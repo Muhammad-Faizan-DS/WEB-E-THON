@@ -30,7 +30,7 @@ export default function NewExamPage() {
   const [openForMin, setOpenFor] = React.useState(1440);
   const [instructions, setInstructions] = React.useState("");
   const [pastePolicy, setPaste] = React.useState<"block" | "log" | "allow">("block");
-  const [fullscreenRequired, setFullscreen] = React.useState(false);
+  const [fullscreenRequired, setFullscreen] = React.useState(true);
   const [questions, setQuestions] = React.useState<QuestionDraft[]>([blank("single")]);
   const [candidates, setCandidates] = React.useState<Candidate[] | null>(null);
   const [enrolled, setEnrolled] = React.useState<Set<string>>(new Set());

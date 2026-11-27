@@ -12,9 +12,9 @@ export const USERS: MockUser[] = [
   { id: "a0000000-0000-4000-8000-000000000001", name: "Ayesha Admin", email: "admin@exam.test", role: "admin", isActive: true },
   { id: "b0000000-0000-4000-8000-000000000001", name: "Dr. Hina Rauf", email: "examiner@exam.test", role: "examiner", isActive: true },
   { id: "b0000000-0000-4000-8000-000000000002", name: "Mr. Bilal Qadir", email: "examiner2@exam.test", role: "examiner", isActive: true },
-  { id: "c0000000-0000-4000-8000-000000000001", name: "Ali Khan", email: "ali@exam.test", role: "candidate", isActive: true },
-  { id: "c0000000-0000-4000-8000-000000000002", name: "Sara Ahmed", email: "sara@exam.test", role: "candidate", isActive: true },
-  { id: "c0000000-0000-4000-8000-000000000003", name: "Omar Farooq", email: "omar@exam.test", role: "candidate", isActive: true },
+  { id: "c0000000-0000-4000-8000-000000000001", name: "Ali Khan", email: "ali@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-001" },
+  { id: "c0000000-0000-4000-8000-000000000002", name: "Sara Ahmed", email: "sara@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-002" },
+  { id: "c0000000-0000-4000-8000-000000000003", name: "Omar Farooq", email: "omar@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-003" },
   // simulated cohort for the live monitor (they never sign in during the demo)
   { id: "d0000000-0000-4000-8000-000000000001", name: "Hamza Siddiqui", email: "cand01@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-014" },
   { id: "d0000000-0000-4000-8000-000000000002", name: "Zainab Malik", email: "cand02@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-022" },

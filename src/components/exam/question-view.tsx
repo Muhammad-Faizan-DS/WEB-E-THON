@@ -30,8 +30,11 @@ export function QuestionView({ q, total, answer, onChange, pastePolicy, split, d
   );
   const prompt = (
     <div
-      className="q-text select-text whitespace-pre-line"
+      className={cn("q-text whitespace-pre-line", pastePolicy === "block" ? "select-none" : "select-text")}
       onCopy={(e) => { if (pastePolicy === "block") { e.preventDefault(); onCopyBlocked(); toast.message("Copying questions is turned off for this exam"); } }}
+      onCut={(e) => { if (pastePolicy === "block") e.preventDefault(); }}
+      onContextMenu={(e) => { if (pastePolicy === "block") e.preventDefault(); }}
+      onDragStart={(e) => { if (pastePolicy === "block") e.preventDefault(); }}
     >
       {q.prompt}
     </div>

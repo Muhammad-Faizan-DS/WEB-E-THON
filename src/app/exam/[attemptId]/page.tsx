@@ -3,7 +3,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, ArrowRight, CloudOff, Eraser, Flag, Hourglass, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send,
+  ArrowLeft, ArrowRight, CloudOff, Eraser, EyeOff, Flag, Hourglass, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send,
 } from "lucide-react";
 import { useExamEngine } from "@/lib/client/exam-engine";
 import { useMe } from "@/lib/client/me";
@@ -48,6 +48,8 @@ export default function WorkspacePage() {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   // the deadline passed on this screen: inputs stop, and we finish submitting (now, or as soon as we reconnect)
   const [timeUp, setTimeUp] = React.useState(false);
+  // lockdown in the browser: while the exam window isn't the one in front, the question is covered
+  const [away, setAway] = React.useState(false);
   const isFullscreen = useIsFullscreen();
   const [dismissedAnn, setDismissedAnn] = React.useState<string | null>(null);
   const mainRef = React.useRef<HTMLDivElement>(null);
@@ -104,9 +106,9 @@ export default function WorkspacePage() {
   const { logEvent, toggleFlag } = ex;
   React.useEffect(() => {
     if (ex.phase !== "ready") return;
-    const vis = () => logEvent(document.hidden ? "visibility_hidden" : "visibility_visible");
-    const blur = () => logEvent("window_blur");
-    const focus = () => logEvent("window_focus");
+    const vis = () => { logEvent(document.hidden ? "visibility_hidden" : "visibility_visible"); setAway(document.hidden || !document.hasFocus()); };
+    const blur = () => { logEvent("window_blur"); setAway(true); };
+    const focus = () => { logEvent("window_focus"); setAway(false); };
     const fs = () => logEvent(document.fullscreenElement ? "fullscreen_enter" : "fullscreen_exit");
     let rt: ReturnType<typeof setTimeout>;
     const resize = () => { clearTimeout(rt); rt = setTimeout(() => logEvent("resize", { w: innerWidth, h: innerHeight }), 1000); };
@@ -166,6 +168,7 @@ export default function WorkspacePage() {
   let main: React.ReactNode;
   if (!ex.activeSession) main = <SupersededPanel onTakeOver={ex.takeOver} />;
   else if (locked) main = <LockedPanel attemptId={attemptId} request={ex.pendingRequest} onSent={ex.refreshStatus} />;
+  else if (away && !closed && !timeUp) main = <AwayShield onBack={() => { window.focus(); setAway(false); }} />;
   else if (timeUp && !closed) main = <TimeUpPanel connection={ex.connection} pendingCount={ex.pendingCount} submitting={ex.submitting} onRetry={() => void ex.submit()} />;
   else if (needFullscreen) main = <FullscreenGate onEnter={() => enterFullscreen()} />;
   else if (view === "review") main = <ReviewPanel questions={questions} answers={ex.answers} onJump={go} onBack={() => setView("question")} onSubmit={() => setConfirmOpen(true)} />;
@@ -187,7 +190,7 @@ export default function WorkspacePage() {
       </div>
     );
 
-  const showFooter = view === "question" && ex.activeSession && !locked && !needFullscreen && !timeUp && !closed;
+  const showFooter = view === "question" && ex.activeSession && !locked && !needFullscreen && !timeUp && !closed && !away;
 
   return (
     <div className="flex h-dvh flex-col" style={{ ["--q-size" as string]: TEXT_SIZES[prefs.textSize] }}>
@@ -286,6 +289,18 @@ export default function WorkspacePage() {
 
       <SubmitDialog open={confirmOpen} onOpenChange={setConfirmOpen} ex={ex} />
     </div>
+  );
+}
+
+/** Covers the question whenever the exam window loses focus (another app, tab or window in front). */
+function AwayShield({ onBack }: { onBack: () => void }) {
+  return (
+    <section role="status" aria-live="polite" className="mx-auto w-full max-w-xl rounded-lg border bg-surface px-6 py-10 text-center sm:px-10">
+      <EyeOff className="mx-auto size-8 text-muted-foreground" aria-hidden />
+      <h2 className="mt-4 text-[20px] font-semibold">Questions are hidden while you&apos;re away</h2>
+      <p className="mt-2 text-muted-foreground">This exam only shows questions while its window is in front. Your answers are safe and the timer keeps running. Time away is noted for your examiner to review; it never changes your marks on its own.</p>
+      <Button className="mt-6" onClick={onBack}>Back to the exam</Button>
+    </section>
   );
 }
 

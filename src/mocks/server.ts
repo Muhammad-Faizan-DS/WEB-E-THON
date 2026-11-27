@@ -474,6 +474,26 @@ on("GET", "/api/me/exams/:id", ([id], _b, db) => {
   return ok(res);
 });
 
+// ---------- one-time identity check before a candidate's first start ----------
+const idv = (db: MDb): Record<string, string> => ((db as MDb & { identity?: Record<string, string> }).identity ??= {});
+on("POST", "/api/exams/:id/verify-identity", ([id], b, db) => {
+  const u = me(db)!;
+  if (u.role !== "candidate") return fail(403, "FORBIDDEN", "Candidates only.");
+  const e = examById(id);
+  if (!e || !e.enrolled.includes(u.id) || e.status !== "published") return fail(404, "NOT_FOUND", "Exam not found.");
+  const A = adm(db);
+  const pwOk = !A.passwords[u.id] && b.password === (A.custom![u.id] ?? DEMO_PASSWORD);
+  const sidOk = String(b.studentId ?? "").trim().toUpperCase() === (u.studentId ?? "").toUpperCase();
+  if (!pwOk || !sidOk) {
+    A.audit.push({ id: uid(), at: iso(Date.now()), by: u.email, action: "Identity check did not match", target: `${e.title} (${e.code})`, note: "Student ID or password was wrong; no attempt started" });
+    return fail(422, "VALIDATION", "Those details don't match this account. Check your student ID and password.");
+  }
+  const at = iso(Date.now());
+  idv(db)[`${e.id}:${u.id}`] = at;
+  A.audit.push({ id: uid(), at, by: u.email, action: "Identity verified", target: `${e.title} (${e.code})`, note: "Password and student ID confirmed before starting" });
+  return ok({ verifiedAt: at });
+});
+
 on("POST", "/api/exams/:id/attempts", ([id], b, db) => {
   const u = me(db)!;
   const sid = String(b.clientSessionId ?? "");
@@ -484,6 +504,8 @@ on("POST", "/api/exams/:id/attempts", ([id], b, db) => {
   if (ph === "scheduled") return fail(403, "EXAM_NOT_OPEN", "This exam hasn't opened yet.");
   if (ph !== "ongoing") return fail(403, "EXAM_CLOSED", "This exam has closed.");
   const existing = db.attempts.find((x) => x.examId === e.id && x.userId === u.id && !x.isSandbox && x.status !== "voided");
+  // a first start needs the one-time identity check; resuming an attempt already tied to this person does not
+  if (!existing && u.role === "candidate" && !idv(db)[`${e.id}:${u.id}`]) return fail(403, "FORBIDDEN", "Verify your identity before starting this exam.");
   if (existing) {
     if (existing.status === "submitted" || existing.status === "expired") return fail(409, "ALREADY_SUBMITTED", "You have already submitted this exam.");
     if (!existing.sessions.some((s) => s.id === sid)) {

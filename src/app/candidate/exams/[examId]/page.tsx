@@ -14,6 +14,8 @@ import { useMedia } from "@/lib/client/use-media";
 import { CandidateStatusBadge } from "@/components/common/status";
 import { RequestForm } from "@/components/exam/request-form";
 import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
+import { USE_MOCKS } from "@/lib/client/api";
 import { StatStrip } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { Checkbox, Skeleton } from "@/components/ui/misc";
@@ -26,6 +28,21 @@ export default function ExamEntryPage() {
   const [entry, setEntry] = React.useState<CandidateExamEntry | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [consent, setConsent] = React.useState(false);
+  // one-time identity check: password + student ID, before the first start
+  const [verifiedAt, setVerifiedAt] = React.useState<string | null>(null);
+  const [idForm, setIdForm] = React.useState({ studentId: "", password: "" });
+  const [idError, setIdError] = React.useState<string | null>(null);
+  const [verifying, setVerifying] = React.useState(false);
+  async function verifyIdentity(e: React.FormEvent) {
+    e.preventDefault();
+    if (!idForm.studentId.trim() || !idForm.password) { setIdError("Enter your student ID and password."); return; }
+    setIdError(null); setVerifying(true);
+    try {
+      const r = await api.post<{ verifiedAt: string }>(`/api/exams/${examId}/verify-identity`, idForm);
+      setVerifiedAt(r.verifiedAt); setIdForm({ studentId: "", password: "" });
+    } catch (err) { setIdError(err instanceof ApiError ? err.message : "Couldn't verify. Try again."); }
+    finally { setVerifying(false); }
+  }
   const [starting, setStarting] = React.useState(false);
   const [startError, setStartError] = React.useState<string | null>(null);
   const online = useOnline();
@@ -115,6 +132,8 @@ export default function ExamEntryPage() {
               {s.pastePolicy === "block" && <Rule icon={ClipboardX}>Pasting into answers is turned off. Paste attempts are noted by length only, never the text.</Rule>}
               {s.pastePolicy === "log" && <Rule icon={ClipboardX}>You may paste. Pastes are noted by length only, never the text.</Rule>}
               {s.fullscreenRequired && <Rule icon={Maximize}>The exam runs in fullscreen. If you leave it, questions are hidden until you return; the timer keeps running.</Rule>}
+              <Rule icon={EyeOff}>Questions are only shown while this exam is the window in front. Switch to another app, tab or window and they are hidden until you come back. Copying question text is turned off.</Rule>
+              <Rule icon={ShieldCheck}>Before you start, you confirm your identity once with your student ID and password. The attempt is then tied to you.</Rule>
               <Rule icon={WifiOff}>If your internet drops, keep working. Answers stay on this device and are sent when you reconnect. Only answers that reach the server before the deadline count.</Rule>
               <Rule icon={MonitorSmartphone}>You can open this exam in up to {s.maxOpens} tabs or devices. After that it locks until your examiner unlocks it.</Rule>
             </ul>
@@ -156,7 +175,24 @@ export default function ExamEntryPage() {
                 </label>
               )}
               {startError && <Alert tone="danger">{startError}</Alert>}
-              <Button size="lg" className="w-full" disabled={!canStart || (!resuming && !consent) || starting || !device.online} onClick={start}>
+              {canStart && !resuming && (
+                <form onSubmit={verifyIdentity} className="space-y-3 rounded-lg border bg-surface-2/60 p-3.5" aria-labelledby="idv-title">
+                  <h3 id="idv-title" className="flex items-center gap-2 text-[14px] font-semibold"><ShieldCheck className="size-4 text-primary" aria-hidden />{verifiedAt ? "Identity verified" : "Verify it's you"}</h3>
+                  {verifiedAt ? (
+                    <p className="flex items-center gap-1.5 text-[13px]"><CheckCircle2 className="size-4 text-success" aria-hidden />Confirmed at <span className="num">{new Date(verifiedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>. This attempt is now tied to you and this device.</p>
+                  ) : (
+                    <>
+                      <p className="text-[12px] text-muted-foreground">Once per exam, so no one else can sit it for you.</p>
+                      <div className="space-y-1"><Label htmlFor="idv-sid">Student ID</Label><Input id="idv-sid" autoComplete="off" value={idForm.studentId} onChange={(e) => setIdForm((f) => ({ ...f, studentId: e.target.value }))} placeholder="FA23-BCS-001" className="font-mono" /></div>
+                      <div className="space-y-1"><Label htmlFor="idv-pw">Password</Label><Input id="idv-pw" type="password" autoComplete="current-password" value={idForm.password} onChange={(e) => setIdForm((f) => ({ ...f, password: e.target.value }))} /></div>
+                      {idError && <p role="alert" className="text-[13px] text-danger">{idError}</p>}
+                      <Button type="submit" variant="outline" className="w-full" disabled={verifying}>{verifying && <Loader2 className="animate-spin" />} Verify identity</Button>
+                      {USE_MOCKS && <p className="text-[11px] text-muted-foreground">Demo IDs: Ali FA23-BCS-001 · Sara FA23-BCS-002 · Omar FA23-BCS-003 · password Demo@2026</p>}
+                    </>
+                  )}
+                </form>
+              )}
+              <Button size="lg" className="w-full" disabled={!canStart || (!resuming && (!consent || !verifiedAt)) || starting || !device.online} onClick={start}>
                 {starting && <Loader2 className="animate-spin" />}
                 {resuming ? "Resume exam" : entry.status === "reattempt_granted" ? "Start re-attempt" : "Start exam"}
                 {!starting && <ArrowRight />}

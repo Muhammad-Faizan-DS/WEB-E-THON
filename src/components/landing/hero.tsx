@@ -1,11 +1,12 @@
 import { HeroActions } from "./actions";
 import { DotsBackground } from "./dots-bg";
 import { ProductFrame } from "./product-frame";
-import { HowSteps } from "./steps";
+import { HeroNotes } from "./hero-notes";
+import { Workflow } from "./workflow";
 import { WRAP } from "./section";
 
 /**
- * Reading order in seconds: what it is (headline) → what to do (Sign in) → how it works (3 steps) →
+ * Reading order in seconds: what it is (headline) → what to do (Sign in) beside a hands-on exam sheet → how it works (the journey) →
  * proof (the live monitor). Behind the top: the emerald 3D dot floor (Vanta).
  */
 export function Hero() {
@@ -13,21 +14,18 @@ export function Hero() {
     <section aria-labelledby="hero-title" className="relative pt-32 md:pt-44">
       <DotsBackground className="inset-x-0 top-0 bottom-auto h-[46rem] [mask-image:linear-gradient(to_bottom,transparent_8%,rgb(0_0_0/0.55)_34%,black_58%,black_72%,transparent_96%)]" />
       <div className={`relative z-10 ${WRAP}`}>
-        <div className="grid items-end gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-16">
-          <h1 id="hero-title" className="display max-w-[16ch] animate-[rise_0.8s_0.05s_cubic-bezier(0.22,1,0.36,1)_both] text-[clamp(2.4rem,5.4vw,4.25rem)] text-balance">
-            Exams you can trust, even when the Wi-Fi can&apos;t.
-          </h1>
-          <div className="animate-[rise_0.8s_0.15s_cubic-bezier(0.22,1,0.36,1)_both] lg:pb-2">
-            <p className="text-[16px] leading-[1.65] text-muted-foreground">
-              Fairmark runs online exams where the server keeps the clock, every answer gets a receipt, and a person,
-              not a machine, decides what an integrity observation means.
-            </p>
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-12">
+          <div>
+            <h1 id="hero-title" className="display max-w-[16ch] animate-[rise_0.8s_0.05s_cubic-bezier(0.22,1,0.36,1)_both] text-[clamp(2.4rem,5.4vw,4.25rem)] text-balance">
+              Exams you can trust, even when the Wi-Fi can&apos;t.
+            </h1>
+            <HeroActions className="mt-9 animate-[rise_0.8s_0.2s_cubic-bezier(0.22,1,0.36,1)_both]" />
           </div>
+          <HeroNotes className="hidden animate-[rise-far_1s_0.3s_cubic-bezier(0.22,1,0.36,1)_both] md:block" />
         </div>
-        <HeroActions className="mt-9 animate-[rise_0.8s_0.25s_cubic-bezier(0.22,1,0.36,1)_both]" />
 
-        <div className="mt-20 md:mt-24">
-          <HowSteps />
+        <div className="mt-24 border-t border-border pt-16 md:mt-28">
+          <Workflow />
         </div>
 
         <div className="relative mt-16 [mask-image:linear-gradient(to_bottom,black_78%,transparent)] md:mt-20">
