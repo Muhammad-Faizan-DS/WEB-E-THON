@@ -1,0 +1,11 @@
+[mcp_servers.playwright]
+command = "npx.cmd"
+args = ["--yes", "@playwright/mcp@0.0.86"]
+
+[mcp_servers.context7]
+command = "npx.cmd"
+args = ["--yes", "@upstash/context7-mcp@4.9.0"]
+
+[mcp_servers.shadcn]
+command = "npx.cmd"
+args = ["--yes", "shadcn@4.23.1", "mcp"]

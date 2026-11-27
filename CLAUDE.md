@@ -1,15 +1,24 @@
-# CLAUDE.md
+# CLAUDE.md — agent instructions (SecureExam)
 
-This replaces any earlier `CLAUDE.md`. The shared rules for all agents live in `AGENTS.md` and are imported here, so edit them there, not in this file.
+**Read `PRD.md` before any task. It is the single source of truth.** The official problem statement overrides it; nothing else does.
 
-@AGENTS.md
+## Hard rules
+- Deadline: final push 19:40, nothing after 20:00 (disqualification). Never alter commit dates. Never force-push `main`.
+- Every protected route/action enforces auth + role + ownership on the SERVER (PRD §4, BR-01).
+- Server owns time, questions, answers, marks. Never send answer keys to candidate responses (BR-05).
+- No paid APIs, no services needing billing. No numeric cheating scores. No automatic deductions.
+- Never commit `.env*`. Never run destructive commands against production DB.
 
-## Claude Code specifics
+## Scope by developer
+- **Dev A (backend):** `db/**`, `src/server/**`, `src/app/api/**`, `src/lib/contracts/**`, `scripts/seed.ts`.
+- **Dev B (frontend):** `src/app/(portal)/**`, `src/components/**`, `src/hooks/**`, `src/mocks/**`, `public/**`.
+- Only touch files in your scope. Contract changes → Dev A only.
 
-- **Read `PRD.md` sections on demand.** It is long, so open the section your task names (for example §7 business rules, §11 contracts, §12 API list, §16 tests) instead of reading it all.
-- **Which dev am I working for?** Check the branch: `be/*` means Dev A (backend scope), `fe/*` means Dev B (frontend scope). On `main` or anything unclear, ask before editing.
-- **Skills:** use `frontend-design` for any new page or component (Dev B). Use `webapp-testing` when verifying T-cases in a browser.
-- **MCP servers:** `shadcn` (add/inspect components, never hand-copy them), `playwright` (drive the Vercel preview or localhost for T-cases, screenshots at 375px and 1280px), `context7` (current docs for Next.js 16, Drizzle, Tailwind v4, shadcn, pdf-lib).
-- **Plan mode** for anything that touches more than 3 files or any business rule (BR-xx). Show the plan, wait for approval, then implement.
-- **Definition of done:** `pnpm typecheck && pnpm lint && pnpm test` pass. The relevant T-ids are checked. UI work has screenshots. The PR template is filled in.
-- Do not create new markdown docs unless asked. Update `PRD.md` only when the human asks, and only via a PR.
+## Working pattern
+1. Find the PRD section + BR/T ids for the task.
+2. Contract (Zod) → server logic → route → UI → test.
+3. Run `pnpm lint && pnpm typecheck && pnpm test` before opening a PR.
+4. Small PRs (≤ 60 min work), branch `be/*` or `fe/*`, conventional commits, merge commit (no squash).
+
+## UI rules
+Use the frontend-design + shadcn skills. One accent colour, one display font, 8px grid, no purple gradients, every async state handled, keyboard + aria-live in the exam workspace, WCAG AA contrast.

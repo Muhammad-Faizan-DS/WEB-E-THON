@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Fairmark tokens. See DESIGN.md. Calm neutrals (Linear-clean) with one quiet emerald accent.
+ * Light and dark themes, AA contrast. Status colours appear on dots/icons; text stays ink
+ * except for priority/destructive states.
+ */
+:root {
+  --radius: 0.5rem;
+
+  --background: #f7f8f8;
+  --foreground: #0b0d0e;
+  --surface: #ffffff;
+  --surface-2: #f1f2f3;
+  --muted-foreground: #5c6168;
+  --subtle-foreground: #6b7078;
+  --border: #e7e8ea;
+  --border-strong: #d0d3d6;
+  --input: #d0d3d6;
+  --ring: #047857;
+
+  /* the one accent: emerald. Links, focus, the main action, live states. */
+  --primary: #047857;
+  --primary-hover: #065f46;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e6f5ee;
+  --brand: #047857;
+  --brand-hover: #065f46;
+  --brand-foreground: #ffffff;
+
+  --secondary: #f1f2f3;
+  --secondary-foreground: #0b0d0e;
+
+  --success: #15803d;
+  --success-soft: #e8f5ec;
+  --warning: #a35f00;
+  --warning-dot: #d98e04;
+  --warning-soft: #fbf2df;
+  --danger: #b42318;
+  --danger-soft: #fbebe9;
+  --flag: #1f6f78;
+  --flag-soft: #e1f1f2;
+  --info: #2a5db0;
+  --info-soft: #eaf0fa;
+
+  --q-size: 1.125rem;
+}
+
+.dark {
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --surface: #0f1011;
+  --surface-2: #16171a;
+  --muted-foreground: #8a8f98;
+  --subtle-foreground: #7c818a;
+  --border: #1c1d20;
+  --border-strong: #2a2c30;
+  --input: #2a2c30;
+  --ring: #34d399;
+
+  --primary: #34d399;
+  --primary-hover: #6ee7b7;
+  --primary-foreground: #04130d;
+  --primary-soft: #0f2a21;
+  --brand: #34d399;
+  --brand-hover: #6ee7b7;
+  --brand-foreground: #04130d;
+
+  --secondary: #16171a;
+  --secondary-foreground: #f7f8f8;
+
+  --success: #4ade80;
+  --success-soft: #11251a;
+  --warning: #f0b44c;
+  --warning-dot: #f0b44c;
+  --warning-soft: #2d2412;
+  --danger: #ff8a80;
+  --danger-soft: #2f1716;
+  --flag: #62c6cf;
+  --flag-soft: #0f2729;
+  --info: #8fb4f0;
+  --info-soft: #17223a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-dot: var(--warning-dot);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-flag: var(--flag);
+  --color-flag-soft: var(--flag-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --font-sans: var(--font-poppins);
+  --font-display: var(--font-poppins);
+  --font-serif: var(--font-source-serif);
+  --font-mono: var(--font-plex-mono);
+
+  /* no soft "card" shadows: depth comes from borders and tone; only overlays get a shadow */
+  --shadow-sm: 0 0 0 0 transparent;
+  --shadow-md: 0 0 0 0 transparent;
+  --shadow-lg: 0 18px 40px -16px rgb(0 0 0 / 0.35);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    scroll-padding-top: 4.5rem;
+    accent-color: var(--primary);
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-poppins), system-ui, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    caret-color: var(--primary);
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 24%, transparent);
+    color: inherit;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-poppins), system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* Reduced motion: keyframe animations and movement collapse; short colour/opacity feedback stays. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-property: color, background-color, border-color, opacity, box-shadow !important;
+      transition-duration: 120ms !important;
+    }
+  }
+  .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-property: color, background-color, border-color, opacity, box-shadow !important;
+    transition-duration: 120ms !important;
+  }
+}
+
+@layer components {
+  /* reading voice: questions, instructions, explanations */
+  .prose-read {
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+  .q-text {
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: var(--q-size);
+    line-height: 1.6;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- homepage ---- */
+  .display {
+    font-family: var(--font-poppins), system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
+  }
+  .ink-strike {
+    text-decoration-line: line-through;
+    text-decoration-thickness: 2px;
+    text-decoration-color: var(--danger);
+  }
+}
+
+/* theme switch: circular reveal from the toggle (View Transitions API); see theme-toggle.tsx */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+/* homepage entrance: CSS-only so server and client render the same; reduced motion collapses it via the base rule */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes rise-far {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes draw-line {
+  from { stroke-dashoffset: var(--len, 200); }
+  to { stroke-dashoffset: 0; }
+}

@@ -1,760 +1,407 @@
-# Secure Examination Management System: PRD (single source of truth)
-
-> **Status:** Final for build day, 27 Nov 2026 (Technoverse 5.0 Web-e-Thon, COMSATS Lahore).
-> **Team:** Dev A (backend), Dev B (frontend).
-> **Rule:** If code, a chat message or an AI agent disagrees with this file, this file wins. If this file disagrees with the official problem statement, the problem statement wins. Change this file by PR only, and tell the other dev.
-
-## Contents
-
-1. [Goal and how we score](#1-goal-and-how-we-score)
-2. [Scope: roles, core, secondary, innovation](#2-scope)
-3. [Architecture and tech choices](#3-architecture-and-tech-choices)
-4. [End-to-end flow (43 steps)](#4-end-to-end-flow-43-steps)
-5. [State diagrams](#5-state-diagrams)
-6. [Key sequences](#6-key-sequences)
-7. [Business rules BR-01 to BR-21](#7-business-rules-server-enforced)
-8. [Integrity engine (innovation 5.1)](#8-integrity-engine-innovation-51)
-9. [Failure resilience (innovation 5.3)](#9-failure-resilience-innovation-53)
-10. [Data model](#10-data-model)
-11. [Contracts (write these first)](#11-contracts-write-these-first)
-12. [API list](#12-api-list)
-13. [Page list](#13-page-list)
-14. [Seed data and sample files](#14-seed-data-and-sample-files)
-15. [Unclear requirements and our resolutions](#15-unclear-requirements-and-our-resolutions)
-16. [Test matrix T01 to T30](#16-test-matrix-t01-to-t30)
-17. [Team, branches and pull requests](#17-team-branches-and-pull-requests)
-18. [Sprint plan](#18-sprint-plan)
-19. [README checklist](#19-readme-checklist)
-20. [Demo script (15 minutes)](#20-demo-script-15-minutes)
-21. [What not to build](#21-what-not-to-build)
-22. [AI tooling](#22-ai-tooling)
+# PRD — SecureExam: Secure Examination Management System
+**Technoverse 5.0 · Web-e-Thon · COMSATS Lahore · 27 Nov 2026 (build 10:00–20:00) · Evaluation 28 Nov 16:00–19:00**
+**Team:** Dev A (Burhan) — Backend · Dev B — Frontend · **Status:** FINAL — this file is the single source of truth. If any other doc disagrees, this wins. Official problem statement wins over this PRD.
 
 ---
 
-## 1. Goal and how we score
+## 0. TL;DR for the coding agent
+- Build a **full-stack Next.js web app** for creating, delivering, monitoring and grading online exams with **3 roles**: Admin, Examiner, Candidate.
+- **The server is the only source of truth** for time, questions, answers, marks and permissions. The client is a display + signal sensor.
+- Integrity is **browser-only, privacy-first, human-reviewed**: detect → warn → log → examiner decides. Nothing is penalised automatically except the declared Strict-mode rule (which still goes through human approval for re-attempts).
+- **Deadline 19:40 final push. No commits/pushes/deploys after 20:00 = disqualification.**
 
-Ship one **deployed, complete exam journey** first: create, publish, take, submit, grade, publish results and view them. Then add the integrity engine and resilience features on top. Judges test common scenarios live, so every feature must hold up when a judge clicks it.
+**One-line identity (first sentence of the demo):**
+> "SecureExam is an exam platform where the server owns time, questions and marks — a dropped connection costs no one a mark, every randomized paper is equally difficult, and every integrity flag is reviewed by a human, not a machine."
+
+---
+
+## 1. Scoring we optimise for
 
 ```mermaid
-pie showData
-  title Official rubric (100 marks)
-  "Core functionality" : 30
-  "Technical quality and reliability" : 20
-  "UI/UX and product design" : 20
-  "Secondary features (all 8)" : 15
-  "Open innovation" : 15
+pie showData title Official rubric (100 marks)
+    "Core functionality" : 30
+    "Technical quality & reliability" : 20
+    "UI/UX & product design" : 20
+    "Secondary features (all 8)" : 15
+    "Open innovation" : 15
 ```
 
-| Rubric area | Marks | What we show |
-|---|---|---|
-| Core functionality | 30 | Full journey with the reference exam, which scores 9/10 (§14). |
-| Technical quality | 20 | Server-side timer, idempotent submit, ownership checks, revisioned saves, lazy expiry. |
-| UI/UX | 20 | A candidate can always answer "Is my latest answer saved?" and "How long do I have?" without asking anyone. |
-| Secondary features | 15 | All 8 features working inside the real flows, not as separate demo pages. |
-| Innovation | 15 | **5.1** explainable incident timeline with human review. **5.3** offline queue, open limit, lock and strict re-attempt approval, with no extra time. |
+Rulebook also scores: requirement analysis (ambiguities resolved), validations FE+BE, backend architecture, OO/DB design, **technology selection reasons**, **mapping design → code**. Generic AI-looking UI is explicitly penalised. Placeholders get no full credit.
 
-**Philosophy:** prevent what we control, detect what we can observe, reduce the payoff of what we cannot control, and never punish what we cannot prove.
+**Innovation challenges chosen:** **5.3 Failure-Resilient** (primary), **5.2 Fairness of Randomized Papers** (secondary), **5.1 Integrity in the AI Era** (explainable integrity engine). Depth over breadth.
 
 ---
 
-## 2. Scope
+## 2. Tech stack & reasons (judges ask "why")
 
-### 2.1 Roles
-
-| Role | Can | Cannot |
+| Layer | Choice | Why |
 |---|---|---|
-| Administrator | Create, edit and disable users, assign roles, view all exams read-only, view audit log. | Grade, or take exams. |
-| Examiner | Manage own question bank and own exams, enroll candidates (and import candidate accounts), preview in sandbox, publish, monitor, announce, decide unlock and re-attempt requests, review incidents, grade, publish results, view analytics and PDFs for own exams. | See or change other examiners' exams. |
-| Candidate | See own enrolled exams, start or resume inside the window, answer, flag, use the scratchpad, set preferences, submit, request unlock or re-attempt, and view own published results, PDF and verification code. | See answer keys, other candidates' data, or unpublished results. |
+| Framework | **Next.js 15 App Router + TypeScript** | One deployable for UI + API; server components keep answer keys off the client; type safety across FE/BE |
+| DB | **PostgreSQL (Neon free tier)** | Relational integrity (FKs, unique constraints, transactions, `FOR UPDATE`) is exactly what exam state needs |
+| ORM | **Drizzle ORM** + drizzle-kit | SQL-close, typed, fast migrations; raw SQL when needed |
+| Auth | **Auth.js (credentials)** or Better Auth, argon2/bcrypt | No paid identity provider; httpOnly session cookies |
+| Validation | **Zod** shared schemas | Same rules on frontend and backend (rubric: FE+BE validation) |
+| UI | **Tailwind + shadcn/ui + lucide + sonner** | Accessible primitives (Radix), fast to compose, not template-looking if themed |
+| Charts | **Recharts** | Simple, SSR-safe |
+| Offline queue | **Dexie (IndexedDB)** | Durable pending-save queue across refresh/outage |
+| PDF / QR | **@react-pdf/renderer**, **qrcode** | Server-side PDF, no paid service |
+| Import | **papaparse** + custom Moodle XML/GIFT parsers | CSV/JSON/Moodle formats |
+| Camera (P2) | **@mediapipe/tasks-vision** FaceDetector (self-hosted model) | Runs on candidate device, free, no video upload |
+| Realtime | **Polling 5 s** (TanStack Query refetchInterval) | Vercel serverless can't hold WebSockets; polling is reliable in a demo |
+| Deploy | **Vercel + Neon** | Free, preview deploy per PR |
 
-### 2.2 Core requirements (problem statement §3) mapped to features
+**Explicitly NOT used:** separate FastAPI backend, Redis, WebSockets, Safe Exam Browser, screen sharing, audio monitoring, face recognition/biometrics, paid AI APIs, encrypted offline hand-in files.
 
-| § | Requirement | Our feature | Owner |
-|---|---|---|---|
-| 3.1 | Auth and authorization | DB sessions, role guard and ownership check in every handler (BR-01, BR-02) | A |
-| 3.2 | Exam management and lifecycle | Exam builder, review-and-publish checklist, derived phase (BR-03) | A + B |
-| 3.3 | Question bank, 3 types, randomization, snapshot | Bank with topic and difficulty. Single, multi and written types. Seeded shuffle. Attempt snapshot (BR-06, BR-07) | A + B |
-| 3.4 | Candidate management | Enrollment and import. Candidate home split into Available, Upcoming and Completed. Entry checks (BR-04) | A + B |
-| 3.5 | Exam interface | Workspace with navigator states, timer, autosave, review, submit and expiry (BR-05, BR-09, BR-10) | B + A |
-| 3.6 | Monitoring | Live monitor, announcements, incident timeline, "indicators are not evidence" wording (BR-18) | B + A |
-| 3.7 | Grading | Auto-grading (exact or partial multi-select), manual grading with limits (BR-14, BR-15) | A + B |
-| 3.8 | Results and analytics | Controlled publish, own-results-only, exam and question analytics, retained attempts (BR-16) | A + B |
+**Supported browsers:** Chrome / Edge desktop (latest). Others: banner "Best on Chrome or Edge".
 
-### 2.3 Secondary features (all 8 expected)
 
-| § | Feature | Smallest complete version | Owner |
-|---|---|---|---|
-| 4.1 | Network-aware UI | Connection pill (Online / Offline / Server unreachable) and save pill (Saving… / Saved hh:mm:ss / Saved on this device / Not accepted), with acks matched by revision | B |
-| 4.2 | PDF reports | Candidate result PDF and exam summary PDF from stored data, access-checked (pdf-lib) | A |
-| 4.3 | Sandbox | "Preview as candidate" makes an `is_sandbox` attempt that is excluded from every count (BR-17) | A + B |
-| 4.4 | Bulk import | CSV/JSON for questions and candidates. Dry run, then row and column errors, then an all-or-nothing commit (BR-20) | A + B |
-| 4.5 | Question analytics | Correct rate, skip rate, most common wrong option, mean written score, observed difficulty, discrimination, and a "check key" flag | A + B |
-| 4.6 | Verifiable reports | Random verification code and QR on the PDF. Public `/verify/{code}` shows masked info only (BR-19) | A |
-| 4.7 | Workspace preferences | Text size, layout (single or split), navigator position, theme, reduced motion. Saved to the account | B |
-| 4.8 | Scratchpad | Per-attempt notes panel that survives refresh and is never graded. Sketch canvas is a stretch goal | B |
+### 2.5 Additions from the exam-portal guide (proctor screen)
 
-### 2.4 Innovation challenges
+Source: the owner's reference case study, "Designing a complete Online Examination Portal from scratch" (D. Saxena). Its proctor screen asks for many actions with **no navigation and minimal popups**. Only free ideas that fit §1's philosophy are taken. The frontend for all of them is built on the mock API (`src/lib/client/proctor.ts`, `src/mocks/server.ts`). **Dev A** builds the endpoints in §12 rows 50–59 and moves the shapes into `src/contracts` via a `contract` PR.
 
-- **Primary, 5.1 Integrity in the AI Era:** a browser-only, privacy-light **explainable integrity engine** (§8). Observations are grouped into incidents with plain-language explanations, a severity, and a human Dismiss or Follow-up decision. No automatic penalties, no recordings, no keystroke logging.
-- **Secondary, 5.3 Failure-resilient exams:** an offline answer queue with server acknowledgment by revision, a server-fixed deadline, a session open limit with lock and unlock, and a strict re-attempt approval flow (§9). Disruptions never give the candidate extra time unless an examiner makes an audited decision.
+| Guide idea | Our version | Owner |
+|---|---|---|
+| Act on one student without leaving the live screen | Monitor **command panel**: a side sheet with status, time left, contact, incidents, private messages, reminders and **extend time** (minutes + required reason, audited, the candidate is told) | B (done on mocks) + A |
+| Filtered views (disconnected, paused, warned, submitted, on break, ended) | Monitor filters: Asking for help, Offline, Locked, Submitted, Time ended (plus the existing ones) | B (done) |
+| Raise hand, chat, break request | Workspace **Ask for help** (question / technical / break + message). The examiner replies privately. A break never pauses the clock; only an audited extension adds time | B (done on mocks) + A |
+| Message all students with acknowledgment status | Announcement **read receipts**: the candidate taps "Got it", and the monitor shows "n of m acknowledged" and who hasn't | B (done on mocks) + A |
+| Extend exam end time, end exam | **Add time for everyone** (audited, announced) and **Close exam now** (existing §12 #19, with a reason) | B (done on mocks) + A |
+| Proctor dashboard: connectivity test, instructions for proctor and student, report issue | Exam page **Before you start**: connectivity test (5 round trips to `/api/ping`), examiner-only notes beside the candidate instructions, **Report an issue** (also on the dashboard) | B (done on mocks) + A |
+| Live webcam streams, AI alerts, photo ID verification | **Not built**: §21 forbids it, images would leave the device, and streaming needs paid infrastructure | — |
+| Pause / resume the whole exam | **Not built**: conflicts with the fixed server deadline (BR-05). "Add time for everyone" covers the need | — |
+| Role switching | **Not built**: one role per account (§2.1) | — |
+
+Rules: messages, reminders and extensions are written to the audit log. Wording stays neutral (rule 8). An extension moves `attempts.deadline` only through an examiner action with a reason; nothing automatic ever adds time.
 
 ---
 
-## 3. Architecture and tech choices
+## 3. System architecture
 
 ```mermaid
 flowchart LR
-  subgraph Browser
-    CW["Candidate workspace<br/>React client components"]
-    IDB[("IndexedDB<br/>answer queue, scratchpad")]
-    MON["Browser observers<br/>visibility, focus, fullscreen,<br/>paste, online/offline"]
-    EX["Examiner and Admin UI"]
-    PUB["Public verify page"]
-    CW <--> IDB
-    MON --> CW
+  subgraph Client["Browser (untrusted sensor + display)"]
+    UI[React UI / shadcn]
+    WS[Exam Workspace]
+    DET[Integrity detectors<br/>fullscreen · visibility · blur · paste · camera]
+    Q[(IndexedDB<br/>pending-save queue)]
   end
-
-  subgraph Vercel["Vercel: Next.js App Router, Node runtime"]
-    RSC["Pages: Server Components"]
-    API["Route Handlers /api/*<br/>Zod-validated"]
-    subgraph Services["src/server services"]
-      AUTH["auth + guards"]
-      ATT["attempts: start, save,<br/>finalize, sweep"]
-      GRD["grading"]
-      INC["incident grouping"]
-      ANA["analytics"]
-      REP["PDF + QR + verify"]
-      IMP["imports"]
-    end
-    CON["src/contracts<br/>Zod schemas + types<br/>(shared with client)"]
+  subgraph Server["Next.js server (source of truth)"]
+    MW[Auth + RBAC middleware]
+    API[Route Handlers / Server Actions]
+    ENG[Attempt Engine<br/>timer · state machine · reveal · open-limit]
+    GR[Grading Engine]
+    INT[Integrity Engine<br/>event correlation · incidents]
+    AN[Analytics<br/>item stats · fairness · collusion]
+    PDF[PDF + QR signer]
   end
-
-  DB[("Neon Postgres<br/>free tier")]
-
-  CW -- "fetch JSON, heartbeat 15s" --> API
-  EX -- "fetch JSON, poll 5s" --> API
-  PUB --> API
-  RSC --> Services
-  API --> Services
-  Services --> DB
-  API -. types .- CON
-  CW -. types .- CON
+  DB[(PostgreSQL / Neon)]
+  UI --> MW --> API
+  WS --> Q --> API
+  DET --> API
+  API --> ENG & GR & INT & AN & PDF
+  ENG & GR & INT & AN & PDF --> DB
 ```
 
-| Concern | Choice | Why |
-|---|---|---|
-| Framework | **Next.js 16 (App Router) + TypeScript (strict)** | One repo, one deploy and one origin. Server Components for examiner pages, Route Handlers for the API. Both devs know React. |
-| UI | **Tailwind CSS v4 + shadcn/ui + lucide-react** | Accessible primitives (Radix) we own and restyle, so it doesn't look like a template. The shadcn MCP lets agents pull components correctly. |
-| Charts | **shadcn charts (Recharts)** | Free, themeable, fast to wire. |
-| Database | **Postgres on Neon (free, via Vercel Marketplace, no card)** | Relational integrity, transactions, `SELECT … FOR UPDATE` for finalization. |
-| ORM / migrations | **Drizzle ORM + drizzle-kit**, driver **node-postgres (`pg`)** with Neon's pooled URL | Typed SQL and real interactive transactions. Do **not** use the `neon-http` driver because it has no interactive transactions. |
-| Validation and contracts | **Zod** in `src/contracts`, imported by handlers and client | Contracts first. The same schema validates on both sides (problem statement §6: validate on frontend and backend). |
-| Auth | **Own DB sessions**: bcryptjs (cost 10), random 32-byte token in an httpOnly, Secure, SameSite=Lax cookie, SHA-256 of the token stored in `sessions` | Simple, server-revocable (disabling a user takes effect on the next request), no third-party service. |
-| Realtime | **Polling**: monitor every 5s, workspace heartbeat every 15s | Reliable on Vercel serverless (no long-lived sockets). Good enough for a demo cohort. |
-| Expiry | **Lazy sweep** on relevant requests + `finalizeAttempt` + optional daily Vercel cron | Vercel Hobby cron runs only daily, so correctness must not depend on it (BR-11). |
-| Offline | **idb-keyval** (IndexedDB) queue + `online`/`offline` events + fetch failure detection | Answers survive refreshes and outages, and acks are per revision. |
-| PDF / QR | **pdf-lib** + **qrcode** (MIT) | Pure JS, works in a serverless function, no headless browser. |
-| CSV | **papaparse** | Robust parsing with row numbers for error messages. |
-| Tests | **Vitest** (grading, grouping, rules), **Playwright** (E2E), plus the Playwright MCP for agent-driven checks | Covers T01–T30. |
-| Hosting | **Vercel Hobby** + Neon free | No billing information required (problem statement §6). |
-
-**Folder layout and ownership:**
-
-```
-src/
-  app/                    # pages + route handlers       (pages: B, app/api: A)
-    (auth)/login/
-    admin/ examiner/ candidate/ exam/[attemptId]/ verify/
-    api/**/route.ts
-  contracts/              # Zod schemas + TS types        (A only)
-  db/                     # schema.ts, client.ts, seed.ts (A only)
-  server/                 # services, guards, sweep        (A)
-  components/ui/          # shadcn primitives              (B)
-  components/{exam,examiner,admin,charts,common}/          (B)
-  lib/client/             # api client, offline queue, observers (B)
-  mocks/                  # mock responses typed by contracts    (B)
-drizzle/                  # generated migrations          (A only)
-samples/                  # import templates + invalid examples (A)
-tests/unit/ tests/e2e/    # A: unit and API, B: e2e UI
-```
+**Trust rule:** every client signal is *untrusted evidence*. Every rule that matters (time, eligibility, ownership, locks, limits, submissions, grading) is enforced in `src/server/**`.
 
 ---
 
-## 4. End-to-end flow (43 steps)
+## 4. Roles & permissions
+
+| Capability | Admin | Examiner | Candidate |
+|---|:-:|:-:|:-:|
+| Manage users & roles, deactivate | ✅ | ❌ | ❌ |
+| Question bank (own) | view all | ✅ | ❌ |
+| Create/configure/publish exams (own) | view all | ✅ | ❌ |
+| Enroll candidates, generate activation keys | ❌ | ✅ (own exams) | ❌ |
+| Live monitoring, announcements, time credit | view | ✅ | ❌ |
+| Review incidents (Cleared/Confirmed) | ✅ | ✅ | ❌ |
+| Re-attempt requests | **approve/reject** | add note + forward (**cannot approve**) | auto-created |
+| Unblock permanently blocked candidate | ✅ | ❌ | ❌ |
+| Grade, regrade, publish results | ❌ | ✅ | ❌ |
+| Take exams | ❌ | sandbox only | ✅ (enrolled) |
+| View results | all | own exams | **own, published only** |
+| Audit log | ✅ | own exams | ❌ |
+
+Enforced on the backend via `requireRole()` + ownership checks (`exam.examiner_id = user.id`, `enrollment exists`). Hidden buttons are UX only.
+
+---
+
+## 5. End-to-end user flow (source of truth, 43 steps)
 
 ```mermaid
 flowchart TD
-  L["Login"] --> R{"Role?"}
-  R -- Admin --> A1["Users: create, role, disable"] --> A2["Audit log"]
-  R -- Examiner --> E1["Dashboard"] --> E2["Question bank + import"] --> E3["Create exam: settings"]
-  E3 --> E4["Assign questions, marks = total"] --> E5["Enroll candidates / import"]
-  E5 --> E6["Sandbox preview"] --> E7{"Publish checklist OK?"}
-  E7 -- no --> E3
-  E7 -- yes --> E8["Published"]
-  R -- Candidate --> C1["Home: Available / Upcoming / Completed"]
-  C1 --> C2{"Window open and enrolled?"}
-  C2 -- no --> C1
-  C2 -- yes --> C3["Entry: instructions, policy, consent, device check"]
-  C3 --> C4["Start or resume: snapshot + server deadline"]
-  C4 --> C5["Workspace: answer, flag, scratchpad, prefs"]
-  C5 --> C6{"Disruption?"}
-  C6 -- offline --> C7["Queue locally, retry, ack by revision"] --> C5
-  C6 -- "new tab/device over limit" --> C8["Locked, request unlock"] --> E11
-  C6 -- none --> C9["Review, submit"]
-  C5 -- "deadline" --> C10["Auto-finalize with accepted answers"]
-  C9 --> C11["Receipt"]
-  C10 --> C11
-  E8 --> E9["Live monitor + announcements"]
-  E9 --> E10["Incident timeline, review"]
-  E9 --> E11["Unlock / re-attempt requests"]
-  E11 -- approve --> C4
-  C11 --> G1["Auto-grade objective"] --> G2["Manual grade written"]
-  G2 --> G3{"All graded?"}
-  G3 -- no --> G2
-  G3 -- yes --> G4["Preview + publish results"]
-  G4 --> C12["Candidate result + PDF + QR"]
-  C12 --> V["Public verify"]
-  G4 --> AN["Analytics + exam PDF"]
+  A0[Admin creates users / CSV import] --> E1[Examiner builds question bank<br/>manual · CSV · JSON · Moodle XML · GIFT]
+  E1 --> E2[Create exam + settings + blueprint]
+  E2 --> E3{Publish checklist passes?}
+  E3 -- no --> E2
+  E3 -- yes --> E4[Sandbox preview] --> E5[Publish → enroll → extra time → generate activation keys]
+  E5 --> C1[Candidate logs in → dashboard]
+  C1 --> C2{Desktop device?}
+  C2 -- no --> C2x[Portal only: 'Desktop or laptop required']
+  C2 -- yes --> C3[Enter activation key] --> C4{Camera check on?}
+  C4 -- yes --> C5[Consent + face check] --> C6
+  C4 -- no --> C6[Start screen: real time available] --> C7[Start → 3-2-1 → fullscreen]
+  C7 --> X[Exam workspace]
+  X --> S1[Submit summary → confirm] --> S2[Submitted once + incident report]
+  S2 --> R1[Examiner: auto-grade + grade written + review incidents]
+  R1 --> R2{All graded AND all incidents reviewed?}
+  R2 -- no --> R1
+  R2 -- yes --> R3[Publish] --> C9[Candidate sees own result → PDF → QR verify]
+  R3 --> AN[Analytics: summary · item stats · fairness · collusion · Moodle CSV]
 ```
 
-Edge cases are written inline. **Bold** marks the server rule that enforces each step.
+### Phase 0 — Setup (Admin)
+1. Admin creates examiner and candidate accounts (or CSV import).
+2. Admin can deactivate a user → existing sessions invalid immediately (check `users.active` on every request).
 
-**A. Admin setup**
-1. Admin signs in and lands on `/admin`. Wrong password shows a generic error. After 5 failures in 5 minutes for that email, login is refused for 5 minutes. **BR-21**
-2. Admin creates examiner and candidate accounts with a temporary password. A duplicate email gets a 409 with "Email already in use". **BR-20**
-3. Admin changes a role or disables an account. Disabling deletes all of that user's sessions, so their next request returns 401 and they are sent to login. Admin cannot disable themself. **BR-02**
+### Phase 1 — Build the exam (Examiner)
+3. Question bank: single MCQ, multi-select, written; topic, difficulty (1–3), marks. Import CSV/JSON/Moodle XML/GIFT with per-row error preview; import valid rows or fix and retry.
+4. Create exam: title, instructions, window `starts_at–ends_at`, duration, total marks, multi-select rule (`all_or_nothing | partial | partial_negative`), blueprint (count per topic × difficulty), `open_limit` (default 5, any number, or unlimited), `sequential_reveal` (on/off), `integrity_mode` (`standard | review | strict`, default `review`), `camera_check` (off by default).
+5. Publish checklist (blocks publish): marks sum = total marks; each blueprint cell has enough questions (warn: "needs 5 hard Algebra, bank has 3"); ends_at > starts_at; duration > 0; ≥1 question.
+6. Sandbox: examiner takes the exam as a candidate; `is_sandbox=true`; excluded from every stat/report/result.
+7. Publish → enroll candidates → optional per-candidate extra time (multiplier 1.0–2.0) and `allow_paste` accommodation → **Generate activation keys** → print/CSV export.
 
-**B. Examiner authoring**
-4. Examiner signs in and lands on `/examiner`, which shows cards for Drafts, Scheduled, Live now, Awaiting grading, Ready to publish, and Pending requests.
-5. Creates questions: type (single, multi, written), topic, difficulty (easy, medium, hard), prompt, options, correct key, default marks, multi-select rule (exact or partial). Validation: a single-answer question has exactly 1 correct option. A multi-select question has at least 1 correct and at least 2 options. A written question has no options. Marks are between 0.5 and 100 in steps of 0.5.
-6. Imports questions from CSV or JSON. The dry run shows every bad row with its row number, column and reason. Commit happens only when there are zero errors, and the whole file commits in one transaction. **BR-20**
-7. Creates an exam draft: title, instructions, opens at, closes at, duration in minutes, total marks, pass mark %, shuffle questions, shuffle options, paste policy (allow / block / allow and log), fullscreen required, allow mobile, max opens (default 3), max re-attempts (default 1), show breakdown to candidates. Validation: opens < closes, and duration ≤ the window length.
-8. Assigns questions from the bank and sets order and per-exam marks. A live indicator shows "Assigned 10 / 10 marks", green when it matches.
-9. Enrolls existing candidates by search, or imports a candidate CSV (`name,email,student_id`), which creates any missing candidate accounts and enrolls them. Re-enrolling the same person does nothing (unique key). An enrollment can be removed only if no attempt exists.
-10. Clicks **Preview as candidate**. This opens the real workspace with a "Sandbox preview: nothing is recorded" banner. The sandbox attempt is excluded everywhere and deleted on exit. **BR-17**
-11. Opens **Review & publish**. A checklist covers: at least 1 question, marks sum equals the total, valid window, instructions present, at least 1 candidate enrolled (warning only). If all pass, the exam moves to published (shown as "Scheduled" until it opens). **BR-03**
-12. Edge case: once the exam is published, settings and questions are read-only. Unpublish (back to draft) is allowed only while no real attempt exists. **BR-03**
+### Phase 2 — Entering (Candidate)
+8. Dashboard: Available / Upcoming / Completed with instructions and access status.
+9. Phone/tablet: portal usable (dashboard, results, PDFs). Exam page shows **"This exam can only be taken on a desktop or laptop computer."** No Start button. "Desktop site" mode does not bypass.
+10. Enter activation key (bound to this candidate, single-use; 5 wrong → locked + examiner alert).
+11. If camera check on: consent screen → camera permission → face visible. Denied → cannot start (examiner may grant exception).
+12. Start screen: rules + "You have **N** minutes" (= min(duration × multiplier + credit, window end − now)) → Start → 3-2-1 → fullscreen.
 
-**C. Candidate before the exam**
-13. Candidate signs in and lands on `/candidate`, which has three tabs: Available, Upcoming, Completed. Each card shows the window, duration, marks and status ("Not started", "In progress, 12 min left", "Submitted, results pending", "Results published", "Locked, waiting for examiner").
-14. Upcoming exam: a countdown, and a disabled Start button. Calling the start API directly returns 403 `EXAM_NOT_OPEN`. No question content is released before start. **BR-04**
-15. When server time reaches opens at, the card moves to Available on the next poll (60s on home). The client clock is never trusted. **BR-05**
-16. Entry page shows the instructions, total marks, duration, number of questions, marking rules (including the multi-select rule), monitoring notice (what is observed and what is not), paste policy, what happens offline, and the open limit. The candidate must tick a consent box before starting.
-17. Device check: online, fullscreen supported (if required), and mobile policy. If mobile is not allowed and a coarse pointer with a width under 768px is detected, the candidate sees "This exam must be taken on a laptop or desktop". This is a client check, documented as best effort.
+### Phase 3 — Taking the exam
+13. Workspace: server timer, question palette, watermark (name + ID), connection chip, announcements, scratchpad, preferences (font size, theme, layout), keyboard shortcuts.
+14. Per-candidate shuffled questions (within blueprint cells) and options. If `sequential_reveal`: server releases only the current question; unseen questions never reach the client.
+15. Answers autosave (debounced 800 ms) and are editable. Candidate may revisit **seen** questions, never jump ahead.
+16. Optional **Lock** = final (server 409 on change). **Flag** for review. Skipped can be "locked blank".
+17. **Open limit:** open = seen but not locked. When open ≥ limit → next question not released → "You have 5 open questions. Lock at least one to continue." Examiner can raise the limit live (all or one candidate).
+18. No paste, right-click, copy, cut, drag-drop, text selection on stems. Each blocked action logged with question number (not a violation). Exception: `allow_paste` accommodation.
+19. Timer warnings at 5 min and 1 min (toast + aria-live).
 
-**D. Attempt**
-18. Start calls `POST /api/exams/{id}/attempts`. The server checks eligibility, then either returns the existing attempt or creates one with a seed, a snapshot of the questions, options, keys and marks, and `deadline = min(closes_at, now + duration)`. It returns the questions **without keys**, plus `serverNow`. **BR-04 BR-05 BR-06 BR-07 BR-08**
-19. If fullscreen is required, the client requests it. If the request is denied or fullscreen is exited, the questions are hidden behind a "Return to fullscreen" panel. The answers and timer keep going, and an observation is logged. **BR-18**
-20. The workspace shows: question n of N, marks, type hint, timer (server offset), connection pill, save pill, and a navigator whose states are Answered, Not answered, Flagged and Not synced. Each state uses both an icon and text, not colour alone.
-21. On each edit, the client writes to IndexedDB, then sends a debounced save (800 ms) with `{value, revision, clientOpId}`. The ack carries the accepted revision, and the save pill shows "Saved 10:24:51" only when ack.revision equals the latest local revision. **BR-09**
-22. Flag or unflag for review. This is saved to the server and does not change the revision.
-23. Scratchpad panel: plain-text notes per attempt, stored in IndexedDB and restored on refresh, never sent for grading. Preferences (text size, layout, navigator position, theme) are saved to the account and applied immediately.
-24. Heartbeat every 15s returns `serverNow`, `deadline`, `status` and any new announcements, which appear as a dismissible banner with aria-live polite. A missed heartbeat feeds the connectivity view on the monitor only.
-25. Refresh in the same tab resumes the same attempt with the same deadline and does **not** count as a new open, because the `clientSessionId` is kept in sessionStorage. Server answers are merged with any newer local pending revisions, which are then re-sent.
-26. Opening in a new tab or device creates a new open. The newest session becomes active. The old tab shows "This exam is active in another window" with a "Use this window" button, which counts as another open. A save from a superseded session gets 409 `SESSION_SUPERSEDED`. **BR-12**
-27. When opens exceed the limit, the attempt becomes **Locked**: saves get 423, and the candidate sees a lock screen with "Request unlock" (a reason is required). **The timer keeps running.** If the deadline passes while locked, the attempt is finalized with the answers already accepted. **BR-12 BR-13**
-28. Network loss shows "Offline: answers are saved on this device". The queue retries with backoff (1, 2, 4, 8, max 15 s) and flushes on `online`. A stale-revision 409 keeps the newer server value and shows a notice. The candidate can keep working.
-29. Browser observations (hidden/visible, blur/focus, fullscreen exit/enter, paste with outcome and character count, copy blocked, resize, offline/online) are batched every 10s, and sent with `sendBeacon` on pagehide, to `/events` with a client sequence number and a UUID. **No clipboard contents and no keystrokes are recorded.** **BR-18**
-30. Timer warnings at 5 minutes and 1 minute (aria-live, non-blocking). Under 1 minute, the timer turns to the warning style with a text label.
-31. The review screen shows Answered, Not answered, Flagged and Not synced counts, with links to jump to each item.
-32. Submit flushes the queue, then shows a confirm dialog that lists any unsynced items. On confirm it calls `POST /submit`, which finalizes in one transaction, auto-grades objective items, and returns a receipt: reference, server time, and "Results pending". A double click or a second tab gets the **same** receipt. **BR-10**
-33. Deadline reached in the browser: the workspace locks its inputs and calls submit. The server finalizes with the answers accepted up to `deadline + 2 s grace`. Later saves get 409 `ATTEMPT_CLOSED`, and the UI lists "Changes not accepted (made after the deadline or while offline)". **BR-09 BR-10**
-34. Browser closed and never returned: the next request that touches the exam (candidate home, examiner monitor, grading, results) runs the sweep and finalizes it as **Expired**. **BR-11**
+### Phase 4 — Disruptions
+20. Refresh / browser crash → resume with answers + server time. No key again. Re-enter fullscreen gate.
+21. Internet drop → "Offline · 3 changes queued", timer keeps running server-side. On reconnect → "Synced ✓". Server records heartbeat gap; examiner sees "lost 4m12s (server-measured)" and may grant credit ≤ gap (audit-logged).
+22. Device dies → log in on another **desktop**, resume.
+23. Second tab/device opens the same attempt → new session takes over; old session's saves rejected (409 `SESSION_SUPERSEDED`), old tab shows "Exam continued in another window".
+24. Leaves fullscreen / tab hidden / window blur → overlay "Return to the exam in 3…2…1":
+    - **Standard:** log only.
+    - **Review (default):** type explanation (≥10 chars) + 30 s wait → continue; examiner notified.
+    - **Strict:** attempt **voided** (answers kept read-only, not scored) → re-attempt request → examiner adds note + forwards → **admin** approves/rejects with reason → if approved: 15-min cooldown → new key → new attempt with full fresh time (capped by window) and **50 % new questions** from same blueprint cells → **2nd violation = permanent block** (admin-only unblock).
+25. Camera signal (no face > 5 s, ≥2 faces, face out of frame) → **warning only, exam continues** → 3-frame snapshot burst saved with question number + description.
 
-**E. Monitoring**
-35. Examiner opens **Live monitor** (polls every 5s). For each candidate it shows: status, progress (answered of total), last contact ("12s ago"), opens used of the limit, connection state, and incident counts by severity. Header totals cover Not started, In progress, Locked, Submitted and Expired. Filter by status or severity.
-36. Sends an announcement (1–500 chars). Candidates receive it on their next heartbeat. A candidate who joins late gets all earlier announcements for the exam.
-37. Opens a candidate's **incident timeline**: grouped incidents, each with its raw observations, timings, an explanation and a severity. The examiner can Dismiss or Request follow-up and add a note. The page always shows the banner "Observations are not proof of misconduct", and a review decision never changes marks. **BR-18**
-38. **Requests** tab: unlock and re-attempt requests, with the candidate's reason and their connectivity timeline. Approve or Deny requires a note, and every decision is audited. **BR-13**
+### Phase 5 — Submit
+26. Submit → summary "3 unanswered · 2 open · 1 flagged" with jump links → confirm.
+27. Submitted exactly once (idempotent); at expiry auto-submit with saved answers.
+28. Submission carries incident report ("Submitted · 2 incidents for review").
+29. Confirmation: "Results will appear when published."
 
-**F. Grading, results and analytics**
-39. Objective items are auto-graded at finalization. The **grading queue** lists written answers by question or by candidate, showing the submitted answer, max marks and any feedback.
-40. Examiner enters a score between 0 and max (steps of 0.5) plus optional feedback. The server rejects anything outside range (422), recomputes the total, and marks the attempt Graded once no written item is pending. Saving the same grade twice has no further effect. **BR-15**
-41. **Results preview** shows every real attempt with its total, % and pass/fail. Publishing is blocked while any attempt is still in progress or any grade is missing. Publishing sets `results_published_at` and issues reports, each with a verification code. **BR-16 BR-19**
-42. Candidate's Completed tab shows "Results published". The result page shows the total, %, pass/fail, per-question breakdown (if the exam allows) and feedback. **Download PDF** produces the same numbers, plus the verification code and a QR. Another candidate gets 404. **BR-01 BR-16**
-43. Anyone can open `/verify/{code}` (or scan the QR) and see Valid, the exam title, masked candidate name ("A. K***"), the issue date and the score. An unknown code shows a neutral "No report found for this code". The examiner's **Analytics** page shows the score distribution, mean, median, min, max, pass rate and completion rate, plus question analytics and an exam summary PDF. **BR-19**
+### Phase 6 — Monitoring & review (Examiner)
+30. Live monitor: attempts, progress, open count, connection gaps, incidents; send announcements; handle requests; raise open limit; grant time credit.
+31. Incident cards = correlated events (≤60 s window) e.g. "Left fullscreen → returned after 45 s → blocked paste 348 chars · Q7 · camera: 2 faces".
+32. Review each: **Cleared** / **Confirmed** + note.
+33. Confirmed outcome: `warning_only | zero_question | escalate_void` (→ admin). Never automatic deductions.
+
+### Phase 7 — Grading & results
+34. Auto-grade MCQ and multi-select per rule.
+35. Manual grading of written answers (0 ≤ marks ≤ max, FE+BE), with feedback; grader sees edit timeline (char-count over time + blocked pastes).
+36. **Publish blocked** until all written answers graded AND all incidents reviewed.
+37. Publish. Regrade after publish requires reason → audit log → candidate notified ("Q7 regraded").
+38. Candidate sees **only own published** result → PDF → QR → public verify page (masked name, exam, score, date, valid/invalid).
+
+### Phase 8 — Analytics (Examiner)
+39. Exam summary: mean, median, min, max, pass rate, distribution histogram.
+40. Item stats: facility p, corrected discrimination, skipped %, most-chosen wrong option. Flags: disc < 0 **"Check answer key"** (red), disc < 0.15 low, p < 0.2 very hard, p > 0.92 too easy.
+41. Fairness chart: paper difficulty spread, 500 simulated papers, naive random vs blueprint.
+42. Collusion check: pairs with unusually many identical **wrong** answers → "Possible answer sharing — review". Moodle-compatible grade CSV export.
+
+### Phase 9 — Admin oversight
+43. Approve/reject re-attempts, unblock, full audit log.
 
 ---
 
-## 5. State diagrams
+## 6. State machines
 
-### 5.1 Exam
-
-Stored: `status ∈ {draft, published}`, `closed_early_at`, `results_published_at`. The **phase** shown in the UI is derived from server time (BR-03).
-
+### 6.1 Exam lifecycle
 ```mermaid
 stateDiagram-v2
-  [*] --> Draft
-  Draft --> Published: publish, checklist passes
-  Published --> Draft: unpublish, only if no real attempts
-  Published --> Ongoing: server time reaches opens_at
-  Ongoing --> Completed: closes_at reached or examiner closes early
-  Completed --> ResultsPublished: publish results, all attempts graded
-  ResultsPublished --> [*]
-  note right of Published
-    Shown as Scheduled to candidates.
-    Read-only, no question content released.
-  end note
+  [*] --> draft
+  draft --> published: publish checklist passes
+  published --> draft: unpublish (only if no attempts)
+  published --> ongoing: now ≥ starts_at (DERIVED, not stored)
+  ongoing --> completed: now ≥ ends_at (DERIVED)
+  completed --> results_published: all graded + incidents reviewed
 ```
+`ongoing/completed` are **derived from time** (document as a resolved ambiguity). Stored: `draft | published`, plus `results_published` boolean. After first attempt starts: questions, duration, blueprint frozen; only `ends_at` extension + announcements allowed.
 
-### 5.2 Attempt
-
-`status ∈ {in_progress, locked, submitted, expired, voided}` and `grading_status ∈ {pending, needs_manual, graded}`.
-
+### 6.2 Attempt
 ```mermaid
 stateDiagram-v2
-  [*] --> InProgress: start, snapshot + deadline fixed
-  InProgress --> InProgress: resume, same tab or opens within limit
-  InProgress --> Locked: opens exceed max_opens
-  Locked --> InProgress: examiner approves unlock, deadline unchanged
-  InProgress --> Submitted: candidate submits
-  InProgress --> Expired: deadline passes, sweep or submit
-  Locked --> Expired: deadline passes while locked
-  Submitted --> Graded: all written items graded
-  Expired --> Graded: all written items graded
-  Submitted --> Voided: re-attempt approved
-  Expired --> Voided: re-attempt approved
-  Graded --> [*]
-  Voided --> [*]
-  note right of Voided
-    Kept for audit, excluded from
-    results and analytics.
-  end note
+  [*] --> in_progress: start (key ok, eligible, desktop)
+  in_progress --> submitted: candidate submits
+  in_progress --> auto_submitted: deadline passed (lazy finalize / sweeper)
+  in_progress --> voided: strict-mode violation
+  submitted --> graded
+  auto_submitted --> graded
+  voided --> [*]: kept read-only, not scored
+  graded --> [*]
 ```
+All transitions inside a transaction with `SELECT … FROM attempts WHERE id=$1 FOR UPDATE`.
 
-### 5.3 Enrollment
-
+### 6.3 Enrollment (strict mode)
 ```mermaid
 stateDiagram-v2
-  [*] --> Enrolled: examiner enrolls or CSV import
-  Enrolled --> Removed: examiner removes, no attempt exists
-  Enrolled --> Attempting: candidate starts
-  Attempting --> Finished: attempt finalized
-  Finished --> ReattemptRequested: candidate requests with reason
-  ReattemptRequested --> ReattemptGranted: examiner approves
-  ReattemptRequested --> Finished: examiner denies
-  ReattemptGranted --> Attempting: candidate starts new attempt
-  Finished --> [*]
-  Removed --> [*]
+  [*] --> active
+  active --> pending_review: strict violation (attempt voided)
+  pending_review --> cooldown: admin approves (cooldown_until = +15m)
+  pending_review --> rejected: admin rejects
+  cooldown --> active: cooldown elapsed (new key issued)
+  active --> blocked: 2nd strict violation
+  blocked --> active: admin unblock (reason)
 ```
 
----
-
-## 6. Key sequences
-
-### 6.1 Answer save path (BR-09)
-
+### 6.4 Re-attempt approval sequence
 ```mermaid
 sequenceDiagram
-  autonumber
-  participant U as Candidate
+  participant C as Candidate
+  participant S as Server
+  participant E as Examiner
+  participant A as Admin
+  C->>S: violation (fullscreen exit, grace expired)
+  S->>S: attempt → voided, enrollment → pending_review, request(pending_examiner)
+  S-->>C: "Attempt voided — request sent for review"
+  E->>S: view evidence, add note, forward
+  S->>S: request → pending_admin (examiner approve = 403)
+  A->>S: approve(reason) / reject(reason)
+  S->>S: approve → revoke old key, issue new key, cooldown_until=+15m, audit
+  S-->>C: "Approved — available in 14:32" / "Rejected: reason"
+  C->>S: start attempt #2 after cooldown with new key
+  S->>S: build paper: keep 50% of attempt-1 Qs, replace 50% from same cells
+```
+
+### 6.5 Answer save path (failure-resilient)
+```mermaid
+sequenceDiagram
   participant W as Workspace
   participant Q as IndexedDB queue
-  participant S as API save
-  participant D as Postgres
-  U->>W: types in Q3
-  W->>Q: put attemptId, aqId, value, rev 5, opId
-  W-->>U: pill shows Saving
-  W->>S: PUT answers/aqId value, revision 5, clientOpId
-  alt online and attempt in progress and now within deadline plus 2s
-    S->>D: UPDATE answers SET value, revision 5 WHERE revision less than 5
-    D-->>S: 1 row
-    S-->>W: 200 ack revision 5, savedAt
-    W->>Q: delete entries with rev up to 5
-    W-->>U: pill shows Saved 10:24:51
-  else stale revision, another tab is ahead
-    S-->>W: 409 STALE_REVISION with server revision and value
-    W-->>U: notice, newer version kept, local copy offered
-  else attempt closed or locked
-    S-->>W: 409 ATTEMPT_CLOSED or 423 ATTEMPT_LOCKED
-    W-->>U: change not accepted, listed on receipt
-  else network failure
-    W-->>U: pill shows Saved on this device
-    W->>W: retry backoff 1 2 4 8 15s, flush on online
-  end
-```
-
-### 6.2 Strict re-attempt / unlock approval (BR-12, BR-13)
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant C as Candidate
-  participant API as API
-  participant DB as Postgres
-  participant E as Examiner
-  C->>API: POST attempts/id/requests type, reasonCategory, reason
-  API->>DB: check owner, eligible state, no pending request, quota left, window open
-  alt not eligible
-    API-->>C: 409 REQUEST_NOT_ALLOWED with reason code
-  else eligible
-    API->>DB: insert request status pending, audit log
-    API-->>C: 201 pending
-    E->>API: GET exams/id/requests, badge via monitor poll
-    API-->>E: request + candidate connectivity timeline
-    E->>API: POST requests/id/decision approve or deny, note required
-    API->>DB: BEGIN, lock request and attempt FOR UPDATE
-    alt approve unlock
-      API->>DB: attempt locked to in_progress, extra_opens plus 1, deadline unchanged
-    else approve re-attempt
-      API->>DB: old attempt voided, enrollment reattempt_granted, reattempts_used plus 1
-    else deny
-      API->>DB: request denied, attempt unchanged
-    end
-    API->>DB: audit log, COMMIT
-    API-->>E: 200
-    C->>API: heartbeat or home poll
-    API-->>C: request decided, status and note
-    C->>API: start, new attempt with new seed, deadline min of closes_at and now plus duration
+  participant S as Server
+  W->>Q: enqueue {qid, response, seq, client_ts}
+  Q->>S: POST /answers (batch)
+  alt online & attempt in_progress & now ≤ deadline+5s & session current
+    S-->>Q: 200 {saved seq}
+    Q->>Q: drop acked items (only if seq unchanged)
+  else offline
+    Q->>Q: keep, chip "Offline · n queued", retry backoff
+  else after deadline
+    S-->>Q: 409 DEADLINE_PASSED (accepted only if server logged a heartbeat gap covering the deadline AND arrival ≤ deadline+120s; flagged as incident)
   end
 ```
 
 ---
 
-## 7. Business rules (server-enforced)
-
-Every rule lives in `src/server`, not just in the UI. Each rule names its tests.
-
-| ID | Rule | Tests |
-|---|---|---|
-| **BR-01** | Every `/api` handler calls `requireUser(role)` and then an ownership check: the examiner owns the exam, the candidate owns the attempt or enrollment, and admin is read-only on exams. A resource the caller doesn't own returns **404** (not 403) so its existence is not leaked. A wrong role returns 403. | T02 T03 T04 |
-| **BR-02** | Sessions are stored server-side. A disabled user has all sessions deleted, and `requireUser` also checks `users.is_active` on every request. The session lasts 12h, sliding. | T05 |
-| **BR-03** | Exam phase is derived: `draft` while status is draft. After publishing: `scheduled` if now < opens, `ongoing` if opens ≤ now < closes and not closed early, otherwise `completed`, and `results_published` once results are published. Publishing requires the checklist (§4 step 11). Published exams are immutable. Unpublish only if no real attempt exists. | T06 |
-| **BR-04** | Start or resume requires: user active, role candidate (or examiner owner with `sandbox=true`), enrollment exists and is not removed, phase `ongoing`, no finalized non-voided attempt unless a re-attempt was granted, attempt not locked. Each failure returns its own error code. | T07 T08 T09 |
-| **BR-05** | `deadline = min(closes_at, started_at + duration)` is stored once at creation. All time checks use DB/server `now()`. Every attempt response includes `serverNow`. Nothing extends a deadline in v1. | T09 T13 |
-| **BR-06** | At start, `attempt_questions` copies the prompt, options (in display order), key, marks and multi-select rule. Grading and display use only the snapshot. Editing or archiving a source question never changes a started attempt. | T10 |
-| **BR-07** | Randomization uses a per-attempt `seed` (stored) with a seeded shuffle of question order and option order when enabled. Start is idempotent, so the same attempt returns the same order. | T09 T21 |
-| **BR-08** | Candidate DTOs are built by whitelist mappers in `src/server/mappers`. `key`, `is_correct`, other candidates' data and examiner notes never appear in candidate responses before results are published. Even after publishing, the correct key is shown only if `show_breakdown` is on. | T11 |
-| **BR-09** | A save is accepted only if: the session is the active one, attempt status is `in_progress`, `server_now ≤ deadline + 2s`, and `revision > stored revision`. It is idempotent on `clientOpId`. The response acks the stored revision. A stale write returns 409 with the current server revision. | T14 T15 T16 T17 |
-| **BR-10** | One function, `finalizeAttempt(attemptId, reason)`, used by submit, sweep and examiner close. It runs `BEGIN; SELECT … FOR UPDATE`. If the attempt is already final it returns the existing receipt. Otherwise it sets status, `finalized_at`, the auto scores, `grading_status` and the receipt code, then commits. There is a unique receipt per attempt. | T18 T19 |
-| **BR-11** | Lazy sweep: `sweepExpired(examId?)` finalizes attempts where `deadline < now()` and status is `in_progress` or `locked`. It runs at the start of: candidate home, workspace GET and heartbeat, monitor, grading, results and analytics. The daily cron is a backup only. | T19 |
-| **BR-12** | Opens are counted as distinct `clientSessionId`s per attempt (a same-tab refresh is free). The newest session is active, and older sessions are superseded. If `opens > max_opens + extra_opens`, status becomes `locked`. While locked, saves and events are refused (423) and the clock keeps running. | T20 |
-| **BR-13** | Requests: types `unlock` and `reattempt`. One pending request per attempt. A reason is required (10–500 chars, plus a category: connectivity, device, power, other). `reattempt` is only allowed while the attempt is final, the exam phase is `ongoing`, results are unpublished, and `reattempts_used < max_reattempts`. A decision requires the exam owner and a note. Approving a re-attempt voids the old attempt and allows one new attempt with a new seed. Everything is audited. | T20 T21 |
-| **BR-14** | Auto-grading. Single: full marks if the chosen option equals the key, otherwise 0. Multi **exact** (default): full marks only if the selected set equals the key set exactly. Multi **partial**: `marks × max(0, (correctSelected − wrongSelected) / keyCount)`, rounded to 0.01. An empty answer scores 0 and counts as skipped. No negative totals. | T22 |
-| **BR-15** | Manual grade: `0 ≤ score ≤ max`, a multiple of 0.5, only on a finalized non-voided attempt of the examiner's own exam, and only before results are published (after that, a grade change requires unpublish, which is v2). The total is always recomputed in SQL from the parts. Upserts are idempotent. | T23 |
-| **BR-16** | Results publish requires no attempt `in_progress` or `locked` (after the sweep) and every non-voided attempt `graded`. Before publishing, candidates see "Results pending" only. After publishing, a candidate sees only their own result. | T24 |
-| **BR-17** | Sandbox attempts have `is_sandbox = true`, are owned by the examiner, and need no enrollment. Every query for counts, monitor, grading, results, analytics or reports goes through `realAttempts()`, which filters `is_sandbox = false AND status <> 'voided'`. Leaving the sandbox deletes its rows. | T26 |
-| **BR-18** | Integrity events are untrusted hints. They are accepted only for the active session of an `in_progress` attempt, deduplicated on `(attempt_id, client_event_id)`, and stored with `client_seq`, `client_time` and `server_time`. Maximum 200 events per batch and 2,000 per attempt. They **never** change scores, status or time. Incidents are derived (§8). Review decisions are stored separately. | T28 T29 |
-| **BR-19** | Reports are issued at results publish, one per graded attempt, each with a random 10-character base32 code (unique). PDF access: the candidate owner after publish, the exam owner, or an admin. Public verify returns only: valid, exam title, masked name, issue date, score %, and whether it was revoked. Unknown codes return the same neutral shape. | T25 |
-| **BR-20** | Imports: at most 1 MB / 1,000 rows, UTF-8 CSV or JSON. Each row is validated with the same Zod schema as the create endpoint. Duplicates are checked within the file and against the DB. `dryRun=true` returns `{valid, errors:[{row, column, message}]}`. Commit re-validates and inserts in a single transaction, all or nothing. | T27 |
-| **BR-21** | Zod on every input, with 422 and field errors on failure. Login is throttled (5 failures per email per 5 min, tracked in the DB). For every non-GET `/api` request, `Origin` must equal `APP_URL` (CSRF). Passwords are bcrypt hashed. Security headers are set in `next.config`. Admin, grading, publishing and request decisions write to `audit_logs`. | T01 T05 |
-
-**Error shape (all endpoints):** `{ "error": { "code": "ATTEMPT_CLOSED", "message": "Human readable", "fields"?: { "path": "msg" } } }`
-
-Codes: `UNAUTHENTICATED` 401, `FORBIDDEN` 403, `NOT_FOUND` 404, `VALIDATION` 422, `EXAM_NOT_OPEN` 403, `EXAM_CLOSED` 403, `NOT_ENROLLED` 403 (returned as 404 when probing someone else's exam), `ALREADY_SUBMITTED` 409, `ATTEMPT_CLOSED` 409, `ATTEMPT_LOCKED` 423, `SESSION_SUPERSEDED` 409, `STALE_REVISION` 409, `REQUEST_NOT_ALLOWED` 409, `PUBLISH_BLOCKED` 409, `RATE_LIMITED` 429.
-
----
-
-## 8. Integrity engine (innovation 5.1)
-
-**Principle:** observe only inside the exam tab, only during an active attempt, and only what the candidate was told about at entry. Group the observations, explain them, and let a human decide.
-
-**Observations collected** (`integrity_events.type`): `visibility_hidden`, `visibility_visible`, `window_blur`, `window_focus`, `fullscreen_exit`, `fullscreen_enter`, `paste` (detail: `{aqId, chars, outcome: allowed|blocked}`), `copy_blocked`, `resize` (`{w,h}`), `offline`, `online`, `mobile_detected`, plus server-derived `session_opened`, `session_superseded` and `heartbeat_gap`.
-**Never collected:** clipboard text, keystrokes, screenshots, camera frames, URLs of other tabs.
-
-**Grouping algorithm** (`src/server/incidents/group.ts`, pure function, unit-tested; incidents are recomputed on read from events, so they are deterministic):
-
-1. Sort events by `client_seq` (ties broken by `server_time`). Events that arrived late are kept in their observed position, and the timeline shows "received 40 s later" when `server_time − client_time > 10 s`.
-2. **Away interval:** opened by the first of `visibility_hidden`, `window_blur` or `fullscreen_exit`. Any further away-type event within the interval is merged in. The interval is closed by `visibility_visible` / `window_focus` / `fullscreen_enter` once all opened signals have returned. If it never closes: "end unknown".
-3. **Related paste:** a `paste` of ≥ 50 chars within **10 s** after an away interval closes is attached to that interval (the gap is recorded, e.g. "2 s after returning").
-4. **Connectivity incidents** (`offline`/`online` and `heartbeat_gap`) are a **separate category**. They are never merged with away intervals and never above Info.
-5. **Severity:**
-
-| Pattern | Severity |
-|---|---|
-| Blur only, < 5 s, or resize | Info |
-| Hidden or fullscreen exit ≥ 5 s | Review |
-| Large paste (≥ 200 chars) alone, when allowed by policy | Review |
-| Away ≥ 5 s, then a related paste (allowed or blocked) | **Priority review** |
-| ≥ 3 Review incidents in 10 min | Priority review (with a "repeated" reason) |
-| Any connectivity incident | Info (category: connectivity) |
-
-6. **Explanation text** is generated from the facts, never accusatory. For example: *"The exam page was hidden for 45 s (10:24:02–10:24:47). 2 s after returning to Question 3, a 348-character paste was attempted and blocked by the exam policy. What happened while the page was hidden is unknown."*
-7. **Incident key** = `attemptId:firstEventId`, which is stable across recomputes. `incident_reviews(incident_key, decision: dismissed|follow_up, note, reviewer_id, reviewed_at)`.
-
-**Trade-offs we explain to judges:** browser events can be spoofed or missed, so they are hints. We deliberately trade detection power for privacy and fairness, and correctness is guaranteed server-side (time, keys, grading) regardless.
-
-**Optional (Dev B, last, cut first): camera presence check.** Off by default (`camera_check` setting). On the entry page the candidate sees a local preview. During the exam, an on-device face count runs every 5 s using MediaPipe Face Detector (WASM, Apache-2.0, assets self-hosted). Only `face_absent_10s` or `multiple_faces` events are sent. No image ever leaves the device. If the camera is denied, an observation is logged and the candidate continues.
-
----
-
-## 9. Failure resilience (innovation 5.3)
-
-| Disruption | What happens | Why it is fair |
-|---|---|---|
-| Wi-Fi drops while typing | Answers go to the IndexedDB queue and the pill reads "Saved on this device". Retries on reconnect. Acks are matched per revision. | The server accepts only before `deadline + 2s`. |
-| Server unreachable, Wi-Fi up | Same as above: fetch failures are treated as offline, and `navigator.onLine` is only a hint. | Same. |
-| Refresh or crash in the same tab | Resume: server answers merged with newer local revisions, same deadline, no open counted. | The deadline is stored server-side. |
-| Laptop dies, candidate moves to another device | A new open (counted). Server-accepted answers load. Local-only edits from the dead device are lost, and the UI says so honestly. | Open limit stops device-hopping abuse. |
-| Too many opens | Locked, request unlock, examiner decides with the connectivity timeline in view. | The clock keeps running, so there is no time gain. |
-| Long outage, attempt expired | The candidate can request a **re-attempt** (strict: reason, quota, window open, examiner note, audited). | The decision is made by a human with evidence. The voided attempt is kept. |
-| Offline past the deadline | Pending changes are listed as "not accepted" on the receipt. Finalized from accepted answers. | A device timestamp cannot prove when an edit was made. |
-
-**Limits stated in the README:** reloading the page while fully offline needs the page to load again (no service worker in v1). Local drafts are scoped to the account and attempt, and cleared after a confirmed submit.
-
----
-
-## 10. Data model
-
-All ids are `uuid` (`gen_random_uuid()`), all times are `timestamptz` UTC, enums are `text` with CHECK constraints, and every FK has an index.
+## 7. Data model
 
 ```mermaid
 erDiagram
-  users ||--o{ sessions : has
-  users ||--o{ audit_logs : acts
-  users ||--o{ questions : authors
-  users ||--o{ exams : owns
-  exams ||--o{ exam_questions : includes
-  questions ||--o{ exam_questions : "assigned in"
-  exams ||--o{ enrollments : has
+  users ||--o{ exams : creates
+  users ||--o{ questions : owns
   users ||--o{ enrollments : "enrolled as candidate"
-  enrollments ||--o{ attempts : has
-  exams ||--o{ attempts : has
-  attempts ||--o{ attempt_questions : snapshots
-  attempt_questions ||--o| answers : "answered by"
-  attempts ||--o{ attempt_sessions : opens
-  attempts ||--o{ integrity_events : emits
-  attempts ||--o{ incident_reviews : reviewed
-  attempts ||--o{ requests : "asks for"
-  exams ||--o{ announcements : broadcasts
+  exams ||--o{ exam_questions : includes
+  questions ||--o{ exam_questions : "used in"
+  exams ||--o{ enrollments : has
+  enrollments ||--o{ activation_keys : gets
+  enrollments ||--o{ attempts : makes
+  attempts ||--o{ attempt_questions : "frozen paper"
+  attempts ||--o{ answers : has
+  attempts ||--o{ events : emits
+  events ||--o{ snapshots : "camera burst"
+  attempts ||--o{ incidents : "correlated into"
   attempts ||--o| reports : issues
-
-  users {
-    uuid id PK
-    text email UK
-    text name
-    text role "admin examiner candidate"
-    text password_hash
-    bool is_active
-    text student_id
-    jsonb preferences
-    timestamptz created_at
-  }
-  sessions {
-    uuid id PK
-    uuid user_id FK
-    text token_hash UK
-    timestamptz expires_at
-  }
-  questions {
-    uuid id PK
-    uuid owner_id FK
-    text type "single multi written"
-    text topic
-    text difficulty "easy medium hard"
-    text prompt
-    jsonb options "id label is_correct"
-    numeric default_marks
-    text multi_rule "exact partial"
-    bool archived
-  }
-  exams {
-    uuid id PK
-    uuid owner_id FK
-    text title
-    text instructions
-    text status "draft published"
-    timestamptz opens_at
-    timestamptz closes_at
-    int duration_min
-    numeric total_marks
-    numeric pass_pct
-    jsonb settings "shuffle paste fullscreen mobile max_opens max_reattempts show_breakdown camera_check"
-    timestamptz closed_early_at
-    timestamptz results_published_at
-  }
-  exam_questions {
-    uuid exam_id FK
-    uuid question_id FK
-    int position
-    numeric marks
-  }
-  enrollments {
-    uuid id PK
-    uuid exam_id FK
-    uuid candidate_id FK
-    text status "enrolled reattempt_granted removed"
-    int reattempts_used
-  }
-  attempts {
-    uuid id PK
-    uuid exam_id FK
-    uuid enrollment_id FK "null for sandbox"
-    uuid user_id FK
-    bool is_sandbox
-    text status "in_progress locked submitted expired voided"
-    text grading_status "pending needs_manual graded"
-    int seed
-    timestamptz started_at
-    timestamptz deadline
-    timestamptz finalized_at
-    text finalize_reason "submit expiry examiner_close"
-    int extra_opens
-    uuid active_session_id
-    text receipt_code UK
-    numeric total_score
-  }
-  attempt_questions {
-    uuid id PK
-    uuid attempt_id FK
-    int position
-    uuid source_question_id
-    text type
-    text prompt
-    jsonb options "display order, no key"
-    jsonb answer_key "never sent to candidate"
-    numeric marks
-    text multi_rule
-  }
-  answers {
-    uuid id PK
-    uuid attempt_question_id FK "unique"
-    jsonb value
-    int revision
-    uuid last_client_op_id
-    bool flagged
-    timestamptz saved_at
-    numeric auto_score
-    numeric manual_score
-    text feedback
-    uuid graded_by
-  }
-  attempt_sessions {
-    uuid id PK
-    uuid attempt_id FK
-    text client_session_id
-    text user_agent
-    timestamptz opened_at
-    timestamptz last_seen_at
-  }
-  integrity_events {
-    uuid id PK
-    uuid attempt_id FK
-    uuid client_event_id "unique per attempt"
-    int client_seq
-    text type
-    jsonb detail
-    timestamptz client_time
-    timestamptz server_time
-  }
-  incident_reviews {
-    text incident_key PK
-    uuid attempt_id FK
-    text decision "dismissed follow_up"
-    text note
-    uuid reviewer_id
-    timestamptz reviewed_at
-  }
-  requests {
-    uuid id PK
-    uuid attempt_id FK
-    text type "unlock reattempt"
-    text reason_category
-    text reason
-    text status "pending approved denied"
-    uuid decided_by
-    text decision_note
-    timestamptz decided_at
-  }
-  announcements {
-    uuid id PK
-    uuid exam_id FK
-    text body
-    uuid author_id
-    timestamptz created_at
-  }
-  reports {
-    uuid id PK
-    uuid attempt_id FK "unique"
-    text verification_code UK
-    numeric score_pct
-    timestamptz issued_at
-    timestamptz revoked_at
-  }
-  audit_logs {
-    uuid id PK
-    uuid actor_id FK
-    text action
-    text entity
-    uuid entity_id
-    jsonb meta
-    timestamptz at
-  }
+  attempts ||--o{ reattempt_requests : triggers
+  exams ||--o{ announcements : has
+  users ||--o{ audit_log : acts
 ```
 
-Key constraints: `unique(exam_id, candidate_id)` on enrollments. A partial unique index on attempts, `(enrollment_id) WHERE status IN ('in_progress','locked') AND NOT is_sandbox`, so there is never more than one live attempt. `unique(attempt_id, client_event_id)` on events. `unique(attempt_id, client_session_id)` on sessions. Also `login_failures(email, at)` for throttling (not shown).
+| Table | Key columns |
+|---|---|
+| users | id, name, email (unique lower), password_hash, role `admin|examiner|candidate`, active, created_at |
+| user_prefs | user_id PK, prefs jsonb (font_size, theme, layout) |
+| questions | id, owner_id, topic, difficulty 1–3, type `single|multi|written`, text, options jsonb `[{id,text,is_correct}]`, marks, archived, created_at |
+| exams | id, examiner_id, title, instructions, starts_at, ends_at, duration_min, total_marks, status `draft|published`, results_published, settings jsonb `{multi_select_rule, blueprint:[{topic,difficulty,count}], open_limit, sequential_reveal, integrity_mode, camera_check, grace_sec:3, cooldown_min:15, shuffle_options:true}`, frozen_at |
+| exam_questions | exam_id, question_id, PK(exam_id, question_id) |
+| enrollments | id, exam_id, candidate_id, status `active|pending_review|cooldown|rejected|blocked`, strikes, cooldown_until, time_multiplier (1.0–2.0), allow_paste, camera_exception, open_limit_override, UNIQUE(exam_id, candidate_id) |
+| activation_keys | id, enrollment_id, key_hash, hint (last 2), status `active|used|revoked|locked`, failed_tries, issued_at, used_at |
+| attempts | id, enrollment_id, exam_id, candidate_id, attempt_no, is_sandbox, status `in_progress|submitted|auto_submitted|voided|graded`, started_at, deadline_at, submitted_at, active_session_id, current_index, time_credit_sec, last_heartbeat_at, score, paper_difficulty. Partial UNIQUE (enrollment_id) WHERE status='in_progress' |
+| attempt_questions | attempt_id, question_id, position, option_order jsonb, marks, answer_key jsonb (server only), seen_at, locked_at — snapshot |
+| answers | attempt_id, question_id, response jsonb, seq, locked, flagged, saved_at, awarded_marks, grader_id, feedback, edit_timeline jsonb. PK(attempt_id, question_id) |
+| events | id, attempt_id, type, question_id, at (server), client_at, duration_ms, meta jsonb, incident_id |
+| incidents | id, attempt_id, started_at, ended_at, duration_sec, priority `low|review|priority`, summary, review_status `unreviewed|cleared|confirmed`, outcome `warning_only|zero_question|escalate_void`, reviewer_id, note |
+| snapshots | id, event_id, attempt_id, seq 1–3, image bytea, taken_at (max 20 bursts/attempt) |
+| reattempt_requests | id, attempt_id, enrollment_id, status `pending_examiner|pending_admin|approved|rejected`, examiner_note, admin_id, admin_reason, created_at, decided_at |
+| announcements | id, exam_id, target_candidate_id null, message, created_at |
+| reports | id, attempt_id unique, verify_code unique, hmac, issued_at |
+| audit_log | id, actor_id, action, entity, entity_id, before jsonb, after jsonb, reason, at |
+
+Indexes on every FK column. Timestamps `timestamptz` UTC.
 
 ---
 
-## 11. Contracts (write these first)
+## 8. Core business rules (BR) — enforced server-side
 
-Dev A writes `src/contracts/*.ts` in Sprint 0 (by 12:45) and merges it first. Dev B builds against `src/mocks/*` typed by these. **Changing a contract needs a PR labelled `contract` that both devs approve.**
-
-```ts
-// src/contracts/attempt.ts (abridged; real file uses Zod, types via z.infer)
-export type QuestionType = 'single' | 'multi' | 'written';
-
-export interface CandidateQuestion {           // never contains a key
-  aqId: string; position: number; type: QuestionType;
-  prompt: string; marks: number;
-  options?: { id: string; label: string }[];   // display order
-  multiRule?: 'exact' | 'partial';
-}
-export interface SavedAnswer { aqId: string; value: AnswerValue | null; revision: number; flagged: boolean; savedAt: string | null }
-export type AnswerValue = { optionIds: string[] } | { text: string };   // single uses optionIds of length 1
-
-export interface AttemptPolicy { pastePolicy: 'allow' | 'block' | 'log'; fullscreenRequired: boolean; allowMobile: boolean; maxOpens: number; opensUsed: number; cameraCheck: 'off' | 'presence' }
-
-export interface StartAttemptRequest { clientSessionId: string; sandbox?: boolean }
-export interface AttemptState {                 // returned by start, GET attempt
-  attemptId: string; examId: string; examTitle: string; isSandbox: boolean;
-  status: 'in_progress' | 'locked' | 'submitted' | 'expired' | 'voided';
-  serverNow: string; deadline: string;          // ISO, server clock
-  questions: CandidateQuestion[]; answers: SavedAnswer[]; policy: AttemptPolicy;
-  announcements: { id: string; body: string; createdAt: string }[];
-  activeSession: boolean;                       // false => superseded
-  pendingRequest?: { id: string; type: 'unlock' | 'reattempt'; status: 'pending' | 'approved' | 'denied' } | null;
-}
-
-export interface SaveAnswerRequest { value: AnswerValue | null; revision: number; clientOpId: string; clientSessionId: string }
-export interface SaveAnswerAck { aqId: string; revision: number; savedAt: string }       // revision = stored revision
-
-export interface HeartbeatRequest { clientSessionId: string; answeredCount: number }
-export interface HeartbeatResponse { serverNow: string; deadline: string; status: AttemptState['status']; activeSession: boolean; announcements: AttemptState['announcements']; pendingRequest: AttemptState['pendingRequest'] }
-
-export interface IntegrityEventIn { clientEventId: string; clientSeq: number; type: string; clientTime: string; detail?: Record<string, unknown> }
-export interface EventsBatchRequest { clientSessionId: string; events: IntegrityEventIn[] }   // max 200
-
-export interface SubmitRequest { clientSessionId: string }
-export interface SubmissionReceipt {
-  attemptId: string; receiptCode: string; finalizedAt: string;
-  reason: 'submit' | 'expiry' | 'examiner_close';
-  acceptedCount: number; unansweredCount: number;
-  resultsStatus: 'pending' | 'published';
-}
-```
-
-```ts
-// src/contracts/incident.ts
-export interface IncidentDTO {
-  key: string; attemptId: string;
-  category: 'away' | 'paste' | 'connectivity' | 'session' | 'camera';
-  severity: 'info' | 'review' | 'priority';
-  startedAt: string; endedAt: string | null;     // null => "end unknown"
-  durationSec: number | null; questionPosition?: number;
-  explanation: string; groupingReason: string;
-  observations: { type: string; clientTime: string; serverTime: string; detail?: Record<string, unknown> }[];
-  review: { decision: 'dismissed' | 'follow_up'; note: string; reviewer: string; reviewedAt: string } | null;
-}
-```
-
-Other contract files: `auth.ts`, `user.ts`, `question.ts`, `exam.ts` (ExamDTO with derived `phase`), `enrollment.ts`, `monitor.ts` (MonitorRow), `grading.ts`, `results.ts`, `analytics.ts`, `request.ts`, `import.ts`, `errors.ts`.
+| ID | Rule |
+|---|---|
+| BR-01 | Every route: `requireUser()` (active) + `requireRole()` + ownership/enrollment check. |
+| BR-02 | `deadline_at = min(started_at + duration×time_multiplier + time_credit, exam.ends_at)`. Client timer = `deadline_at − server_now` (server sends `server_now` every response). |
+| BR-03 | Start requires: published, now ∈ window, enrolled, enrollment `active`, not cooldown, valid key, desktop check, no other in_progress attempt. |
+| BR-04 | Paper snapshot on start: blueprint draw (seeded crypto-random) → attempt_questions with option order + marks + key. Bank edits never affect active attempts. |
+| BR-05 | Answer keys never serialised to candidate responses (dedicated DTOs). |
+| BR-06 | Save accepted only if attempt `in_progress`, session current, not locked, now ≤ deadline + 5 s (see 6.5 exception). Higher `seq` wins. |
+| BR-07 | Sequential reveal: next question released only if `open_count < open_limit` (override if set). |
+| BR-08 | Submit: `UPDATE attempts SET status='submitted' … WHERE id=$1 AND status='in_progress'` in `FOR UPDATE` tx → idempotent. |
+| BR-09 | Lazy finalize: any read/write of an expired in_progress attempt auto-submits first; plus `/api/cron/finalize` sweeper. |
+| BR-10 | Strict violation → void + request; examiner cannot approve (403); admin decides; 2nd violation → blocked. |
+| BR-11 | Re-attempt paper: keep 50 % of prior questions, replace 50 % from same topic×difficulty cell; warn at publish if cells too small. |
+| BR-12 | Results publish blocked until every written answer graded and every incident reviewed. |
+| BR-13 | Candidate results: `candidate_id = me AND results_published`. |
+| BR-14 | Sandbox excluded from all stats, results, reports, collusion. |
+| BR-15 | Multi-select: all_or_nothing = full if exact set; partial = marks × correct_chosen/total_correct, 0 if any wrong; partial_negative = marks × (correct − wrong)/total_correct, floored at 0. |
+| BR-16 | Manual marks: 0 ≤ marks ≤ question marks, 2 decimals; regrade after publish requires reason. |
+| BR-17 | Activation key: hash stored, bound to enrollment, single-use, 5 failed → locked + event. |
+| BR-18 | Desktop-only start/resume: client deviceCheck true AND `Sec-CH-UA-Mobile` ≠ `?1` AND UA not mobile → else 403 `DESKTOP_REQUIRED`. |
+| BR-19 | Time credit ≤ server-measured heartbeat gap, ≤ 25 % of duration, examiner only, audit-logged. |
+| BR-20 | Questions used in any attempt cannot be deleted → archived. Exam settings frozen after first attempt (only ends_at extension). |
+| BR-21 | Monitoring signals are never conclusive; UI wording "signals for review". |
 
 ---
 
-## 12. API list
+## 9. Integrity engine (5.1)
 
-All JSON responses, except PDFs. Auth column: `A` admin, `E` examiner (owner), `C` candidate (owner), `P` public. Every handler follows the same pattern: `sweep (if listed) → requireUser → zod.parse → ownership → service → mapper`.
+```mermaid
+flowchart LR
+  E1[fullscreen_exit] --> COR
+  E2[visibility_hidden] --> COR
+  E3[window_blur] --> COR
+  E4[paste_blocked / copy_blocked / context_menu] --> COR
+  E5[camera: no_face / multi_face / out_of_frame] --> COR
+  E6[heartbeat_gap / offline / reconnect] --> COR
+  COR{Correlate per attempt<br/>events within 60 s} --> INC[Incident card<br/>duration · question · events]
+  INC --> PRI{Priority rules}
+  PRI -->|"< 10 s, single event"| L[low]
+  PRI -->|"> 10 s away OR camera signal"| R[review]
+  PRI -->|"away > 10 s then blocked paste, OR ≥3 incidents / 10 min"| P[priority]
+  L & R & P --> HUM[Examiner: Cleared / Confirmed → outcome]
+```
+
+- **Prevention (client):** fullscreen required, questions hidden outside fullscreen, block contextmenu/copy/cut/paste/drop/`beforeinput insertFromPaste|insertFromDrop`, `user-select:none` on stems, `beforeunload` warning, watermark.
+- **Detection:** events above + `navigator.sendBeacon` on `pagehide`; every event stores `question_id`.
+- **Mitigation:** per-candidate shuffle, sequential reveal, open limit, watermark, blueprint equivalence.
+- **Evidence:** correlated incidents, snapshots, edit timeline, collusion pairs, audit log.
+- **No numeric "cheating score". No auto deductions.**
+- Camera (P2): MediaPipe every 1.5 s; debounce one event per signal per 20 s; 3 frames 320×240 JPEG q0.5; stop tracks on submit.
+- Phones in "desktop mode" detection: `matchMedia('(pointer: coarse)')`, `screen.width < 1024`, iPadOS (`maxTouchPoints > 1` + Macintosh UA), `navigator.userAgentData?.mobile`.
+
+**Honest limits (say in demo):** a web app cannot see other apps, second devices or OS overlays (e.g. Cluely); client blocks can be bypassed with DevTools. Server rules + human-reviewed evidence are the real enforcement; full OS lockdown would need Safe Exam Browser (future work).
+
+**Frontend API table (from the frontend branch; the implemented backend routes are in §12 and the README):**
 
 | # | Method and path | Auth | Purpose | BR |
 |---|---|---|---|---|
@@ -776,7 +423,7 @@ All JSON responses, except PDFs. Auth column: `A` admin, `E` examiner (owner), `
 | 16 | `PUT /api/exams/{id}/questions` | E | set assigned questions, order, marks | 03 |
 | 17 | `POST /api/exams/{id}/publish` | E | validate checklist and publish | 03 |
 | 18 | `POST /api/exams/{id}/unpublish` | E | back to draft if no attempts | 03 |
-| 19 | `POST /api/exams/{id}/close` | E | close early, finalize all live attempts | 10 |
+| 19 | `POST /api/exams/{id}/close` | E | close early with a reason, finalize all live attempts (`examiner_close`), announce | 10 |
 | 20 | `GET /api/exams/{id}/enrollments` | E | list with attempt status | 01 |
 | 21 | `POST /api/exams/{id}/enrollments?dryRun=` | E | enroll by ids/emails, or CSV import | 20 |
 | 22 | `DELETE /api/enrollments/{id}` | E | remove if no attempt | |
@@ -807,356 +454,348 @@ All JSON responses, except PDFs. Auth column: `A` admin, `E` examiner (owner), `
 | 47 | `GET /api/exams/{id}/report.pdf` | E A | exam summary PDF | 19 |
 | 48 | `GET /api/verify/{code}` | P | masked verification result | 19 |
 | 49 | `GET /api/exams/{id}/analytics` | E A | exam + question analytics | 17 |
+| 50 | `GET /api/exams/{id}/proctor` | E | messages, extensions, announcement acks, examiner notes, candidate instructions (§2.5) | |
+| 51 | `POST /api/attempts/{id}/messages` | E | private message or neutral reminder to one candidate; resolves open help requests | |
+| 52 | `POST /api/attempts/{id}/extend` | E | add 1–60 min with a reason; audited; candidate notified | 05 |
+| 53 | `POST /api/exams/{id}/extend` | E | add 1–60 min for all live attempts with a reason; audited; announced | 05 |
+| 54 | `PUT /api/exams/{id}/notes` | E | examiner-only instructions | |
+| 55 | `GET /api/attempts/{id}/inbox` | C | own messages + acknowledged announcement ids | |
+| 56 | `POST /api/attempts/{id}/help` | C | help request: category (question/technical/break) + message; max 3 open | |
+| 57 | `POST /api/attempts/{id}/announcements/{annId}/ack` | C | acknowledge an announcement | |
+| 58 | `POST /api/issues` · `GET /api/issues` | E A | report an issue (category + description); admin lists all, examiner own | 21 |
+| 59 | `GET /api/ping` | any | `{ serverNow }` for the connectivity test | |
 
 ---
 
-## 13. Page list
+## 10. Fairness (5.2) & resilience (5.3)
 
-| Route | Who | Content | Owner |
+**Fairness:** exam blueprint = counts per (topic × difficulty). Each paper draws randomly *within* cells → variation preserved, difficulty equal. After attempts exist, use observed facility p instead of authored difficulty. `paper_difficulty` = mean expected facility of drawn items. Fairness chart = histogram/box of paper_difficulty for 500 simulated papers: naive random vs blueprint.
+
+**Resilience:** server-owned deadline; IndexedDB pending queue with seq; heartbeat every 15 s; server-measured gaps; examiner-granted capped credit; session takeover; resume on any desktop; lazy finalize; idempotent submit. No self-granted time is ever possible.
+
+---
+
+## 11. Secondary features checklist (all 8 expected)
+
+| # | Feature | Implementation | Owner |
 |---|---|---|---|
-| `/login` | all | Email + password, role redirect, demo credentials hint (non-production flag) | B |
-| `/admin` | A | Users table: search, create, role, disable/enable, reset password | B |
-| `/admin/audit` | A | Audit log | B |
-| `/examiner` | E | Dashboard cards (step 4) + exam list with phase badges | B |
-| `/examiner/questions` | E | Bank table, filters, create/edit drawer, archive | B |
-| `/examiner/questions/import` | E | Upload, dry-run errors table, commit | B |
-| `/examiner/exams/new` | E | Create form | B |
-| `/examiner/exams/[id]` | E | Tabs: **Setup · Questions · Candidates · Review & publish** + "Preview as candidate" | B |
-| `/examiner/exams/[id]/monitor` | E | Live table, totals, announcements composer, requests badge | B |
-| `/examiner/exams/[id]/attempts/[attemptId]` | E | Incident timeline + answers + session/opens history | B |
-| `/examiner/exams/[id]/requests` | E | Unlock / re-attempt queue with decision dialog | B |
-| `/examiner/exams/[id]/grading` | E | Queue by question or candidate, score + feedback, keyboard next | B |
-| `/examiner/exams/[id]/results` | E | Preview table, blockers, publish, PDF | B |
-| `/examiner/exams/[id]/analytics` | E | KPIs, histogram, question table with flags, exam PDF | B |
-| `/candidate` | C | Tabs: Available / Upcoming / Completed | B |
-| `/candidate/exams/[examId]` | C | Entry: instructions, rules, monitoring notice, consent, device check, Start/Resume | B |
-| `/exam/[attemptId]` | C, E(sandbox) | **Workspace**: top bar (title, timer, connection, save), navigator, question, scratchpad + prefs panel, announcements, lock/superseded overlays | B |
-| `/exam/[attemptId]/review` | C | Counts + jump links + submit | B |
-| `/exam/[attemptId]/receipt` | C | Receipt, not-accepted changes list, "Request re-attempt" (if allowed) | B |
-| `/candidate/results/[attemptId]` | C | Score, breakdown, feedback, PDF, verification code | B |
-| `/candidate/settings` | C | Preferences | B |
-| `/verify` and `/verify/[code]` | P | Code input; masked result | B |
-
-**Design direction (Dev B):** calm and paper-like, with high contrast. Use one accent colour, and pair every status colour with an icon and text. Use a mono font for the timer and codes. The workspace has three zones: navigator (left, collapsible; bottom sheet on mobile), question (centre, max 72ch), and tools rail (right: scratchpad and preferences). Visible focus rings, works at 200% zoom, at least 44px touch targets. Use the `frontend-design` skill so it doesn't look like a template.
+| 4.1 | Network-aware UI | connection chip: Saved ✓ / Saving… / Offline · n queued / Synced; red banner if save fails > 30 s | B (A: heartbeat API) |
+| 4.2 | PDF reports | `/api/reports/:attemptId/pdf` (candidate own + published; examiner own exam) and exam summary PDF | A (B: buttons) |
+| 4.3 | Sandbox | `is_sandbox` attempts, banner "Sandbox — not recorded" | A + B |
+| 4.4 | Bulk import | CSV/JSON/Moodle XML/GIFT, preview table with row errors | A parser, B UI |
+| 4.5 | Question analytics | item stats + flags | A queries, B charts |
+| 4.6 | Verifiable reports | verify_code + HMAC, QR → `/verify/:code` (public, masked) | A + B |
+| 4.7 | Custom workspace | font size, theme, layout (list/single/split), persisted in user_prefs | B (A: prefs API) |
+| 4.8 | Scratchpad | canvas pen/eraser + text notes per attempt (local + optional save) | B |
 
 ---
 
-## 14. Seed data and sample files
+## 12. API contract (Dev A owns, Dev B consumes)
+Contracts live in `src/lib/contracts/*.ts` as Zod schemas + inferred types. **Write these first (Sprint 0).** All responses `{ data } | { error: { code, message, fieldErrors? } }`, plus `serverNow` on attempt endpoints.
 
-`pnpm db:seed` is idempotent (it truncates and reseeds). Times are relative to now, so the demo always works. **All demo passwords: `Demo@2026`**. All emails use the reserved `.test` domain, and all people are fictional.
-
-| Email | Role | Purpose |
+| Method & path | Role | Purpose |
 |---|---|---|
-| `admin@exam.test` | Admin | User management |
-| `examiner@exam.test` | Examiner | Owns exams 1–4 |
-| `examiner2@exam.test` | Examiner | Owns exam 5 (authorization test T04) |
-| `ali@exam.test` | Candidate | Live demo candidate |
-| `sara@exam.test` | Candidate | Second candidate (T03 access test) |
-| `omar@exam.test` | Candidate | Locked / re-attempt demo |
-| `cand01…cand24@exam.test` | Candidate | Cohort for analytics |
-
-| # | Exam | State at seed | Content |
-|---|---|---|---|
-| 1 | **Data Science Fundamentals (DSF-101)** | Ongoing (opened 1h ago, closes in 9h), 20 min, 10 marks | Reference paper: Q1 single (median, 2 marks), Q2 multi exact (classification + regression, 3 marks), Q3 written (imbalanced accuracy, 5 marks). Enrolled: ali, sara, omar. Paste blocked, fullscreen required, max opens 3. **Reference run gives 9/10** (Q3 graded 4/5). |
-| 2 | **Statistics Quiz 1** | Completed, results published | 10 questions (8 objective, 2 written), 30 marks, 24 graded attempts with a realistic spread, **one question with a deliberately wrong key** (negative discrimination, so "Check key" appears), a few incidents (1 reviewed). |
-| 3 | **Machine Learning Midterm** | Scheduled (opens tomorrow) | Shows Upcoming + countdown for ali. |
-| 4 | **Expiry Demo Quiz** | Ongoing, **2-minute duration** | 2 single-answer questions, for judges to watch auto-expiry. |
-| 5 | **Examiner 2 Draft** | Draft, owned by examiner2 | Authorization tests. |
-
-Question bank: about 25 questions across Statistics, Machine Learning and Data Wrangling, all three difficulties and all three types.
-
-**Sample files** (`samples/`): `questions.csv`, `questions.json`, `questions_invalid.csv` (missing key, bad difficulty, duplicate prompt), `candidates.csv`, `candidates_invalid.csv` (bad email, duplicate row).
-`questions.csv` columns: `type,topic,difficulty,prompt,option_a,option_b,option_c,option_d,option_e,correct,marks,multi_rule`. Here `correct` is letters such as `B` or `A;C`, and is empty for written questions.
-
----
-
-## 15. Unclear requirements and our resolutions
-
-| # | Ambiguity in the brief | Our decision | Why |
-|---|---|---|---|
-| 1 | Are "ongoing" and "completed" stored or derived? | Derived from server time, plus a manual early close (BR-03). | There is no cron to flip statuses, and it is always correct. |
-| 2 | Multi-select marking rule | Exact match by default. Partial (correct minus wrong, floored at 0) can be set per question (BR-14). The rule is shown at entry. | The brief demands "rules for multiple-select". Exact is the safest default. |
-| 3 | "Answers accepted within the permitted period" vs network latency | Server receipt time ≤ deadline + 2 s grace. Device timestamps are ignored (BR-09). | Tolerates in-flight requests without giving usable extra time. |
-| 4 | Re-attempts are not mentioned | One attempt by default. Re-attempts only via strict examiner approval, with a quota (BR-13). | Supports fairness after failures (5.3) without abuse. |
-| 5 | What counts as "returning to the exam" vs a new session | Same-tab refresh is free. New tab or device counts toward the open limit (BR-12). | A refresh should never be punished. Device-hopping is limited. |
-| 6 | Can a published exam be edited? | No. Unpublish is possible only before any attempt exists (BR-03). Active attempts use snapshots anyway (BR-06). | Prevents changing an exam under candidates. |
-| 7 | "Unless authorized otherwise" for viewing results | Candidate sees own results only. Examiner sees own exams. Admin can view everything read-only. | Least privilege. |
-| 8 | Who creates candidate accounts | Admin creates any account. Examiners can create **candidate** accounts only, via the enrollment CSV. | Examiners need bulk enrollment (4.4) without admin rights. |
-| 9 | How much a verification page may reveal | Exam title, masked name, issue date, score %, valid/revoked. No email, ID or answers (BR-19). | "Without exposing unnecessary candidate information." |
-
----
-
-## 16. Test matrix T01 to T30
-
-**A** = Dev A (Vitest/API or scripted), **B** = Dev B (Playwright or manual on the deployed preview). Run the full list in Sprint 4 on the **production URL**.
-
-| ID | Scenario | Expected | BR | Owner |
-|---|---|---|---|---|
-| T01 | Log in as each role | Lands on own home. Wrong password shows a generic error. The 6th failure is throttled. | 21 | B |
-| T02 | Candidate calls `GET /api/exams` and `POST /api/exams/{id}/publish` | 403 | 01 | A |
-| T03 | sara requests ali's `/api/me/results/{id}` and `report.pdf` | 404 for both | 01 19 | A |
-| T04 | examiner2 grades or opens exam 1 monitor | 404 | 01 | A |
-| T05 | Admin disables omar while he is logged in | omar's next request returns 401 and he is redirected to login | 02 | A |
-| T06 | Publish with marks sum 8 ≠ total 10, or opens > closes | 409 `PUBLISH_BLOCKED` with the list of failing checks | 03 | A |
-| T07 | ali starts exam 3 (scheduled) via the API | 403 `EXAM_NOT_OPEN`, no question content in the response | 04 | A |
-| T08 | An unenrolled candidate opens exam 1's URL or API | 404 / 403, no content | 04 | A |
-| T09 | Call start twice (and from two tabs) | Same attemptId, same deadline, same order | 04 05 07 | A |
-| T10 | Edit Q1's wording and key after ali starts | ali sees the original. Grading uses the original key. | 06 | A |
-| T11 | Inspect start/GET/heartbeat JSON | No `answer_key`, `is_correct` or `key` anywhere | 08 | A |
-| T12 | Answer Q1, Q2, flag Q3, refresh | Same answers, flags and remaining time (±1 s) | 05 09 | B |
-| T13 | Change the OS clock +1h, then reload | Timer unchanged (server offset) | 05 | B |
-| T14 | Save revision 3 after revision 5 was stored | 409 `STALE_REVISION`, the server keeps revision 5 | 09 | A |
-| T15 | Replay the same `clientOpId` 3 times | One write, same ack | 09 | A |
-| T16 | DevTools offline, edit Q3, back online before the deadline | Pill goes Saved on this device → Saved hh:mm:ss. The examiner sees the new text. | 09 | B |
-| T17 | Offline until after the deadline, then reconnect | Attempt Expired with the accepted answers. The receipt lists the not-accepted change. | 09 10 | B |
-| T18 | Double-click Submit, and submit from two tabs | One receipt code, one finalization | 10 | A |
-| T19 | Start exam 4, close the browser, wait 2 min, open the monitor | Attempt shows Expired. Auto-score is present. | 10 11 | A |
-| T20 | omar opens exam 1 in 4 browsers | 4th open → Locked. Request unlock → approve → resumes with the same deadline. | 12 13 | A |
-| T21 | omar's attempt is expired → re-attempt request → approve; and a second request → deny | Old attempt Voided (visible in history). New attempt has a new order. The deny leaves the attempt unchanged. Audit rows exist. | 13 | A |
-| T22 | Unit tests: grading with single/multi exact/multi partial/empty | Reference: Q1 2/2, Q2 3/3, partial cases as in BR-14 | 14 | A |
-| T23 | Grade Q3 as 6/5, then 4/5, then 4/5 again | 422, then total 9/10, then still 9/10 | 15 | A |
-| T24 | Before publish, ali views the result; after publish, compare screen vs PDF | "Results pending", then 9/10 on both | 16 19 | B |
-| T25 | Verify the PDF's code; verify `AAAAAAAAAA` | Valid + masked name; neutral "not found" | 19 | A |
-| T26 | Examiner completes a sandbox preview of exam 1 | Enrollment, monitor, grading queue, results and analytics counts unchanged | 17 | A |
-| T27 | Import `questions_invalid.csv`, then `questions.csv` | Errors listed with row and column, 0 inserted; then all inserted | 20 | B |
-| T28 | Leave the tab for about 45 s, return to Q3, paste 300+ chars (blocked) | One **Priority review** incident with 3+ observations and an explanation. Dismiss with a note. Score unchanged. | 18 | B |
-| T29 | Turn Wi-Fi off for 30 s while typing (tab stays visible) | Connectivity incident (Info) only, no Priority | 18 | B |
-| T30 | Keyboard only, 200% text size, 375px width in the workspace; change prefs, refresh | Everything reachable. Navigator in a bottom sheet. Prefs persist. | — | B |
+| POST /api/auth/* | all | Auth.js |
+| GET/POST/PATCH /api/admin/users | admin | list/create/update/deactivate |
+| POST /api/admin/users/import | admin | CSV |
+| GET/POST/PATCH/DELETE /api/questions | examiner | bank CRUD (delete → archive if used) |
+| POST /api/questions/import | examiner | csv/json/moodle-xml/gift → {valid[], errors[]} ; ?commit=true |
+| GET/POST/PATCH /api/exams | examiner | CRUD + settings |
+| GET /api/exams/:id/checklist | examiner | publish checklist |
+| POST /api/exams/:id/publish · /unpublish | examiner | |
+| POST /api/exams/:id/enrollments | examiner | add/import candidates, extra time, accommodations |
+| POST /api/exams/:id/keys | examiner | generate/reissue keys → plaintext once |
+| GET /api/candidate/exams | candidate | dashboard buckets |
+| POST /api/exams/:id/attempts | candidate/examiner(sandbox) | start {key, deviceCheck} |
+| GET /api/attempts/:id | owner | state, deadline, serverNow, palette, open count |
+| GET /api/attempts/:id/questions/current · /:position | owner | question DTO (no key); 403 if unseen in sequential mode |
+| POST /api/attempts/:id/next | owner | release next (BR-07) |
+| PUT /api/attempts/:id/answers | owner | batch save [{qid, response, seq}] |
+| POST /api/attempts/:id/answers/:qid/lock · /flag | owner | |
+| POST /api/attempts/:id/heartbeat | owner | {sessionId} → serverNow, announcements |
+| POST /api/attempts/:id/events | owner | integrity events (beacon-compatible) |
+| POST /api/attempts/:id/explanation | owner | review-mode explanation |
+| POST /api/attempts/:id/violation | owner | strict-mode → void |
+| POST /api/attempts/:id/submit | owner | idempotent |
+| GET /api/exams/:id/monitor | examiner | live attempts, incidents, gaps |
+| POST /api/exams/:id/announcements | examiner | |
+| POST /api/attempts/:id/time-credit · /open-limit | examiner | |
+| PATCH /api/incidents/:id | examiner/admin | review + outcome |
+| GET/PATCH /api/requests | examiner (note/forward) · admin (decide) | re-attempts |
+| POST /api/admin/enrollments/:id/unblock | admin | |
+| GET /api/exams/:id/grading · PATCH /api/answers/:attemptId/:qid/grade | examiner | |
+| POST /api/exams/:id/results/publish · /regrade | examiner | BR-12, BR-16 |
+| GET /api/candidate/results | candidate | own published |
+| GET /api/reports/:attemptId/pdf · /api/exams/:id/report/pdf | scoped | |
+| GET /api/verify/:code | public | masked |
+| GET /api/exams/:id/analytics · /items · /fairness · /collusion · /export/moodle.csv | examiner | |
+| GET /api/audit | admin | |
+| GET/PUT /api/me/prefs | any | |
+| GET /api/cron/finalize | system | sweeper |
 
 ---
 
-## 17. Team, branches and pull requests
+## 13. Pages (Dev B owns)
 
-| | Dev A: backend | Dev B: frontend |
+| Route | Role | Notes |
 |---|---|---|
-| Owns | `src/db`, `drizzle/`, `src/contracts`, `src/server`, `src/app/api`, `samples/`, `tests/unit` | `src/app/**` pages and layouts, `src/components`, `src/lib/client`, `src/mocks`, `tests/e2e` |
-| Builds | Schema, auth and permissions, contracts, every API route, attempt engine (timer, question release only after start, open limit, lock), grading, incident grouping, strict re-attempt flow, analytics, PDF + QR, imports, seed | Design system, all pages, exam workspace, browser observers (fullscreen, visibility, paste, mobile), offline save queue, monitor, charts, scratchpad, preferences, camera check (last) |
-| Never touches | Page styling (ask B) | DB schema, migrations, contracts (open an issue or ask A) |
+| /login | all | |
+| /admin · /admin/users · /admin/requests · /admin/audit | admin | |
+| /examiner · /examiner/questions · /examiner/questions/import | examiner | |
+| /examiner/exams/new · /examiner/exams/[id] (tabs: Settings, Questions, Blueprint, Candidates & Keys, Monitor, Grading, Results, Analytics) | examiner | |
+| /candidate · /candidate/exams/[id] (start/gates) · /candidate/exams/[id]/attempt · /candidate/results | candidate | |
+| /verify/[code] | public | |
 
-**Working rules**
-
-- **Contracts first:** by 12:45, contracts v1 are merged. Dev B uses `src/mocks` behind a `NEXT_PUBLIC_USE_MOCKS=1` flag until each endpoint lands, then flips it per feature.
-- Branches: `be/<topic>` (Dev A) and `fe/<topic>` (Dev B), short-lived, cut from the latest `main`.
-- **A small PR every 45–60 minutes.** The other dev reviews it within 10 minutes by opening the **Vercel preview** and following the PR's "How to test" steps.
-- **Merge commits only** (disable squash and rebase in the repo settings), so judges see each dev's real commit history. Never force-push `main`. Never rewrite shared history.
-- Commit messages: `feat(api): start attempt with snapshot (BR-04..07)`, `fix(ui): save pill revision match (T16)`.
-- `main` must always deploy. A broken production deploy means **everyone stops** until it is fixed or reverted.
-- Secrets live only in Vercel env vars and `.env.local` (git-ignored). Commit `.env.example` with names only.
-
-**Environment variables:** `DATABASE_URL` (Neon pooled), `DATABASE_URL_UNPOOLED` (migrations), `APP_URL`, `SESSION_SECRET`, `CRON_SECRET`, `NEXT_PUBLIC_USE_MOCKS`, `NEXT_PUBLIC_DEMO_HINTS`.
+**Design rules (20 marks):** one accent colour, one display font (next/font), neutral greys, 8 px spacing grid, no purple gradients/emoji headers. Every async action has loading/success/error. Empty states with next action. Keyboard: 1–4 select option, N/P next/prev, L lock, F flag. Visible focus rings, aria-live for timer + save status, WCAG AA contrast. Split pane (question left, answer right) on desktop. Responsive portal on mobile.
 
 ---
 
-## 18. Sprint plan
+## 14. Edge-case test matrix (judges will try these)
 
-1 story point ≈ 15 minutes of focused work. Point totals assume no breaks, so if you take one, cut from the **Stretch** rows first.
+| ID | Scenario | Expected | Owner |
+|---|---|---|---|
+| T01 | Candidate opens another candidate's result URL / API | 403, logged | A |
+| T02 | Examiner opens another examiner's exam | 403 | A |
+| T03 | Start before window / after window | blocked with message | A |
+| T04 | Not enrolled / wrong key ×5 | blocked / key locked + alert | A |
+| T05 | Late starter | start screen shows reduced time | A+B |
+| T06 | Change OS clock | no effect on timer | A+B |
+| T07 | Refresh mid-exam | same answers, time, position | A+B |
+| T08 | Close browser, return after deadline | already auto-submitted | A |
+| T09 | Double-click submit / refresh during submit | exactly one submission | A |
+| T10 | Network offline in DevTools | queue chip, syncs on reconnect | B+A |
+| T11 | Second tab | takeover, old tab read-only | A+B |
+| T12 | Edit question during active attempt | active attempt unchanged | A |
+| T13 | Lock then change answer | 409, UI shows locked | A+B |
+| T14 | 5 open questions | next blocked with message; examiner raises limit → continues | A+B |
+| T15 | Unseen question requested in sequential mode | 403 | A |
+| T16 | Answer key in network payload | absent | A |
+| T17 | Paste / right-click / drag | blocked + logged | B |
+| T18 | Phone + "Desktop site" | portal OK, exam blocked | B+A |
+| T19 | Esc in review mode | explanation + 30 s, continue | B+A |
+| T20 | Esc in strict mode | void → request → examiner can't approve → admin approves → cooldown → new key → 50 % new Qs | A+B |
+| T21 | 2nd strict violation | permanent block, admin unblock only | A |
+| T22 | Camera: cover face / second person | warning only + snapshot burst in incident | B+A |
+| T23 | Publish with ungraded written / unreviewed incident | blocked, shows counts | A |
+| T24 | Manual mark > max | rejected FE+BE | A+B |
+| T25 | Multi-select 3 rules | correct scores | A |
+| T26 | CSV with bad rows | row errors, import valid only | A+B |
+| T27 | Tampered verify code | "Not valid" | A |
+| T28 | Sandbox attempt | excluded from analytics | A |
+| T29 | Deactivated user mid-session | next request 401 | A |
+| T30 | Blueprint cell too small | publish warning | A |
+
+---
+
+## 15. Seed data (`pnpm db:seed`)
+- 1 admin, 2 examiners, 40 candidates (fictional), test credentials in README.
+- 60 questions across 4 topics × 3 difficulties × 3 types.
+- Exam A "Midterm — completed": 30 graded attempts, results published, **one question seeded with a wrong answer key** (shows red flag), **one colluding pair** (shared wrong answers), varied incidents (cleared + confirmed), one voided attempt + approved request.
+- Exam B "Live now": window open now → 2 h, keys generated, strict mode, camera off.
+- Exam C "Upcoming": tomorrow.
+- Exam D "Practice": standard mode.
+
+---
+
+## 16. Team split, sprints & points
+
+**Dev A (Burhan) — Backend:** `db/**`, `src/server/**`, `src/app/api/**`, `src/lib/contracts/**`, seed, auth/RBAC, engines, analytics, PDF/QR, import parsers, README backend sections.
+**Dev B — Frontend:** `src/app/(portal)/**` pages, `src/components/**`, `src/hooks/**`, design system, exam workspace, client detectors, IndexedDB queue, camera module, charts, scratchpad, prefs.
+**Shared:** `src/lib/contracts/**` (A owns; B requests changes via PR comment). B builds against **mock fixtures** (`src/mocks/**`) from contracts until A's endpoints land.
 
 ```mermaid
 gantt
-  title Build day 27 Nov 2026 (PKT)
+  title Sprint plan (27 Nov)
   dateFormat HH:mm
   axisFormat %H:%M
-  section Milestones
-  S0 Setup and contracts          :s0, 12:00, 45m
-  S1 End-to-end path              :s1, after s0, 120m
-  S2 Grading and monitoring       :s2, after s1, 105m
-  S3 Integrity and analytics      :s3, after s2, 105m
-  S4 Testing and polish           :s4, after s3, 85m
-  Final push and freeze           :crit, s5, after s4, 20m
-  section Dev A backend
-  Repo, Vercel, Neon, schema, contracts      :a0, 12:00, 45m
-  Auth, exams, bank, enroll, start, save, submit :a1, after a0, 120m
-  Grading, results, sweep, monitor, admin    :a2, after a1, 105m
-  Events, incidents, lock, requests, analytics, PDF, import :a3, after a2, 105m
-  Seed, permission tests, fixes              :a4, after a3, 85m
-  section Dev B frontend
-  Design system, shell, mocks                :b0, 12:00, 45m
-  Login, builder, bank, home, workspace      :b1, after b0, 120m
-  Review, grading, results, monitor, admin   :b2, after b1, 105m
-  Offline queue, observers, timeline, charts :b3, after b2, 105m
-  Import UI, requests UI, a11y, demo prep    :b4, after b3, 85m
+  section Dev A Backend
+  S0 Scaffold, schema, auth, contracts, deploy   :a0, 12:00, 45m
+  S1 Exams, bank, enroll, keys, start, save, submit :a1, after a0, 120m
+  S2 Grading, publish, results, monitor, events, incidents :a2, after a1, 105m
+  S3 Strict flow, requests, analytics, PDF/QR, import :a3, after a2, 105m
+  S4 Fix, seed polish, README                     :a4, after a3, 60m
+  section Dev B Frontend
+  S0 Design system, layout, login, mocks          :b0, 12:00, 45m
+  S1 Examiner exam builder + candidate workspace  :b1, after b0, 120m
+  S2 Grading UI, results, monitor, detectors, offline chip :b2, after b1, 105m
+  S3 Strict/review overlays, analytics charts, scratchpad, prefs, camera :b3, after b2, 105m
+  S4 UX polish, a11y, backup video                :b4, after b3, 60m
+  section Gates
+  Steel thread works end-to-end                   :milestone, m1, 14:45, 0m
+  Feature freeze                                  :milestone, m2, 18:15, 0m
+  FINAL PUSH                                      :milestone, m3, 19:40, 0m
 ```
 
-### Sprint 0, 12:00–12:45 (3 pts each)
+### Sprint backlog with points (1 pt ≈ 15 min)
 
-| Dev A | pts | Dev B | pts |
-|---|---|---|---|
-| Scaffold Next.js, push, link Vercel, add Neon via Marketplace, `.env.example` | 1 | `shadcn init`, tokens (colour, type, spacing), fonts, app shell + role layouts | 2 |
-| Drizzle schema v1 + first migration on Neon | 1 | `src/mocks` + typed API client wrapper (`lib/client/api.ts`) | 1 |
-| Contracts v1 (§11) + error helper + `requireUser` stub | 1 | | |
-
-**Scaffold note (Dev A):** `create-next-app` refuses to run in a folder that already contains `PRD.md`, `AGENTS.md` and the other files, so scaffold into a temporary folder and move it in:
-
-```bash
-pnpm create next-app@latest web-tmp --ts --tailwind --eslint --app --src-dir --import-alias "@/*" --use-pnpm --yes
-```
-
-```bash
-rm -rf web-tmp/.git && cp -a web-tmp/. . && rm -rf web-tmp
-```
-
-```bash
-pnpm i && git add -A && git commit -m "chore: scaffold Next.js app"
-```
-
-**Exit check:** `main` deploys. Contracts are merged. Both devs pull.
-
-### Sprint 1, 12:45–14:45 (8 pts each). By 14:45 an exam can be created, taken and submitted on production.
-
-| Dev A | pts | Dev B | pts |
-|---|---|---|---|
-| Login/logout/me, sessions, guards, Origin check | 2 | Login + role redirect | 1 |
-| Questions CRUD + exams CRUD + assign + publish checklist | 2 | Question bank + exam builder tabs + review & publish | 3 |
-| Enrollment + `/me/exams` + entry info | 1 | Candidate home + entry page | 1 |
-| Start/resume with snapshot, seed, deadline, mapper | 2 | Workspace: question renderers, navigator, timer (server offset), autosave hook | 3 |
-| Save (revision, opId) + flags + submit/finalize + receipt | 1 | | |
-
-### Sprint 2, 14:45–16:30 (7 pts each)
-
-| Dev A | pts | Dev B | pts |
-|---|---|---|---|
-| Auto-grading (BR-14) + unit tests | 1 | Review screen + submit dialog + receipt | 1 |
-| Manual grading + results preview/publish + reports issue | 2 | Grading screen (keyboard flow) | 2 |
-| Sweep + examiner close + idempotency checks | 1 | Results preview/publish + candidate result page | 1 |
-| Monitor endpoint + heartbeat + announcements | 2 | Live monitor + announcement composer + banner in workspace | 2 |
-| Admin users API + audit log | 1 | Admin users page | 1 |
-
-### Sprint 3, 16:30–18:15 (7 pts each)
-
-| Dev A | pts | Dev B | pts |
-|---|---|---|---|
-| Events ingest + `group.ts` incidents + review endpoint + tests | 2 | Offline queue (IndexedDB, backoff, revision acks) + connection/save pills | 2 |
-| Open limit, sessions, lock, requests + decisions (BR-12/13) | 2 | Observers: visibility, focus, fullscreen gate, paste policy, mobile check, batching + beacon | 2 |
-| Analytics (exam + question, discrimination, check-key flag) | 1 | Incident timeline + review UI; requests queue + lock/superseded overlays | 1 |
-| PDF (result + exam) + QR + verify | 1 | Analytics charts + verify page | 1 |
-| Imports (questions + candidates, dry run) | 1 | Scratchpad + preferences (persisted) | 1 |
-
-### Sprint 4, 18:15–19:40 (5 pts each + buffer)
-
-| Dev A | pts | Dev B | pts |
-|---|---|---|---|
-| Seed (§14) + sample files + sandbox delete path | 1 | Import UI + sandbox entry/banner | 1 |
-| Run T02–T11, T14–T15, T18–T23, T25–T26 on production | 2 | Run T01, T12–T13, T16–T17, T24, T27–T30 on production | 2 |
-| Fix release blockers (§19 list) | 2 | Accessibility + responsive pass, empty/error states | 1 |
-| | | **Stretch:** camera presence check | 1 |
-
-### Final push, 19:40 (official cutoff: confirm the exact time with organizers; this plan assumes 20:00 PKT)
-
-1. 19:40: last merge to `main`. Re-seed production. Smoke test: login as all 3 roles and complete the DSF-101 run.
-2. Confirm the Vercel production deployment is **Ready** and its commit SHA equals `main` HEAD on GitHub.
-3. **Turn off automatic deploys** before the cutoff: Vercel → Project → Settings → Git → **Disconnect** (or set *Ignored Build Step* to `exit 0`). No commits, pushes, builds or deploys after the cutoff.
-4. Warm up Neon (open the app) shortly before judging, because Neon free tier suspends when idle.
-
-**Release blockers** (stop everything): an answer key or another candidate's data is visible; confirmed work disappears; expiry grants extra time; a wrong grade; two final submissions for one attempt; production deploy broken.
-
----
-
-## 19. README checklist
-
-- [ ] Project name, one-paragraph pitch, **deployed URL**
-- [ ] **Test credentials for each role** (table from §14), and a note that the data is fictional
-- [ ] Features mapped to brief sections 3.1–3.8 and 4.1–4.8 (short table)
-- [ ] **Innovation challenges**: 5.1 explainable integrity engine and 5.3 failure resilience. Explain the problem, the design, the trade-offs, and what is and is not collected.
-- [ ] Architecture diagram + tech choices (link to `PRD.md`)
-- [ ] Setup: Node 22, pnpm, `cp .env.example .env.local`, `pnpm i`, `pnpm db:migrate`, `pnpm db:seed`, `pnpm dev`
-- [ ] Scripts: `dev`, `build`, `lint`, `typecheck`, `test`, `test:e2e`, `db:generate`, `db:migrate`, `db:seed`
-- [ ] Dependencies (main libraries + licences, no paid services)
-- [ ] Sample import files and their format
-- [ ] Browsers tested (exact versions) and known limits (offline reload, browser monitoring is a hint)
-- [ ] Team members and who built what
-
----
-
-## 20. Demo script (15 minutes)
-
-Use two browser profiles: **Candidate** (ali) and **Examiner**. Dev B drives the candidate, Dev A drives the examiner. Have production open and warmed up.
-
-| Time | Who | Show |
+**S0 · 12:00–12:45 — Foundation (both)**
+| Task | Owner | Pts |
 |---|---|---|
-| 0:00–0:45 | A | The problem in one line: candidates need to trust saving and time, examiners need evidence they can interpret. Rubric coverage slide = §1 table. |
-| 0:45–2:15 | A | Admin users (role, disable). Examiner: bank (3 types, topic, difficulty), DSF-101 setup, checklist, enrollment, **sandbox preview** (counts unchanged). |
-| 2:15–4:00 | B | ali: home tabs (upcoming countdown), entry page (rules, monitoring notice, consent), start. Answer Q1, Q2, flag Q3, scratchpad, text size, **refresh** (all preserved, same time). |
-| 4:00–5:30 | B | DevTools offline, edit Q3, "Saved on this device", back online, "Saved 10:24:51". Examiner monitor shows a connectivity Info only. |
-| 5:30–7:15 | B + A | Leave tab ~45 s, return to Q3, paste is blocked. Examiner opens the timeline: one **Priority review** with a plain explanation. Dismiss with a note. Marks unaffected. Send an announcement, which appears on ali's screen. |
-| 7:15–9:00 | B + A | Review screen, submit (double-click shows the same receipt). Grade Q3 4/5 (try 6/5, rejected), preview 9/10, publish. |
-| 9:00–11:00 | B + A | ali's result 9/10, PDF, scan QR, verify page (masked). Analytics: Statistics Quiz 1 shows the "Check key" flag. Import an invalid CSV to show row errors. |
-| 11:00–15:00 | Judges | Offer: sara tries ali's result (404), exam 4 expires live, omar opens 4 tabs (lock, then unlock), repeat submit. |
+| Next.js + TS + Tailwind + shadcn init, repo, branch protection, Vercel+Neon connected, empty deploy | A | 1 |
+| Drizzle schema (§7) + migration + seed skeleton | A | 1 |
+| Auth.js credentials, `requireUser/requireRole`, role redirects | A | 1 |
+| Zod contracts for exams, attempts, answers, questions | A | 1 (shared) |
+| Theme tokens, font, AppShell (sidebar/topbar per role), login page | B | 2 |
+| Mock fixtures from contracts | B | 1 |
+
+**S1 · 12:45–14:45 — Steel thread** (exam → take → submit)
+| Task | Owner | Pts |
+|---|---|---|
+| Question bank CRUD API + archive rule | A | 1 |
+| Exam CRUD + settings + blueprint + checklist + publish | A | 2 |
+| Enrollment + activation keys | A | 1 |
+| Start attempt: BR-02/03/04, paper snapshot, seeded shuffle | A | 2 |
+| Attempt GET, current/next question, BR-07 open limit | A | 1 |
+| Batch save, lock, flag, submit (BR-06/08), lazy finalize | A | 1 |
+| Question bank UI + editor | B | 2 |
+| Exam builder (settings, questions, blueprint, candidates & keys) | B | 2 |
+| Candidate dashboard + start gates (device, key, start screen, fullscreen) | B | 1 |
+| Exam workspace: timer, palette, question view, autosave, lock/flag, open-limit message, submit summary | B | 3 |
+
+**S2 · 14:45–16:30 — Grade, publish, monitor**
+| Task | Owner | Pts |
+|---|---|---|
+| Auto-grade (BR-15) + manual grade API + publish gate (BR-12) + regrade | A | 2 |
+| Candidate results API + PDF + verify code + /verify | A | 2 |
+| Heartbeat, events (beacon), correlation → incidents, monitor API, announcements, time credit | A | 3 |
+| Grading UI, results publish UI, candidate results page | B | 2 |
+| Monitor dashboard (attempts, incident cards, announce, credit, raise limit) | B | 2 |
+| Client detectors (fullscreen/visibility/blur/paste/contextmenu/drag), IndexedDB queue, connection chip, second-tab handling | B | 3 |
+
+**S3 · 16:30–18:15 — Integrity, analytics, secondary**
+| Task | Owner | Pts |
+|---|---|---|
+| Strict flow: violation → void → requests (examiner forward / admin decide) → cooldown → new key → 50 % new paper → block/unblock | A | 3 |
+| Analytics: summary, item stats + flags, fairness simulation, collusion, Moodle CSV | A | 2 |
+| Import parsers CSV/JSON/Moodle XML/GIFT + preview | A | 1 |
+| Sandbox, prefs API, audit log API, admin users API | A | 1 |
+| Review/strict overlays, request status screens, admin requests page | B | 2 |
+| Analytics charts (histogram, item table, fairness chart, collusion list) | B | 2 |
+| Import UI, scratchpad, workspace prefs, watermark, sandbox banner | B | 2 |
+| P2 camera check (only if all above green) | B | 2 |
+
+**S4 · 18:15–19:15 — Harden & polish** — run §14 matrix (both), UX pass, README, test credentials, record 60 s backup video, rehearse demo.
+**S5 · 19:15–19:40 — Freeze** — merge last PRs, verify production URL, tag `v1.0`, **final push 19:40**, then set Vercel *Ignored Build Step* to `exit 0` and stop pushing.
 
 ---
 
-## 21. What not to build
-
-- Safe Exam Browser, desktop agents, browser extensions, OS lockdown
-- Webcam AI beyond the optional local presence check. No face recognition, phone detection (YOLO), gaze tracking, audio monitoring, screen recording or screen sharing.
-- Keystroke logging or "authenticity %" scores
-- WebSockets, Redis, queues, microservices, a separate backend server
-- Automatic penalties, auto-termination, mark deductions from incidents
-- Encrypted offline submission files, QR answer submission, service-worker offline shell
-- LTI/QTI, SSO/OAuth, email sending (in-app status only), password-reset emails
-- More than 3 roles. AI grading. Paid APIs of any kind.
-- Dispute module (5.4): mention it as future work only
-- Fancy dashboards before the T01–T30 tests pass
+## 17. Git & pull-request workflow
+- `main` = production (Vercel). Protected: PR required, 1 approval (the other dev), no force-push.
+- Branches: `be/<topic>` (Dev A), `fe/<topic>` (Dev B), e.g. `be/attempt-engine`, `fe/exam-workspace`.
+- **Small PRs every 45–60 min.** Rebase on `main` before opening. Each PR has a Vercel preview — reviewer clicks through it.
+- Merge with **"Create a merge commit"** (keep commit history visible to judges — do not squash everything into one).
+- Conventional commits: `feat(api): …`, `fix(workspace): …`, `chore(db): …`. Never amend dates, never force-push `main`.
+- Contract changes: only Dev A edits `src/lib/contracts/**`; Dev B comments in PR.
+- Conflicts: owner of the folder resolves.
+- Migrations: only Dev A creates migrations; Dev B never edits `db/**`.
 
 ---
 
-## 22. AI tooling
+## 18. AI-assisted development (encouraged — use agents heavily)
+Allowed by the rules. Each dev runs their own coding agent (Claude Code / Cursor / Codex) **scoped to their folders**.
 
-### 22.1 Install (each dev, once, about 5 minutes in Sprint 0)
-
-> Commands were checked against the official READMEs on 27 Nov 2026 where marked ✅. Items marked ⚠️ could not be fetched from this environment, so confirm them on first run (the `/plugin` browser shows what each bundle contains).
-
-**Skills (Claude Code)**
-
+**Setup (each machine, verify commands once):**
 ```bash
-# in Claude Code
-/plugin marketplace add anthropics/skills            # ✅ official marketplace
-/plugin install example-skills@anthropic-agent-skills # ⚠️ bundle expected to contain frontend-design + webapp-testing; check via /plugin → Browse
+# Skills (Claude Code / any agent that reads .claude/skills)
+npx -y skills add anthropics/skills --skill frontend-design --agent claude-code     # Dev B
+npx -y skills add anthropics/skills --skill webapp-testing --agent claude-code      # both (Playwright tests)
+npx -y skills add jezweb/claude-skills --skill shadcn-ui --agent claude-code         # Dev B
+# MCP servers
+npx shadcn@latest mcp init --client claude                                          # Dev B
+claude mcp add playwright -- npx @playwright/mcp@latest                             # both
+claude mcp add context7 -- npx -y @upstash/context7-mcp                             # both (current docs)
 ```
+- Cursor reads `AGENTS.md` and `.cursor/rules/*.mdc`; Claude Code reads `CLAUDE.md`. Both point to this PRD.
+- `.cursorignore` keeps secrets, build output and large files out of AI context.
+- **Prompt pattern:** "Implement PRD §X (rules BR-..). Only touch <folders>. Write Zod contract first, then route, then a Playwright/Vitest test for T-ids. Do not change other modules."
+- Agent must **never** commit `.env*`, never run destructive DB commands on production, never push to `main` directly.
+- Ask the agent to run `pnpm lint && pnpm typecheck && pnpm test` before every PR.
 
-- `frontend-design`: Dev B uses it for the design system and every page.
-- `webapp-testing`: both devs use it for Playwright-driven checks of T-cases.
-- **shadcn:** use the shadcn MCP below; there is no separate skill needed.
+---
 
-**MCP servers**
+## 19. README must contain
+Setup steps · env vars list (no values) · test credentials per role · architecture diagram (§3) · tech choices (§2) · **requirement ambiguities & resolutions** (§20) · innovation challenges implemented (5.1/5.2/5.3) · "Try to break it" checklist (§14) · honest limitations.
 
-```bash
-# shadcn components (⚠️ verify flag names with: npx shadcn@latest mcp --help)
-npx shadcn@latest mcp init --client claude      # Cursor: --client cursor · Codex: --client codex
+## 20. Requirement ambiguities resolved (rubric: case study analysis)
+1. Multi-select marking unspecified → configurable 3 rules (BR-15).
+2. "Ongoing" state → derived from time, not manual.
+3. Window vs duration → deadline = min(start + duration, window end); shown before start.
+4. Randomization vs fairness → blueprint sampling (5.2).
+5. Monitoring "not conclusive" → incidents reviewed by humans; no auto deductions.
+6. Lock-down impossible in browser → layered prevention + detection + evidence, stated openly.
+7. Re-attempts unspecified → Strict mode policy with examiner→admin approval and fresh paper.
+8. Editing exams after start → frozen except ends_at extension.
+9. Offline at deadline → server-measured gap rule (6.5), examiner-granted capped credit.
 
-# Playwright browser control (✅ from microsoft/playwright-mcp README)
-claude mcp add playwright npx @playwright/mcp@latest
-codex mcp add playwright npx "@playwright/mcp@latest"
-# Cursor: Settings → MCP → Add new MCP Server → command: npx @playwright/mcp@latest
+## 21. Demo script (15 min)
+1. 0:00 One-line identity + who it's for.
+2. Examiner: blueprint exam → checklist → sandbox → publish → keys.
+3. Candidate: key → start screen → fullscreen → answer, lock, hit open limit → refresh (persists) → DevTools offline → reconnect synced.
+4. Press Esc (review mode) → explanation. Switch to strict exam → void → examiner forwards → admin approves → new key.
+5. Security: other result URL → 403; network tab shows no keys; double submit → one.
+6. Monitor: incident card with timeline (+ camera burst if built) → Cleared.
+7. Grade written → publish → PDF → scan QR → verify.
+8. Analytics: red "check answer key" item, fairness chart, collusion pair.
+9. Limits + "what breaks first at scale" (polling → SSE/queue; Postgres connection pooling).
 
-# Context7 up-to-date library docs (✅ README: one-shot setup, Node ≥ 22.13)
-npx ctx7 setup --claude        # or --cursor
-# manual remote server: https://mcp.context7.com/mcp (header Authorization: Bearer <key>)
-```
+## 22. Definition of done
+Feature works on deployed URL · FE + BE validation · server-side auth check · loading/error/empty states · keyboard accessible · no console errors · covered by a T-id check · merged via PR.
 
-Use Context7 for **Next.js 16, Drizzle, Tailwind v4, shadcn, pdf-lib**, because training data is often a version behind (for example, Next 16 renamed `middleware.ts` to `proxy.ts`).
+## 24. AMENDMENTS — 27 Nov 14:20 (override earlier sections where they conflict)
 
-### 22.2 Prompt pattern
+### 24.1 Authentication — keep Auth.js credentials; Google sign-in is optional
+- Do NOT migrate to a hosted auth provider now (working auth + time risk). Keep Auth.js credentials + dev account buttons.
+- P2 optional: Auth.js Google provider (free Google Cloud OAuth client, no billing). Google sign-in only logs in users who already exist or match an allowed domain — it never creates exam access by itself.
 
-Paste this shape for every task. One endpoint or one screen per prompt.
+### 24.2 Account access model — institution-controlled, no public self-signup
+- Single institution per deployment. Table `org_settings` (singleton): `name`, `allowed_domains text[]` (e.g. `umt.edu.pk`), `allow_external_invites bool`.
+- **No open sign-up.** Accounts come from: (a) admin create / CSV import, (b) examiner enrolling candidates by email (creates candidate account if missing, sends nothing — shows temp password / key list), (c) Google sign-in auto-creates a CANDIDATE account only if email domain ∈ allowed_domains.
+- **External users** (e.g. gmail.com): only by explicit invite — admin or examiner adds the email; `users.is_external = true`; badge "External" in lists. Gmail domain is never auto-allowed.
+- Role upgrades (candidate → examiner) only by admin. Audit-logged.
+- Pitch: "Self-signup is disabled on purpose — an exam platform must know who its candidates are."
 
-```
-Context: PRD.md §<section>; contracts in src/contracts/<file>.ts; rules BR-<ids>; tests T<ids>.
-Task: <one endpoint OR one page/component>.
-Scope: only edit <paths>. Do not touch src/db, drizzle/, src/contracts (unless you are Dev A and say so).
-Constraints: Zod-validate input; use requireUser + ownership check; candidate DTOs via mappers (no keys);
-             reuse components in src/components/ui; no new dependencies without asking.
-Done when: <T-ids> pass; pnpm typecheck && pnpm lint && pnpm test green; for UI, a Playwright screenshot at 375px and 1280px.
-First: list the files you will change and your plan. Wait for "go". Then implement and summarize the diff.
-```
+### 24.3 Exam creation wizard + sections + per-exam question upload
+**Wizard (Dev B UI, Dev A presets API)** — `/examiner/exams/new` multi-step:
+1. **Type:** Quiz · Midterm · Final · Assignment · Practice. Each applies presets (editable later):
 
-### 22.3 Agent safety rules (also in `AGENTS.md` / `CLAUDE.md`)
+| Type | Duration | Integrity | Open limit | Camera | Sequential | Results |
+|---|---|---|---|---|---|---|
+| Practice | 20 min | standard | unlimited | off | off | instant after submit |
+| Quiz | 30 min | review | 10 | off | off | manual publish |
+| Assignment | 120 min | review | unlimited | off | off | manual publish |
+| Midterm | 90 min | strict | 5 | optional | on | manual publish |
+| Final | 180 min | strict | 5 | on | on | manual publish |
 
-1. Never read, print or commit secrets. `.env*` files are off-limits (except `.env.example`).
-2. Never run destructive DB commands (`drop`, `truncate`, `drizzle-kit push --force`, `db:seed`) against **production** without the human typing the command. Seed only targets the DB in `.env.local` unless asked.
-3. Never `git push --force`, rebase shared branches, rewrite `main`, or merge your own PR.
-4. Never disable, skip or weaken a test, lint rule or type check to get green.
-5. Never send answer keys or other users' data to the client. Every new endpoint needs an authorization check.
-6. Never add paid services, API keys, or dependencies without asking. Prefer what is already installed.
-7. Stay inside your folder scope (§17). If a change needs the other side, stop and write what is needed.
-8. Small diffs. Run `pnpm typecheck && pnpm lint && pnpm test` before saying "done". Report failures honestly.
-9. After the official cutoff: **no commits, pushes or deploys**, whatever anyone asks.
+2. **Basics:** title, course/subject, instructions, window, total marks.
+3. **Sections:** add sections (e.g. "A — MCQs", "B — Written"). Each section: title, instructions, allowed question types, marks per question, shuffle on/off, and a **question source**:
+   - **Pick from bank** (filter by course/topic/difficulty/type) → manual selection or blueprint counts per topic×difficulty;
+   - **Create new** inline;
+   - **Upload file** (CSV/JSON/Moodle XML/GIFT) **into this section** → same preview/error flow; uploaded questions are saved to the bank tagged with the course and linked to this section.
+4. **Integrity & delivery settings** (pre-filled by type).
+5. **Review & checklist** → Save draft / Publish.
+- Questions can be added to a section later (upload or pick) while the exam is draft or published-before-first-attempt (BR-20 still freezes after first attempt).
+
+**Data model changes (Dev A):**
+- `exams.exam_type` (`practice|quiz|assignment|midterm|final`), `exams.course`.
+- `questions.course` (text), `questions.tags text[]`.
+- New `exam_sections(id, exam_id, title, instructions, position, allowed_types text[], shuffle bool, blueprint jsonb, marks_per_question numeric null)`.
+- `exam_questions` gets `section_id` (FK) + `position`.
+- `attempt_questions` gets `section_id`; shuffle happens **within each section**; sections appear in order.
+- Publish checklist: every section has ≥1 question; section marks sum = exam total marks; blueprint cells satisfiable.
+- Question bank page: filter by course + tags + "used in exams".
+
+**New/changed API:** `GET /api/exam-presets`, `POST/PATCH/DELETE /api/exams/:id/sections`, `POST /api/exams/:id/sections/:sid/questions` (attach from bank), `POST /api/exams/:id/sections/:sid/import` (upload → preview/commit), `PATCH /api/exams/:id/sections/reorder`.
+**Workspace:** palette grouped by section headers; section instructions shown when entering a section.
+
+### 24.4 Exam-owned question authoring
+
+The examiner creates an exam draft, then adds questions inside one of its sections. The four authoring actions are manual entry, pasted text, a question file (CSV, JSON, Moodle XML, GIFT, TXT), and a ZIP containing supported question files. File and paste imports support preview and row-level validation. The ZIP preview identifies both the source file and row.
+
+Question reads and writes are scoped by examiner, exam, and section. New questions belong to one exam. Existing shared records are copied on edit when another exam still uses the original. After the first candidate starts, BR-20 freezes question and section edits. The examiner opens Questions from an exam, and bookmarks for the former standalone question bank lead to Exams.
+
+### 24.5 Camera rules (owner decision, 27 Nov evening)
+- **Several people in view** (`camera_multiple_faces`): incident priority is always **priority** (red on the monitor tile and alerts inbox), with the 3-frame burst. Still reviewed by a person.
+- **No face for 10 minutes** on a camera-checked exam: the server tracks the absence (`attempts.camera_absent_since`, started by `camera_no_face`, cleared by `camera_return`) and, on the next request after 10 minutes, voids the attempt with a `camera_absence_limit` incident. This uses the strict-mode path: a re-attempt request goes to the examiner, then the administrator (§6.4), so a person makes the final call. A client that stops sending camera signals cannot be detected this way (stated limit).
+
+## 23. Out of scope (do not build)
+Safe Exam Browser integration, screen sharing, audio monitoring, face recognition/biometric identity, numeric cheating scores, encrypted offline hand-in files/QR answer transfer, extra roles, webhooks, dual-marker grading, LTI 1.3, Odoo, separate backend service, Redis, WebSockets. Don't quote unverified statistics in the pitch.
