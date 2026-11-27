@@ -141,8 +141,7 @@ function CardAction({ c }: { c: CandidateExamCard }) {
     case "expired":
       return c.attemptId ? <Button asChild variant="outline" className="w-full"><Link href={`/exam/${c.attemptId}/receipt`}><FileQuestion /> Receipt</Link></Button> : null;
     case "results_published":
-      return c.attemptId ? <Button asChild className="w-full"><Link href={`/candidate/results/${c.attemptId}`}>View result <ArrowRight /></Link></Button>
-        : <Button variant="outline" disabled className="w-full">Result coming soon</Button>;
+      return <Button asChild className="w-full"><Link href={`/candidate/exams/${c.examId}/result`}>View result <ArrowRight /></Link></Button>;
     default:
       return <Button variant="outline" disabled className="w-full">Not available</Button>;
   }

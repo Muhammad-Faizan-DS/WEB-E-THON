@@ -17,7 +17,7 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
   return (
     <div className="min-h-dvh">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
-      <header className="sticky top-0 z-30 border-b bg-background">
+      <header className="sticky top-0 z-30 border-b bg-background print:static print:border-0">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <Link href={nav[0]?.href ?? "/"} aria-label="Fairmark home"><Logo /></Link>
           <nav aria-label="Main" className="hidden h-full items-stretch gap-5 sm:flex">

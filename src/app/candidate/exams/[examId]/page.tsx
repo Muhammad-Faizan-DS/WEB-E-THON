@@ -143,7 +143,7 @@ export default function ExamEntryPage() {
                 <Check ok={!mobileBlocked} label={mobileBlocked ? "Use a laptop or desktop for this exam" : device.mobile ? "Phone or tablet allowed" : "Laptop or desktop"} />
               </ul>
             </section>
-            <section className="space-y-4 border-t p-5">
+            <section id="start-panel" className="scroll-mt-24 space-y-4 border-t p-5">
               {entry.phase === "scheduled" && <p className="text-sm"><span className="font-medium">Not open yet.</span> Opens {fmtRelative(Date.parse(entry.opensAt) - now)}; this page updates by itself.</p>}
               {entry.phase === "completed" && <p className="text-sm font-medium">This exam has closed.</p>}
               {resuming && left !== null && (
@@ -151,7 +151,7 @@ export default function ExamEntryPage() {
               )}
               {canStart && !resuming && (
                 <label className="flex cursor-pointer gap-3 text-[13px] leading-snug">
-                  <Checkbox checked={consent} onCheckedChange={(v) => setConsent(v === true)} className="mt-0.5" />
+                  <Checkbox id="start-consent" checked={consent} onCheckedChange={(v) => setConsent(v === true)} className="mt-0.5" />
                   <span>I&apos;ve read the instructions and understand what is observed during this exam.</span>
                 </label>
               )}
@@ -166,6 +166,22 @@ export default function ExamEntryPage() {
           </div>
         </aside>
       </div>
+
+      {/* phones: the start panel sits below the rules, so keep a way to reach it on screen */}
+      {(canStart || resuming) && (
+        <div className="sticky bottom-0 z-20 -mx-4 mt-8 flex items-center justify-between gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
+          <p className="num text-[13px]">
+            {resuming && left !== null ? <><span className="font-semibold">{fmtClock(left)}</span> left</> : <><span className="font-semibold">{effectiveMin} min</span> once you start</>}
+          </p>
+          {resuming ? (
+            <Button onClick={start} disabled={starting || !device.online}>{starting && <Loader2 className="animate-spin" />} Resume exam <ArrowRight /></Button>
+          ) : (
+            <Button onClick={() => { document.getElementById("start-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => document.getElementById("start-consent")?.focus(), 400); }}>
+              Ready to start <ArrowRight />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

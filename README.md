@@ -32,7 +32,7 @@ Use the [core contracts](src/lib/contracts/core.ts) for questions, exams, and ac
 
 ## Route ownership after the frontend merge
 
-- **Frontend (Dev B) owns the top-level pages:** `/`, `/login`, `/candidate/**`, `/examiner/**`, `/exam/**` (`src/app/(auth)`, `src/app/candidate`, `src/app/examiner`, `src/app/exam`, `src/components/{landing,ui,exam,examiner,common,bits}`, `src/lib/client`, `src/contracts`). The mock server is removed; these pages call the real API.
+- **Frontend (Dev B) owns the top-level pages:** `/`, `/login`, `/candidate/**`, `/examiner/**`, `/exam/**` (`src/app/(auth)`, `src/app/candidate`, `src/app/examiner`, `src/app/exam`, `src/components/{landing,ui,exam,examiner,common,bits}`, `src/lib/client`, `src/contracts`). These files are kept byte-for-byte as on the frontend branch. With `NEXT_PUBLIC_USE_MOCKS=1` they run on the in-browser mock server exactly as before; without it they call the real API.
 - **Real sign-in for the frontend:** `POST /api/auth/login` (JSON email + password), `POST /api/auth/logout`, `GET /api/auth/me` return the shapes in `src/contracts/auth.ts` and use the same Auth.js session as everything else.
 - **Working reference portal (backend):** `/portal/login`, `/portal/admin`, `/portal/examiner`, `/portal/candidate` (`src/app/portal`, `src/components/backend-preview`, `src/components/dashboard`). It exercises every API end to end and stays available while the frontend screens are wired to real data.
 - **Public:** `/verify/[code]` (QR target in report PDFs).

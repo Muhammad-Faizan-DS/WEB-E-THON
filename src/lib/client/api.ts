@@ -3,11 +3,11 @@ import type { z } from "zod";
 import type { ErrorCode } from "@/contracts";
 
 /**
- * Typed fetch wrapper for the real SecureExam API (same-origin, httpOnly session cookie).
+ * Typed fetch wrapper. With NEXT_PUBLIC_USE_MOCKS=1 every call is served by the in-browser
+ * mock server (src/mocks), so the UI can be built before the real API exists.
  * Pass a Zod schema to validate responses against the shared contracts.
- * The in-browser mock server was removed; USE_MOCKS stays exported (always false) for existing imports.
  */
-export const USE_MOCKS = false;
+export const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === "1";
 
 export class ApiError extends Error {
   constructor(
@@ -30,7 +30,10 @@ async function request<T>(method: Method, path: string, body?: unknown, schema?:
   let status: number;
   let json: unknown;
   try {
-    {
+    if (USE_MOCKS) {
+      const { mockFetch } = await import("@/mocks/server");
+      ({ status, json } = await mockFetch(method, path, body));
+    } else {
       const res = await fetch(path, {
         method,
         headers: body !== undefined ? { "content-type": "application/json" } : undefined,

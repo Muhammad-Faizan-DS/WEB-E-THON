@@ -240,7 +240,8 @@ export default function MonitorPage() {
           )}
         </section>
 
-        <aside className="grid content-start gap-6 lg:grid-cols-2 2xl:grid-cols-1">
+        {/* decisions waiting come before the roster on narrower screens */}
+        <aside className={cn("grid content-start gap-6 lg:grid-cols-2 2xl:grid-cols-1", pendingReqs.length > 0 && "order-first 2xl:order-none")}>
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2"><Hand className="size-4 text-subtle-foreground" aria-hidden />Requests {pendingReqs.length > 0 && <Badge tone="flag">{pendingReqs.length} pending</Badge>}</CardTitle>

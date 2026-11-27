@@ -5,8 +5,8 @@ import type { VantaEffect } from "vanta/dist/vanta.dots.min";
 import { cn } from "@/lib/utils";
 
 /**
- * Vanta DOTS on a transparent canvas: a perspective floor of points drifting over the gradient plate,
- * coloured for the current theme. Loads after first paint, only on wide screens without reduced motion;
+ * Vanta DOTS on a transparent canvas: the 3D perspective floor of emerald points behind the hero, with
+ * mouse parallax, coloured for the current theme. Loads after first paint, only on wide screens without reduced motion;
  * rebuilt when the theme changes and destroyed on unmount.
  */
 export function DotsBackground({ className }: { className?: string }) {
@@ -28,7 +28,7 @@ export function DotsBackground({ className }: { className?: string }) {
       (window as unknown as { THREE: unknown }).THREE = THREE;
       const { default: DOTS } = await import("vanta/dist/vanta.dots.min");
       if (cancelled || !ref.current) return;
-      const color = resolvedTheme === "dark" ? 0x5b6068 : 0xa3a8ae;
+      const color = resolvedTheme === "dark" ? 0x10b981 : 0x059669;
       effect = DOTS({
         el: ref.current,
         THREE,
@@ -42,8 +42,8 @@ export function DotsBackground({ className }: { className?: string }) {
         color2: color,
         backgroundColor: 0x000000,
         backgroundAlpha: 0,
-        size: 2.2,
-        spacing: 24,
+        size: 2.4,
+        spacing: 26,
         showLines: false,
       });
       setLive(true);
@@ -62,7 +62,7 @@ export function DotsBackground({ className }: { className?: string }) {
     <div
       ref={ref}
       aria-hidden
-      className={cn("absolute inset-0 transition-opacity duration-[1200ms] ease-out", live ? "opacity-70" : "opacity-0", className)}
+      className={cn("absolute inset-0 transition-opacity duration-[1200ms] ease-out", live ? "opacity-100" : "opacity-0", className)}
     />
   );
 }

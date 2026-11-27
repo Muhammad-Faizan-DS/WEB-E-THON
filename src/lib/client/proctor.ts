@@ -2,7 +2,7 @@
 /**
  * Proctoring additions from the exam-portal guide (frontend side). These shapes live here, not in
  * src/contracts (Dev A's), until the backend endpoints exist; PRD §2.5 lists what Dev A needs to build.
- * These call the real API (the mock server was removed).
+ * With NEXT_PUBLIC_USE_MOCKS=1 they are served by src/mocks/server.ts.
  */
 import * as React from "react";
 import { z } from "zod";

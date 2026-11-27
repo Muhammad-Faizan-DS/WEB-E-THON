@@ -1,8 +1,9 @@
 "use client";
 import * as React from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, ArrowRight, Eraser, Flag, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send,
+  ArrowLeft, ArrowRight, CloudOff, Eraser, Flag, Hourglass, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send,
 } from "lucide-react";
 import { useExamEngine } from "@/lib/client/exam-engine";
 import { useMe } from "@/lib/client/me";
@@ -45,6 +46,8 @@ export default function WorkspacePage() {
   const [navOpen, setNavOpen] = React.useState(false);
   const [toolsOpen, setToolsOpen] = React.useState(false);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  // the deadline passed on this screen: inputs stop, and we finish submitting (now, or as soon as we reconnect)
+  const [timeUp, setTimeUp] = React.useState(false);
   const isFullscreen = useIsFullscreen();
   const [dismissedAnn, setDismissedAnn] = React.useState<string | null>(null);
   const mainRef = React.useRef<HTMLDivElement>(null);
@@ -153,7 +156,7 @@ export default function WorkspacePage() {
   const locked = ex.status === "locked";
   const closed = ex.status !== "in_progress" && !locked;
   const needFullscreen = policy.fullscreenRequired && !isFullscreen && !locked && ex.activeSession;
-  const inputsDisabled = closed || locked || !ex.activeSession || ex.submitting;
+  const inputsDisabled = closed || locked || timeUp || !ex.activeSession || ex.submitting;
   const latestAnn = ex.announcements.at(-1);
   const navSide = prefs.navigatorPosition;
 
@@ -163,6 +166,7 @@ export default function WorkspacePage() {
   let main: React.ReactNode;
   if (!ex.activeSession) main = <SupersededPanel onTakeOver={ex.takeOver} />;
   else if (locked) main = <LockedPanel attemptId={attemptId} request={ex.pendingRequest} onSent={ex.refreshStatus} />;
+  else if (timeUp && !closed) main = <TimeUpPanel connection={ex.connection} pendingCount={ex.pendingCount} submitting={ex.submitting} onRetry={() => void ex.submit()} />;
   else if (needFullscreen) main = <FullscreenGate onEnter={() => enterFullscreen()} />;
   else if (view === "review") main = <ReviewPanel questions={questions} answers={ex.answers} onJump={go} onBack={() => setView("question")} onSubmit={() => setConfirmOpen(true)} />;
   else
@@ -183,7 +187,7 @@ export default function WorkspacePage() {
       </div>
     );
 
-  const showFooter = view === "question" && ex.activeSession && !locked && !needFullscreen;
+  const showFooter = view === "question" && ex.activeSession && !locked && !needFullscreen && !timeUp && !closed;
 
   return (
     <div className="flex h-dvh flex-col" style={{ ["--q-size" as string]: TEXT_SIZES[prefs.textSize] }}>
@@ -200,21 +204,23 @@ export default function WorkspacePage() {
           </div>
           {ex.deadline && (
             <div className="md:absolute md:left-1/2 md:-translate-x-1/2">
-              <CountdownContainer deadline={ex.deadline} now={ex.now} totalMs={ex.attempt.durationMin * 60000} onExpire={ex.status === "in_progress" ? ex.submit : undefined} />
+              <CountdownContainer deadline={ex.deadline} now={ex.now} totalMs={ex.attempt.durationMin * 60000} onExpire={ex.status === "in_progress" ? () => { setTimeUp(true); setView("question"); setConfirmOpen(false); void ex.submit(); } : undefined} />
             </div>
           )}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
-            <SaveStatus connection={ex.connection} pendingCount={ex.pendingCount} rejectedCount={ex.rejectedCount} saving={false} lastAckAt={ex.lastAckAt} compact />
+            <SaveStatus connection={ex.connection} pendingCount={ex.pendingCount} rejectedCount={ex.rejectedCount} saving={false} lastAckAt={ex.lastAckAt} deviceSaveFailed={ex.deviceSaveFailed} compact />
             <Button variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={() => setToolsOpen((o) => !o)} aria-pressed={toolsOpen} aria-label={toolsOpen ? "Hide tools" : "Show scratchpad and display tools"}>
               {toolsOpen ? <PanelRightClose /> : <PanelRightOpen />}
             </Button>
             {inboxOn && ex.activeSession && <HelpButton attemptId={attemptId} messages={help.inbox.messages} unread={help.unread} onOpen={help.markRead} onSent={help.reload} />}
-            <Button size="sm" className="hidden sm:inline-flex" onClick={() => setView("review")} disabled={inputsDisabled}>Review &amp; submit</Button>
+            <Button size="sm" onClick={() => setView("review")} disabled={inputsDisabled}>
+              <span className="sm:hidden">Review</span><span className="hidden sm:inline">Review &amp; submit</span>
+            </Button>
           </div>
         </div>
         {ex.attempt.isSandbox && <p className="border-t bg-info-soft px-5 py-1.5 text-[12px] font-medium text-info">Sandbox preview: nothing you do here is recorded or counted.</p>}
       </header>
-      <OfflineBanner connection={ex.connection} pendingCount={ex.pendingCount} />
+      {!timeUp && <OfflineBanner connection={ex.connection} pendingCount={ex.pendingCount} deviceSaveFailed={ex.deviceSaveFailed} />}
       {latestAnn && dismissedAnn !== latestAnn.id && !help.inbox.acked.includes(latestAnn.id) && (
         <div role="status" aria-live="polite" className="flex items-start gap-2.5 border-b bg-primary-soft px-5 py-2.5 text-[13px]">
           <Megaphone className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
@@ -229,7 +235,11 @@ export default function WorkspacePage() {
           {nav}
         </aside>
         <main ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto px-3 py-6 outline-none sm:px-8 sm:py-10" aria-label="Exam question">
-          {closed && <Alert tone="info" className="mx-auto mb-4 max-w-4xl" title="This attempt has ended">Your accepted answers were submitted.</Alert>}
+          {closed && (
+            <Alert tone="info" className="mx-auto mb-4 max-w-4xl" title="This attempt has ended">
+              Your accepted answers were submitted. <Link href={`/exam/${attemptId}/receipt`} className="font-medium underline">See your receipt and which answers counted</Link>
+            </Alert>
+          )}
           {main}
         </main>
         {toolsOpen && isLg && (
@@ -243,8 +253,8 @@ export default function WorkspacePage() {
             <Button variant="outline" onClick={() => go(current - 1)} disabled={current === 0} aria-label="Previous question"><ArrowLeft /> <span className="hidden sm:inline">Previous</span></Button>
             <Button variant="outline" className="num lg:hidden" onClick={() => setNavOpen(true)}><LayoutGrid /> {current + 1}/{questions.length}</Button>
             <div className="flex-1" />
-            <Button variant="ghost" onClick={() => ex.setAnswer(q.aqId, null, 0)} disabled={inputsDisabled || !a?.value} className="hidden text-muted-foreground sm:inline-flex"><Eraser /> Clear</Button>
-            <Button variant={a?.flagged ? "flag" : "outline"} onClick={() => ex.toggleFlag(q.aqId)} aria-pressed={!!a?.flagged} disabled={inputsDisabled}>
+            <Button variant="ghost" onClick={() => ex.setAnswer(q.aqId, null, 0)} disabled={inputsDisabled || !a?.value} className="px-2.5 text-muted-foreground sm:px-4" aria-label="Clear answer"><Eraser /> <span className="hidden sm:inline">Clear</span></Button>
+            <Button variant={a?.flagged ? "flag" : "outline"} onClick={() => ex.toggleFlag(q.aqId)} aria-pressed={!!a?.flagged} disabled={inputsDisabled} aria-label="Mark for review">
               <Flag className={cn(a?.flagged && "fill-current")} /> <span className="hidden sm:inline">{a?.flagged ? "Marked for review" : "Mark for review"}</span>
             </Button>
             <Button variant="outline" size="icon" className="lg:hidden" onClick={() => setToolsOpen(true)} aria-label="Scratchpad and display tools"><PanelRightOpen /></Button>
@@ -276,6 +286,34 @@ export default function WorkspacePage() {
 
       <SubmitDialog open={confirmOpen} onOpenChange={setConfirmOpen} ex={ex} />
     </div>
+  );
+}
+
+/** Shown the moment time runs out, until the server confirms the submission (then we go to the receipt). */
+function TimeUpPanel({ connection, pendingCount, submitting, onRetry }: { connection: string; pendingCount: number; submitting: boolean; onRetry: () => void }) {
+  const offline = connection !== "online";
+  return (
+    <section role="alert" className="mx-auto w-full max-w-xl rounded-lg border bg-surface px-6 py-8 text-center sm:px-10">
+      <Hourglass className="mx-auto size-8 text-muted-foreground" aria-hidden />
+      <h2 className="mt-4 text-[22px] font-semibold">Time&apos;s up</h2>
+      {offline ? (
+        <>
+          <p className="mt-2 text-muted-foreground">
+            <CloudOff className="mr-1 inline size-4 align-[-2px]" aria-hidden />
+            You&apos;re offline, so we can&apos;t confirm your submission yet. It finishes automatically when you reconnect. Keep this page open.
+          </p>
+          <p className="mt-3 text-[14px]">
+            Answers the server received before the deadline count.
+            {pendingCount > 0 && <> <b>{pendingCount} change{pendingCount > 1 ? "s" : ""} on this device</b> did not reach it in time, so the last saved version{pendingCount > 1 ? "s" : ""} will be used. Your receipt will list {pendingCount > 1 ? "them" : "it"}.</>}
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 text-muted-foreground">{submitting ? "Submitting your saved answers…" : "Your saved answers are being submitted. Your receipt shows exactly which answers counted."}</p>
+      )}
+      <Button className="mt-6" variant="outline" onClick={onRetry} disabled={submitting}>
+        {submitting ? <Loader2 className="animate-spin" /> : <Send />} {offline ? "Try again now" : "Finish submitting"}
+      </Button>
+    </section>
   );
 }
 

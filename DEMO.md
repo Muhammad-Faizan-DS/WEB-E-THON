@@ -88,6 +88,6 @@ Legend: ✅ built and covered by automated tests · 🟢 built, checked by hand 
 | New | Notification bell (all portals), disputes (admin-only when about the examiner), remove candidate with reason | ✅ |
 | §11 | All 8 secondary features (network UI, PDF, sandbox, bulk import, item analytics, verifiable reports, custom workspace, scratchpad) | ✅ / 🟢 |
 | §2.5 | Close exam now, connectivity test (`/api/ping`), examiner-only notes, per-attempt +minutes extension | ⬜ (window extension and gap-capped credit exist) |
-| Frontend | Real sign-in for the new UI (`/api/auth/login`, `/logout`, `/me`); mocks removed | ✅ |
+| Frontend | Frontend files identical to the frontend branch (mocks kept behind `NEXT_PUBLIC_USE_MOCKS`); real JSON sign-in endpoints available for when mocks are switched off | ✅ |
 | Frontend | New UI screens (`/candidate`, `/examiner`, `/exam`) on real data | 🟡 still call frontend-only endpoints; use `/portal` for the demo |
 | Deploy | `/api/health`, `pnpm smoke`, daily cron, Vercel guide | ✅ (production database not yet connected) |

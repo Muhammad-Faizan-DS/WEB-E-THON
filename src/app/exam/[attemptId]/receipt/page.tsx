@@ -2,13 +2,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CheckCircle2, Copy, FileWarning, Hourglass, RotateCcw } from "lucide-react";
+import { CheckCircle2, CircleSlash, Copy, FileWarning, Hourglass, RotateCcw, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
-import { AttemptState } from "@/contracts";
+import { AttemptState, type AttemptState as AttemptStateT } from "@/contracts";
 import { api } from "@/lib/client/api";
 import { receiptKey, type StoredReceipt } from "@/lib/client/exam-engine";
 import { RequestForm } from "@/components/exam/request-form";
-import { useSessionItem } from "@/lib/client/use-browser";
+import { useStoredItem } from "@/lib/client/use-browser";
 import { Logo } from "@/components/common/brand";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,18 +18,24 @@ import { fmtDateTime, fmtTime } from "@/lib/utils";
 
 export default function ReceiptPage() {
   const { attemptId } = useParams<{ attemptId: string }>();
-  const stored = useSessionItem(receiptKey(attemptId));
+  const stored = useStoredItem(receiptKey(attemptId));
   const [fetched, setFetched] = React.useState<StoredReceipt | null>(null);
+  const [state, setState] = React.useState<AttemptStateT | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const data = React.useMemo<StoredReceipt | null>(() => (stored ? JSON.parse(stored) : fetched), [stored, fetched]);
   const [showRequest, setShowRequest] = React.useState(false);
   const [requested, setRequested] = React.useState(false);
 
+  // always ask the server what it kept, so the receipt can say which version of each answer counted
   React.useEffect(() => {
-    if (stored) return;
     api.get(`/api/attempts/${attemptId}`, AttemptState).then(
-      (st) => (st.receipt ? setFetched({ receipt: st.receipt, notAccepted: [] }) : setError("This attempt hasn't been submitted yet.")),
-      () => setError("Couldn't load your receipt."),
+      (st) => {
+        setState(st);
+        if (stored) return;
+        if (st.receipt) setFetched({ receipt: st.receipt, notAccepted: [] });
+        else setError("This attempt hasn't been submitted yet.");
+      },
+      () => { if (!stored) setError("Couldn't load your receipt."); },
     );
   }, [attemptId, stored]);
 
@@ -72,6 +78,8 @@ export default function ReceiptPage() {
           </Alert>
         )}
 
+        {state && <WhatCounted state={state} notAccepted={data.notAccepted} />}
+
         <Alert tone="info" title="What happens next">
           <p>Objective questions are marked automatically; written answers are marked by your examiner. You&apos;ll see your result on your exams page once it&apos;s published.</p>
         </Alert>
@@ -98,6 +106,38 @@ export default function ReceiptPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+/** Per question: the version the server kept (and when), and whether a later edit on this device did not count. */
+function WhatCounted({ state, notAccepted }: { state: AttemptStateT; notAccepted: number[] }) {
+  return (
+    <section aria-labelledby="counted-title" className="rounded-lg border bg-surface">
+      <h2 id="counted-title" className="border-b px-5 py-3 text-[15px] font-semibold">What counted, question by question</h2>
+      <ul className="divide-y text-sm">
+        {state.questions.map((q) => {
+          const a = state.answers.find((x) => x.aqId === q.aqId);
+          const answered = !!a?.value && ("text" in a.value ? a.value.text.trim().length > 0 : a.value.optionIds.length > 0);
+          const lost = notAccepted.includes(q.position);
+          return (
+            <li key={q.aqId} className="grid grid-cols-[3rem_1fr] gap-3 px-5 py-3">
+              <span className="num font-medium">Q{q.position}</span>
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 font-medium">
+                  {answered ? <CheckCircle2 className="size-4 text-success" aria-hidden /> : <CircleSlash className="size-4 text-muted-foreground" aria-hidden />}
+                  {answered ? `Counted: version ${a!.revision}${a!.savedAt ? `, saved ${fmtTime(a!.savedAt)}` : ""}` : "No answer counted"}
+                </p>
+                {lost && (
+                  <p className="mt-1 flex items-start gap-1.5 text-[13px] text-warning">
+                    <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden /> A later edit on this device did not reach the server in time and was not counted.
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
