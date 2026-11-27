@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, ClipboardCheck, FilePen, Hand, Plus, Radio, Send } from "lucide-react";
+import { AlertTriangle, CalendarClock, ClipboardCheck, FilePen, Hand, Radio, Send } from "lucide-react";
 import { ExaminerDashboard, type ExaminerExamRow } from "@/contracts";
 import { api } from "@/lib/client/api";
 import { PageHeader } from "@/components/common/app-shell";
@@ -35,7 +35,7 @@ export default function ExaminerHome() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description="What needs your attention across your exams." actions={<Button asChild><Link href="/examiner/exams/new"><Plus /> New exam</Link></Button>} />
+      <PageHeader title="Dashboard" description="What needs your attention across your exams."  />
       {error && <Alert tone="warning" className="mb-4">Couldn&apos;t refresh. Showing the last data loaded.</Alert>}
       <dl className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (
@@ -76,7 +76,6 @@ function ExamRow({ e }: { e: ExaminerExamRow }) {
       </dl>
       <div className="flex gap-2">
         {e.phase === "ongoing" && <Button asChild size="sm"><Link href={`/examiner/exams/${e.examId}/monitor`}><Radio /> Monitor</Link></Button>}
-        {e.awaitingGrading > 0 && <Button asChild size="sm" variant="outline"><Link href={`/examiner/exams/${e.examId}/grading`}>Grade</Link></Button>}
         <Button asChild size="sm" variant="ghost"><Link href={`/examiner/exams/${e.examId}`}>Open</Link></Button>
       </div>
     </div>

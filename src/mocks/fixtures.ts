@@ -6,7 +6,7 @@ import type { ExamSettings, Preferences, Role } from "@/contracts";
 
 export const DEMO_PASSWORD = "Demo@2026";
 
-export interface MockUser { id: string; name: string; email: string; role: Role; isActive: boolean; preferences?: Partial<Preferences> }
+export interface MockUser { id: string; name: string; email: string; role: Role; isActive: boolean; studentId?: string; preferences?: Partial<Preferences> }
 
 export const USERS: MockUser[] = [
   { id: "a0000000-0000-4000-8000-000000000001", name: "Ayesha Admin", email: "admin@exam.test", role: "admin", isActive: true },
@@ -15,6 +15,12 @@ export const USERS: MockUser[] = [
   { id: "c0000000-0000-4000-8000-000000000001", name: "Ali Khan", email: "ali@exam.test", role: "candidate", isActive: true },
   { id: "c0000000-0000-4000-8000-000000000002", name: "Sara Ahmed", email: "sara@exam.test", role: "candidate", isActive: true },
   { id: "c0000000-0000-4000-8000-000000000003", name: "Omar Farooq", email: "omar@exam.test", role: "candidate", isActive: true },
+  // simulated cohort for the live monitor (they never sign in during the demo)
+  { id: "d0000000-0000-4000-8000-000000000001", name: "Hamza Siddiqui", email: "cand01@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-014" },
+  { id: "d0000000-0000-4000-8000-000000000002", name: "Zainab Malik", email: "cand02@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-022" },
+  { id: "d0000000-0000-4000-8000-000000000003", name: "Usman Tariq", email: "cand03@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-031" },
+  { id: "d0000000-0000-4000-8000-000000000004", name: "Fatima Noor", email: "cand04@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-040" },
+  { id: "d0000000-0000-4000-8000-000000000005", name: "Ahmed Raza", email: "cand05@exam.test", role: "candidate", isActive: true, studentId: "FA23-BCS-047" },
 ];
 
 export interface MockQuestion {
@@ -51,6 +57,7 @@ const strictSettings: ExamSettings = {
 };
 
 const ALI = USERS[3].id, SARA = USERS[4].id, OMAR = USERS[5].id;
+export const SIMULATED = USERS.slice(6).map((u) => u.id);
 const H = 60;
 
 export const EXAMS: MockExam[] = [
@@ -90,7 +97,7 @@ export const EXAMS: MockExam[] = [
           "A model achieves 98% accuracy on a dataset where only 2% of the examples are positive. Explain why this accuracy could be misleading, and name one other measure you would inspect.",
       },
     ],
-    enrolled: [ALI, SARA, OMAR],
+    enrolled: [ALI, SARA, OMAR, ...SIMULATED],
     resultsPublished: false,
   },
   {

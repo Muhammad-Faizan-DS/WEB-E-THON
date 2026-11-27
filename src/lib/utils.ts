@@ -40,3 +40,18 @@ export function fmtRelative(ms: number) {
 export function uuid() {
   return crypto.randomUUID();
 }
+
+/** "4 s ago", "2 min ago", "1 h 5 min ago" */
+export function fmtAgo(ms: number) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return `${s} s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  return `${Math.floor(m / 60)} h ${m % 60} min ago`;
+}
+
+export function fmtDuration(sec: number) {
+  if (sec < 60) return `${sec} s`;
+  const m = Math.floor(sec / 60);
+  return sec % 60 ? `${m} min ${sec % 60} s` : `${m} min`;
+}

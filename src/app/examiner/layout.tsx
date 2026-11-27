@@ -4,8 +4,7 @@ import { AppShell, ShellSkeleton } from "@/components/common/app-shell";
 
 const NAV = [
   { href: "/examiner", label: "Dashboard" },
-  { href: "/examiner/questions", label: "Question bank" },
-  { href: "/examiner/exams/new", label: "New exam" },
+  // Question bank and New exam return here once those pages are built (PRD §13)
 ];
 
 export default function ExaminerLayout({ children }: { children: React.ReactNode }) {

@@ -1,8 +1,9 @@
 /**
  * In-browser mock API (NEXT_PUBLIC_USE_MOCKS=1). Implements the PRD business rules closely
  * enough to build and test the UI: server-fixed deadlines, revisioned + idempotent saves,
- * open limit and lock, one idempotent finalization path, and lazy expiry.
- * State lives in localStorage so a refresh behaves like a real server.
+ * open limit and lock, one idempotent finalization path, lazy expiry, observations,
+ * incident grouping (the real pure engine), requests and announcements.
+ * State lives in localStorage so a refresh behaves like a real server. Each browser has its own data.
  *
  * Dev helpers (browser console):
  *   localStorage.setItem("mock:unreachable", "1")   // simulate server down with Wi-Fi up
@@ -11,26 +12,36 @@
  *   window.__mock.announce("Q2 typo fixed")           // examiner announcement
  */
 import type {
-  AttemptState, CandidateExamCard, CandidateExamEntry, CandidateExamList, CandidateExamStatus, ExamPhase,
-  ExaminerDashboard, HeartbeatResponse, Me, SaveAnswerAck, SubmissionReceipt, AnswerValue,
+  AnswerValue, AttemptState, AttemptTimeline, CandidateExamCard, CandidateExamEntry, CandidateExamList,
+  CandidateExamStatus, ExamMonitor, ExamPhase, ExamRequest, ExaminerDashboard, HeartbeatResponse, IncidentReview,
+  Me, MonitorRow, SaveAnswerAck, SubmissionReceipt,
 } from "@/contracts";
 import { DEFAULT_PREFERENCES } from "@/contracts";
-import { DEMO_PASSWORD, EXAMS, PUBLISHED_SCORES, STAT_Q1_QUESTION_COUNT, USERS, type MockExam, type MockUser } from "./fixtures";
+import { countBySeverity, groupIncidents, type StoredObservation } from "@/server/incidents/group";
+import { DEMO_PASSWORD, EXAMS, PUBLISHED_SCORES, SIMULATED, STAT_Q1_QUESTION_COUNT, USERS, type MockExam, type MockUser } from "./fixtures";
 
-const KEY = "mock:db:v1";
+const KEY = "mock:db:v2";
 const GRACE_MS = 2000;
 
 interface MAnswer { value: AnswerValue | null; revision: number; flagged: boolean; savedAt: string | null; opIds: string[] }
+interface MRequest {
+  id: string; type: "unlock" | "reattempt"; status: "pending" | "approved" | "denied";
+  reasonCategory: ExamRequest["reasonCategory"]; reason: string; createdAt: string;
+  decidedAt: string | null; decidedBy: string | null; note: string | null;
+}
 interface MAttempt {
   id: string; examId: string; userId: string; isSandbox: boolean;
   status: AttemptState["status"]; seed: number; startedAt: string; deadline: string;
   order: string[]; optionOrder: Record<string, string[]>;
   answers: Record<string, MAnswer>; // keyed by aqId
   aqMap: Record<string, string>; // aqId -> source question id
-  sessions: string[]; activeSession: string; extraOpens: number;
+  sessions: { id: string; openedAt: string; ua: string }[];
+  activeSession: string; extraOpens: number;
   receipt: SubmissionReceipt | null;
-  events: number;
-  request: { id: string; type: "unlock" | "reattempt"; status: "pending" | "approved" | "denied"; note: string | null } | null;
+  events: StoredObservation[];
+  lastSeenAt: string | null;
+  requests: MRequest[];
+  sim?: "live" | "static";
 }
 interface MDb {
   epoch: number;
@@ -39,6 +50,7 @@ interface MDb {
   attempts: MAttempt[];
   announcements: { id: string; examId: string; body: string; createdAt: string }[];
   reattemptGranted: Record<string, boolean>; // `${examId}:${userId}`
+  reviews: Record<string, IncidentReview>;
 }
 
 const uid = () => crypto.randomUUID();
@@ -47,7 +59,8 @@ const iso = (ms: number) => new Date(ms).toISOString();
 function load(): MDb {
   const raw = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
   if (raw) return JSON.parse(raw) as MDb;
-  const db: MDb = { epoch: Date.now(), session: null, prefs: {}, attempts: [], announcements: [], reattemptGranted: {} };
+  const db: MDb = { epoch: Date.now(), session: null, prefs: {}, attempts: [], announcements: [], reattemptGranted: {}, reviews: {} };
+  seedSimulated(db);
   save(db);
   return db;
 }
@@ -76,6 +89,8 @@ function shuffle<T>(arr: T[], rnd: () => number) {
 
 const opens = (db: MDb, e: MockExam) => db.epoch + e.opensOffsetMin * 60000;
 const closes = (db: MDb, e: MockExam) => db.epoch + e.closesOffsetMin * 60000;
+const userById = (id: string) => USERS.find((u) => u.id === id)!;
+const examById = (id: string) => EXAMS.find((e) => e.id === id);
 
 function phase(db: MDb, e: MockExam, now: number): ExamPhase {
   if (e.status === "draft") return "draft";
@@ -90,18 +105,40 @@ function me(db: MDb): MockUser | null {
   return u && u.isActive ? u : null;
 }
 
-function answeredCount(a: MAttempt) {
-  return Object.values(a.answers).filter((x) => isAnswered(x.value)).length;
-}
 function isAnswered(v: AnswerValue | null) {
   if (!v) return false;
   return "text" in v ? v.text.trim().length > 0 : v.optionIds.length > 0;
+}
+const answeredCount = (a: MAttempt) => Object.values(a.answers).filter((x) => isAnswered(x.value)).length;
+
+function serverEvent(a: MAttempt, type: StoredObservation["type"], detail?: Record<string, unknown>, at = Date.now()) {
+  a.events.push({ id: uid(), clientSeq: (a.events.at(-1)?.clientSeq ?? 0) + 1, type, clientTime: iso(at), serverTime: iso(at), detail });
+}
+
+function createAttempt(db: MDb, e: MockExam, userId: string, startMs: number, sid: string, ua = navigator.userAgent): MAttempt {
+  const seed = Math.floor(Math.random() * 2 ** 31);
+  const rnd = mulberry32(seed);
+  const qs = e.settings.shuffleQuestions ? shuffle(e.questions, rnd) : e.questions;
+  const a: MAttempt = {
+    id: uid(), examId: e.id, userId, isSandbox: false, status: "in_progress", seed,
+    startedAt: iso(startMs), deadline: iso(Math.min(closes(db, e), startMs + e.durationMin * 60000)),
+    order: [], optionOrder: {}, answers: {}, aqMap: {}, sessions: [{ id: sid, openedAt: iso(startMs), ua }],
+    activeSession: sid, extraOpens: 0, receipt: null, events: [], lastSeenAt: iso(startMs), requests: [],
+  };
+  for (const q of qs) {
+    const aqId = uid();
+    a.order.push(aqId); a.aqMap[aqId] = q.id;
+    a.answers[aqId] = { value: null, revision: 0, flagged: false, savedAt: null, opIds: [] };
+    if (q.options) a.optionOrder[aqId] = (e.settings.shuffleOptions ? shuffle(q.options, rnd) : q.options).map((o) => o.id);
+  }
+  db.attempts.push(a);
+  return a;
 }
 
 /** BR-10: single idempotent finalization path. */
 function finalize(db: MDb, a: MAttempt, reason: SubmissionReceipt["reason"]): SubmissionReceipt {
   if (a.receipt) return a.receipt;
-  const e = EXAMS.find((x) => x.id === a.examId)!;
+  const e = examById(a.examId)!;
   const answered = answeredCount(a);
   a.status = reason === "submit" ? "submitted" : "expired";
   const code = `FM-${Math.random().toString(36).slice(2, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
@@ -123,8 +160,65 @@ function sweep(db: MDb) {
   }
 }
 
+const pendingReq = (a: MAttempt) => a.requests.find((r) => r.status === "pending") ?? null;
+const latestReq = (a: MAttempt) => a.requests.at(-1) ?? null;
+
+// ---------- simulated cohort (monitor demo) ----------
+function seedSimulated(db: MDb) {
+  const e = EXAMS[0];
+  const [hamza, zainab, usman, fatima, ahmed] = SIMULATED;
+  const start = db.epoch - 6 * 60000;
+  const fill = (a: MAttempt, n: number) => a.order.slice(0, n).forEach((aqId, i) => {
+    const q = e.questions.find((x) => x.id === a.aqMap[aqId])!;
+    a.answers[aqId] = {
+      value: q.type === "written" ? { text: "Because most examples are negative, predicting the majority class scores high accuracy. Precision and recall show the minority class." } : { optionIds: q.key!.slice(0, q.type === "multi" ? 2 : 1) },
+      revision: 2 + i, flagged: false, savedAt: iso(start + (i + 1) * 70000), opIds: [],
+    };
+  });
+  const at = (sec: number) => start + sec * 1000;
+  const ev = (a: MAttempt, sec: number, type: StoredObservation["type"], detail?: Record<string, unknown>, delay = 0.4) =>
+    a.events.push({ id: uid(), clientSeq: a.events.length, type, clientTime: iso(at(sec)), serverTime: iso(at(sec + delay)), detail });
+
+  const h = createAttempt(db, e, hamza, start, uid(), "Chrome 131 on Windows");
+  fill(h, 1); h.sim = "live"; h.lastSeenAt = iso(db.epoch);
+  ev(h, 40, "window_blur"); ev(h, 42, "window_focus");
+
+  const z = createAttempt(db, e, zainab, start + 20000, uid(), "Chrome 131 on macOS");
+  fill(z, 2); z.sim = "live"; z.lastSeenAt = iso(db.epoch);
+  ev(z, 95, "window_blur"); ev(z, 96.5, "window_focus");
+  ev(z, 302, "visibility_hidden"); ev(z, 302.3, "window_blur");
+  ev(z, 347, "visibility_visible"); ev(z, 347.1, "window_focus");
+  ev(z, 349, "paste", { chars: 348, outcome: "blocked", position: 3, aqId: z.order[2] });
+
+  const u = createAttempt(db, e, usman, start + 45000, uid(), "Edge 131 on Windows");
+  fill(u, 2); u.sim = "static"; u.lastSeenAt = iso(db.epoch - 70000);
+  ev(u, 120, "offline", undefined, 0.2); ev(u, 151, "online", undefined, 0.2);
+  ev(u, 290, "offline", undefined, 0.2);
+
+  const f = createAttempt(db, e, fatima, start - 9 * 60000, uid(), "Firefox 133 on Windows");
+  fill(f, 3); f.sim = "static";
+  ev(f, -400, "visibility_hidden"); ev(f, -388, "visibility_visible");
+  finalize(db, f, "submit");
+  f.receipt!.finalizedAt = iso(db.epoch - 60000);
+  db.reviews[`${f.id}:${f.events[0].id}`] = { decision: "dismissed", note: "Candidate reported a notification popup; returned within 12 s, no paste.", reviewer: "Dr. Hina Rauf", reviewedAt: iso(db.epoch - 30000) };
+
+  const r = createAttempt(db, e, ahmed, start + 60000, uid(), "Chrome 130 on Windows");
+  fill(r, 1); r.sim = "static"; r.lastSeenAt = iso(db.epoch - 20000);
+  for (let i = 2; i <= 4; i++) {
+    r.sessions.push({ id: uid(), openedAt: iso(at(60 + i * 40)), ua: i === 4 ? "Chrome 130 on Android" : "Chrome 130 on Windows" });
+    ev(r, 60 + i * 40, "session_opened", { open: i, max: e.settings.maxOpens }, 0);
+  }
+  r.status = "locked";
+  r.requests.push({
+    id: uid(), type: "unlock", status: "pending", reasonCategory: "device",
+    reason: "My laptop restarted for an update, then the browser reopened the exam twice. I also tried my phone before the laptop came back.",
+    createdAt: iso(db.epoch - 15000), decidedAt: null, decidedBy: null, note: null,
+  });
+}
+
 function attemptState(db: MDb, a: MAttempt, clientSessionId?: string): AttemptState {
-  const e = EXAMS.find((x) => x.id === a.examId)!;
+  const e = examById(a.examId)!;
+  const req = latestReq(a);
   return {
     attemptId: a.id, examId: e.id, examTitle: e.title, isSandbox: a.isSandbox, status: a.status,
     serverNow: iso(Date.now()), deadline: a.deadline, durationMin: e.durationMin, totalMarks: e.totalMarks,
@@ -143,7 +237,7 @@ function attemptState(db: MDb, a: MAttempt, clientSessionId?: string): AttemptSt
     },
     announcements: db.announcements.filter((x) => x.examId === e.id),
     activeSession: clientSessionId ? a.activeSession === clientSessionId : true,
-    pendingRequest: a.request,
+    pendingRequest: req ? { id: req.id, type: req.type, status: req.status, note: req.note } : null,
     receipt: a.receipt,
   };
 }
@@ -158,7 +252,7 @@ function candidateCard(db: MDb, e: MockExam, userId: string, now: number): Candi
   else if (db.reattemptGranted[`${e.id}:${userId}`]) status = "reattempt_granted";
   else if (ph === "completed") status = "missed";
   return {
-    examId: e.id, title: e.title, code: e.code, examinerName: USERS.find((u) => u.id === e.ownerId)!.name, phase: ph,
+    examId: e.id, title: e.title, code: e.code, examinerName: userById(e.ownerId).name, phase: ph,
     opensAt: iso(opens(db, e)), closesAt: iso(closes(db, e)), durationMin: e.durationMin, totalMarks: e.totalMarks,
     questionCount: e.questions.length || STAT_Q1_QUESTION_COUNT, status, attemptId: live?.id ?? null,
     deadline: live && (live.status === "in_progress" || live.status === "locked") ? live.deadline : null,
@@ -166,24 +260,54 @@ function candidateCard(db: MDb, e: MockExam, userId: string, now: number): Candi
   };
 }
 
+function contactOf(a: MAttempt, now: number): MonitorRow["contact"] {
+  if (a.status !== "in_progress" && a.status !== "locked") return "none";
+  if (!a.lastSeenAt) return "lost";
+  const age = now - Date.parse(a.lastSeenAt);
+  return age < 30000 ? "live" : age < 90000 ? "stale" : "lost";
+}
+
+function incidentsOf(db: MDb, a: MAttempt) {
+  return groupIncidents(a.id, a.events, db.reviews);
+}
+
+/** Simulated candidates stay "live" and make slow progress, so the monitor feels real. */
+function tickSimulation(db: MDb, now: number) {
+  for (const a of db.attempts) {
+    if (a.sim !== "live" || a.status !== "in_progress") continue;
+    a.lastSeenAt = iso(now - 1000 - Math.random() * 8000);
+    const next = a.order.find((id) => !isAnswered(a.answers[id].value));
+    if (next && Math.random() < 0.08) {
+      const e = examById(a.examId)!;
+      const q = e.questions.find((x) => x.id === a.aqMap[next])!;
+      a.answers[next] = { value: q.type === "written" ? { text: "Accuracy hides the minority class; check recall." } : { optionIds: [q.options![0].id] }, revision: 1, flagged: false, savedAt: iso(now), opIds: [] };
+    }
+  }
+}
+
+function examOwned(db: MDb, id: string) {
+  const u = me(db)!;
+  const e = examById(id);
+  if (!e || (u.role !== "admin" && e.ownerId !== u.id)) return null;
+  return e;
+}
+
 // ---------- routes ----------
 type Handler = (p: string[], body: Record<string, unknown>, db: MDb) => Res;
 const routes: [string, RegExp, Handler][] = [];
 const on = (m: string, pattern: string, h: Handler) => routes.push([m, new RegExp(`^${pattern.replace(/:\w+/g, "([^/]+)")}$`), h]);
+
+const meDto = (db: MDb, u: MockUser): Me => ({ id: u.id, name: u.name, email: u.email, role: u.role, preferences: { ...DEFAULT_PREFERENCES, ...db.prefs[u.id] } });
 
 on("POST", "/api/auth/login", (_p, b, db) => {
   const u = USERS.find((x) => x.email === String(b.email ?? "").toLowerCase().trim());
   if (!u || b.password !== DEMO_PASSWORD) return fail(401, "UNAUTHENTICATED", "Email or password is incorrect.");
   if (!u.isActive) return fail(401, "UNAUTHENTICATED", "This account is disabled. Contact your administrator.");
   db.session = u.id;
-  return ok({ id: u.id, name: u.name, email: u.email, role: u.role, preferences: { ...DEFAULT_PREFERENCES, ...db.prefs[u.id] } } satisfies Me);
+  return ok(meDto(db, u));
 });
 on("POST", "/api/auth/logout", (_p, _b, db) => { db.session = null; return ok({ ok: true }); });
-on("GET", "/api/auth/me", (_p, _b, db) => {
-  const u = me(db);
-  if (!u) return fail(401, "UNAUTHENTICATED", "Please sign in.");
-  return ok({ id: u.id, name: u.name, email: u.email, role: u.role, preferences: { ...DEFAULT_PREFERENCES, ...db.prefs[u.id] } } satisfies Me);
-});
+on("GET", "/api/auth/me", (_p, _b, db) => ok(meDto(db, me(db)!)));
 on("PUT", "/api/me/preferences", (_p, b, db) => {
   const u = me(db)!;
   db.prefs[u.id] = { ...db.prefs[u.id], ...b };
@@ -195,11 +319,12 @@ on("GET", "/api/me/exams", (_p, _b, db) => {
   if (u.role !== "candidate") return fail(403, "FORBIDDEN", "Candidates only.");
   const now = Date.now();
   const cards = EXAMS.filter((e) => e.enrolled.includes(u.id) && e.status === "published").map((e) => candidateCard(db, e, u.id, now));
+  const isAvail = (c: CandidateExamCard) => c.phase === "ongoing" && ["not_started", "in_progress", "locked", "reattempt_granted"].includes(c.status);
   const res: CandidateExamList = {
     serverNow: iso(now),
-    available: cards.filter((c) => c.phase === "ongoing" && ["not_started", "in_progress", "locked", "reattempt_granted"].includes(c.status)),
+    available: cards.filter(isAvail),
     upcoming: cards.filter((c) => c.phase === "scheduled"),
-    completed: cards.filter((c) => !(c.phase === "scheduled") && !(c.phase === "ongoing" && ["not_started", "in_progress", "locked", "reattempt_granted"].includes(c.status))),
+    completed: cards.filter((c) => c.phase !== "scheduled" && !isAvail(c)),
   };
   return ok(res);
 });
@@ -224,7 +349,7 @@ on("GET", "/api/me/exams/:id", ([id], _b, db) => {
 on("POST", "/api/exams/:id/attempts", ([id], b, db) => {
   const u = me(db)!;
   const sid = String(b.clientSessionId ?? "");
-  const e = EXAMS.find((x) => x.id === id);
+  const e = examById(id);
   if (!e || !e.enrolled.includes(u.id) || e.status !== "published") return fail(404, "NOT_FOUND", "Exam not found.");
   const now = Date.now();
   const ph = phase(db, e, now);
@@ -233,30 +358,20 @@ on("POST", "/api/exams/:id/attempts", ([id], b, db) => {
   const existing = db.attempts.find((x) => x.examId === e.id && x.userId === u.id && !x.isSandbox && x.status !== "voided");
   if (existing) {
     if (existing.status === "submitted" || existing.status === "expired") return fail(409, "ALREADY_SUBMITTED", "You have already submitted this exam.");
-    if (!existing.sessions.includes(sid)) {
-      existing.sessions.push(sid);
-      if (existing.sessions.length > e.settings.maxOpens + existing.extraOpens) existing.status = "locked";
+    if (!existing.sessions.some((s) => s.id === sid)) {
+      existing.sessions.push({ id: sid, openedAt: iso(now), ua: navigator.userAgent });
+      const max = e.settings.maxOpens + existing.extraOpens;
+      serverEvent(existing, "session_opened", { open: existing.sessions.length, max });
+      if (existing.sessions.length > max) existing.status = "locked";
+    } else if (existing.activeSession !== sid) {
+      serverEvent(existing, "session_superseded");
     }
     existing.activeSession = sid;
+    existing.lastSeenAt = iso(now);
     return ok(attemptState(db, existing, sid));
   }
-  const seed = Math.floor(Math.random() * 2 ** 31);
-  const rnd = mulberry32(seed);
-  const qs = e.settings.shuffleQuestions ? shuffle(e.questions, rnd) : e.questions;
-  const a: MAttempt = {
-    id: uid(), examId: e.id, userId: u.id, isSandbox: false, status: "in_progress", seed,
-    startedAt: iso(now), deadline: iso(Math.min(closes(db, e), now + e.durationMin * 60000)),
-    order: [], optionOrder: {}, answers: {}, aqMap: {}, sessions: [sid], activeSession: sid, extraOpens: 0,
-    receipt: null, events: 0, request: null,
-  };
-  for (const q of qs) {
-    const aqId = uid();
-    a.order.push(aqId); a.aqMap[aqId] = q.id;
-    a.answers[aqId] = { value: null, revision: 0, flagged: false, savedAt: null, opIds: [] };
-    if (q.options) a.optionOrder[aqId] = (e.settings.shuffleOptions ? shuffle(q.options, rnd) : q.options).map((o) => o.id);
-  }
   delete db.reattemptGranted[`${e.id}:${u.id}`];
-  db.attempts.push(a);
+  const a = createAttempt(db, e, u.id, now, sid);
   return ok(attemptState(db, a, sid), 201);
 });
 
@@ -268,7 +383,7 @@ function ownAttempt(db: MDb, id: string) {
 on("GET", "/api/attempts/:id", ([id], _b, db) => {
   const a = ownAttempt(db, id);
   if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
-  const sid = typeof window !== "undefined" ? sessionStorage.getItem(`exam:session:${id}`) ?? undefined : undefined;
+  const sid = sessionStorage.getItem(`exam:session:${id}`) ?? undefined;
   return ok(attemptState(db, a, sid));
 });
 
@@ -278,6 +393,7 @@ on("PUT", "/api/attempts/:id/answers/:aq", ([id, aq], b, db) => {
   if (a.activeSession !== b.clientSessionId) return fail(409, "SESSION_SUPERSEDED", "This exam is open in another window.");
   if (a.status === "locked") return fail(423, "ATTEMPT_LOCKED", "This attempt is locked.");
   if (a.status !== "in_progress" || Date.now() > Date.parse(a.deadline) + GRACE_MS) return fail(409, "ATTEMPT_CLOSED", "Time is up. This change was not accepted.");
+  a.lastSeenAt = iso(Date.now());
   const cur = a.answers[aq];
   const opId = String(b.clientOpId);
   if (cur.opIds.includes(opId)) return ok({ aqId: aq, revision: cur.revision, savedAt: cur.savedAt! } satisfies SaveAnswerAck);
@@ -298,9 +414,12 @@ on("PUT", "/api/attempts/:id/flags/:aq", ([id, aq], b, db) => {
 on("POST", "/api/attempts/:id/heartbeat", ([id], b, db) => {
   const a = ownAttempt(db, id);
   if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
+  a.lastSeenAt = iso(Date.now());
+  const req = latestReq(a);
   const res: HeartbeatResponse = {
     serverNow: iso(Date.now()), deadline: a.deadline, status: a.status, activeSession: a.activeSession === b.clientSessionId,
-    announcements: db.announcements.filter((x) => x.examId === a.examId), pendingRequest: a.request,
+    announcements: db.announcements.filter((x) => x.examId === a.examId),
+    pendingRequest: req ? { id: req.id, type: req.type, status: req.status, note: req.note } : null,
   };
   return ok(res);
 });
@@ -308,9 +427,18 @@ on("POST", "/api/attempts/:id/heartbeat", ([id], b, db) => {
 on("POST", "/api/attempts/:id/events", ([id], b, db) => {
   const a = ownAttempt(db, id);
   if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
-  const events = (b.events as unknown[]) ?? [];
-  a.events += events.length;
-  return ok({ accepted: events.length });
+  if (a.status !== "in_progress" || a.activeSession !== b.clientSessionId) return ok({ accepted: 0 }); // BR-18: active session of a live attempt only
+  const seen = new Set(a.events.map((x) => x.id));
+  const now = iso(Date.now());
+  let accepted = 0;
+  for (const raw of ((b.events as Record<string, unknown>[]) ?? []).slice(0, 200)) {
+    const ev = raw as { clientEventId: string; clientSeq: number; type: StoredObservation["type"]; clientTime: string; detail?: Record<string, unknown> };
+    if (seen.has(ev.clientEventId) || a.events.length >= 2000) continue;
+    a.events.push({ id: ev.clientEventId, clientSeq: ev.clientSeq + 10000 * a.sessions.findIndex((s) => s.id === b.clientSessionId), type: ev.type, clientTime: ev.clientTime, serverTime: now, detail: ev.detail });
+    accepted++;
+  }
+  a.lastSeenAt = now;
+  return ok({ accepted });
 });
 
 on("POST", "/api/attempts/:id/submit", ([id], b, db) => {
@@ -325,15 +453,18 @@ on("POST", "/api/attempts/:id/submit", ([id], b, db) => {
 on("POST", "/api/attempts/:id/requests", ([id], b, db) => {
   const a = ownAttempt(db, id);
   if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
-  if (a.request?.status === "pending") return fail(409, "REQUEST_NOT_ALLOWED", "You already have a pending request.");
+  if (pendingReq(a)) return fail(409, "REQUEST_NOT_ALLOWED", "You already have a pending request.");
   const type = b.type as "unlock" | "reattempt";
   if (type === "unlock" && a.status !== "locked") return fail(409, "REQUEST_NOT_ALLOWED", "This attempt isn't locked.");
   if (type === "reattempt" && !a.receipt?.canRequestReattempt) return fail(409, "REQUEST_NOT_ALLOWED", "A re-attempt can't be requested for this exam.");
-  if (String(b.reason ?? "").trim().length < 10) return fail(422, "VALIDATION", "Please describe what happened.", { fields: { reason: "At least 10 characters" } });
-  a.request = { id: uid(), type, status: "pending", note: null };
-  return ok(a.request, 201);
+  const reason = String(b.reason ?? "").trim();
+  if (reason.length < 10) return fail(422, "VALIDATION", "Please describe what happened.", { fields: { reason: "At least 10 characters" } });
+  const r: MRequest = { id: uid(), type, status: "pending", reasonCategory: (b.reasonCategory as MRequest["reasonCategory"]) ?? "other", reason, createdAt: iso(Date.now()), decidedAt: null, decidedBy: null, note: null };
+  a.requests.push(r);
+  return ok({ id: r.id, type: r.type, status: r.status, note: null }, 201);
 });
 
+// ---------- examiner ----------
 on("GET", "/api/exams", (_p, _b, db) => {
   const u = me(db)!;
   if (u.role === "candidate") return fail(403, "FORBIDDEN", "Examiners only.");
@@ -347,15 +478,139 @@ on("GET", "/api/exams", (_p, _b, db) => {
       return {
         examId: e.id, title: e.title, code: e.code, phase: phase(db, e, now), opensAt: iso(opens(db, e)), closesAt: iso(closes(db, e)),
         durationMin: e.durationMin, totalMarks: e.totalMarks, questionCount: e.questions.length || (isStat ? STAT_Q1_QUESTION_COUNT : 0),
-        enrolled: isStat ? 24 : e.enrolled.length, inProgress: at.filter((x) => x.status === "in_progress").length,
+        enrolled: isStat ? 24 : e.enrolled.length, inProgress: at.filter((x) => x.status === "in_progress" || x.status === "locked").length,
         submitted: isStat ? 24 : at.filter((x) => x.status === "submitted" || x.status === "expired").length,
         awaitingGrading: at.filter((x) => (x.status === "submitted" || x.status === "expired") && e.questions.some((q) => q.type === "written")).length,
-        pendingRequests: at.filter((x) => x.request?.status === "pending").length,
-        priorityIncidents: isStat ? 1 : 0,
+        pendingRequests: at.filter((x) => pendingReq(x)).length,
+        priorityIncidents: isStat ? 1 : at.reduce((s, x) => s + incidentsOf(db, x).filter((i) => i.severity === "priority" && !i.review).length, 0),
       };
     }),
   };
   return ok(res);
+});
+
+on("GET", "/api/exams/:id/monitor", ([id], _b, db) => {
+  const e = examOwned(db, id);
+  if (!e) return fail(404, "NOT_FOUND", "Exam not found.");
+  const now = Date.now();
+  tickSimulation(db, now);
+  const rows: MonitorRow[] = e.enrolled.map((cid) => {
+    const u = userById(cid);
+    const a = db.attempts.find((x) => x.examId === e.id && x.userId === cid && !x.isSandbox && x.status !== "voided");
+    if (!a) {
+      return {
+        enrollmentId: `${e.id}:${cid}`, candidateId: cid, candidateName: u.name, studentId: u.studentId ?? null, attemptId: null,
+        status: "not_started", answered: 0, total: e.questions.length, startedAt: null, deadline: null, finalizedAt: null,
+        lastContactAt: null, contact: "none", opensUsed: 0, maxOpens: e.settings.maxOpens,
+        incidents: { info: 0, review: 0, priority: 0 }, unreviewed: 0, pendingRequest: null,
+      };
+    }
+    const inc = incidentsOf(db, a);
+    const pr = pendingReq(a);
+    return {
+      enrollmentId: `${e.id}:${cid}`, candidateId: cid, candidateName: u.name, studentId: u.studentId ?? null, attemptId: a.id,
+      status: a.status as MonitorRow["status"], answered: answeredCount(a), total: a.order.length, startedAt: a.startedAt, deadline: a.deadline,
+      finalizedAt: a.receipt?.finalizedAt ?? null, lastContactAt: a.lastSeenAt, contact: contactOf(a, now),
+      opensUsed: a.sessions.length, maxOpens: e.settings.maxOpens + a.extraOpens, incidents: countBySeverity(inc),
+      unreviewed: inc.filter((i) => i.severity !== "info" && !i.review).length,
+      pendingRequest: pr ? { id: pr.id, type: pr.type } : null,
+    };
+  });
+  const count = (s: MonitorRow["status"]) => rows.filter((r) => r.status === s).length;
+  const res: ExamMonitor = {
+    serverNow: iso(now),
+    exam: { examId: e.id, title: e.title, code: e.code, phase: phase(db, e, now), opensAt: iso(opens(db, e)), closesAt: iso(closes(db, e)), durationMin: e.durationMin, questionCount: e.questions.length },
+    totals: { enrolled: rows.length, notStarted: count("not_started"), inProgress: count("in_progress"), locked: count("locked"), submitted: count("submitted"), expired: count("expired") },
+    rows,
+    announcements: db.announcements.filter((x) => x.examId === e.id),
+    pendingRequests: rows.filter((r) => r.pendingRequest).length,
+  };
+  return ok(res);
+});
+
+on("POST", "/api/exams/:id/announcements", ([id], b, db) => {
+  const e = examOwned(db, id);
+  if (!e) return fail(404, "NOT_FOUND", "Exam not found.");
+  const body = String(b.body ?? "").trim();
+  if (!body || body.length > 500) return fail(422, "VALIDATION", "Announcement must be 1–500 characters.", { fields: { body: "1–500 characters" } });
+  const a = { id: uid(), examId: e.id, body, createdAt: iso(Date.now()) };
+  db.announcements.push(a);
+  return ok(a, 201);
+});
+
+function examinerAttempt(db: MDb, id: string) {
+  const a = db.attempts.find((x) => x.id === id);
+  if (!a || !examOwned(db, a.examId)) return null;
+  return a;
+}
+
+on("GET", "/api/attempts/:id/incidents", ([id], _b, db) => {
+  const a = examinerAttempt(db, id);
+  if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
+  const e = examById(a.examId)!;
+  const u = userById(a.userId);
+  const res: AttemptTimeline = {
+    serverNow: iso(Date.now()),
+    attempt: {
+      attemptId: a.id, examId: e.id, examTitle: e.title, candidateName: u.name, studentId: u.studentId ?? null, status: a.status,
+      startedAt: a.startedAt, deadline: a.deadline, finalizedAt: a.receipt?.finalizedAt ?? null,
+      answered: answeredCount(a), total: a.order.length, lastContactAt: a.lastSeenAt,
+    },
+    sessions: a.sessions.map((s) => ({ openedAt: s.openedAt, userAgent: s.ua, active: s.id === a.activeSession })),
+    maxOpens: e.settings.maxOpens + a.extraOpens,
+    incidents: incidentsOf(db, a),
+  };
+  return ok(res);
+});
+
+on("PUT", "/api/attempts/:id/incidents/:key/review", ([id, key], b, db) => {
+  const a = examinerAttempt(db, id);
+  const k = decodeURIComponent(key);
+  if (!a || !incidentsOf(db, a).some((i) => i.key === k)) return fail(404, "NOT_FOUND", "Incident not found.");
+  const decision = b.decision === "follow_up" ? "follow_up" : b.decision === "dismissed" ? "dismissed" : null;
+  if (!decision) return fail(422, "VALIDATION", "Choose dismiss or follow-up.");
+  const note = String(b.note ?? "").trim().slice(0, 500);
+  db.reviews[k] = { decision, note, reviewer: me(db)!.name, reviewedAt: iso(Date.now()) };
+  return ok(db.reviews[k]);
+});
+
+on("GET", "/api/exams/:id/requests", ([id], _b, db) => {
+  const e = examOwned(db, id);
+  if (!e) return fail(404, "NOT_FOUND", "Exam not found.");
+  const list: ExamRequest[] = db.attempts
+    .filter((a) => a.examId === e.id && !a.isSandbox)
+    .flatMap((a) => a.requests.map((r) => {
+      const inc = incidentsOf(db, a).filter((i) => i.category === "connectivity");
+      return {
+        id: r.id, attemptId: a.id, candidateName: userById(a.userId).name, type: r.type, reasonCategory: r.reasonCategory, reason: r.reason,
+        status: r.status, createdAt: r.createdAt, decidedAt: r.decidedAt, decidedBy: r.decidedBy, decisionNote: r.note,
+        attemptStatus: a.status, opensUsed: a.sessions.length, connectivityIncidents: inc.length,
+        offlineSeconds: inc.reduce((s, i) => s + (i.durationSec ?? 0), 0),
+      };
+    }))
+    .sort((x, y) => (x.status === "pending" ? 0 : 1) - (y.status === "pending" ? 0 : 1) || Date.parse(y.createdAt) - Date.parse(x.createdAt));
+  return ok({ requests: list });
+});
+
+on("POST", "/api/requests/:id/decision", ([id], b, db) => {
+  const a = db.attempts.find((x) => x.requests.some((r) => r.id === id));
+  if (!a || !examOwned(db, a.examId)) return fail(404, "NOT_FOUND", "Request not found.");
+  const r = a.requests.find((x) => x.id === id)!;
+  if (r.status !== "pending") return fail(409, "REQUEST_NOT_ALLOWED", "This request was already decided.");
+  const note = String(b.note ?? "").trim();
+  if (note.length < 3) return fail(422, "VALIDATION", "Add a short note for the record.", { fields: { note: "At least 3 characters" } });
+  const approve = b.decision === "approve";
+  if (approve && r.type === "unlock") {
+    if (a.status !== "locked") return fail(409, "REQUEST_NOT_ALLOWED", "This attempt is no longer locked.");
+    a.status = "in_progress"; a.extraOpens += 1;
+  }
+  if (approve && r.type === "reattempt") {
+    const e = examById(a.examId)!;
+    if (phase(db, e, Date.now()) !== "ongoing") return fail(409, "REQUEST_NOT_ALLOWED", "The exam window has closed.");
+    a.status = "voided"; db.reattemptGranted[`${a.examId}:${a.userId}`] = true;
+  }
+  Object.assign(r, { status: approve ? "approved" : "denied", decidedAt: iso(Date.now()), decidedBy: me(db)!.name, note });
+  return ok({ id: r.id, status: r.status });
 });
 
 // ---------- entry ----------
@@ -371,7 +626,7 @@ export async function mockFetch(method: string, path: string, body?: unknown): P
     const match = url.match(re);
     if (!match) continue;
     if (!url.startsWith("/api/auth/login") && !me(db)) { save(db); return fail(401, "UNAUTHENTICATED", "Please sign in."); }
-    const res = h(match.slice(1), (body ?? {}) as Record<string, unknown>, db);
+    const res = h(match.slice(1).map(decodeURIComponent), (body ?? {}) as Record<string, unknown>, db);
     save(db);
     return JSON.parse(JSON.stringify(res));
   }
@@ -380,13 +635,14 @@ export async function mockFetch(method: string, path: string, body?: unknown): P
 
 if (typeof window !== "undefined") {
   (window as unknown as { __mock: object }).__mock = {
-    reset: () => { localStorage.removeItem(KEY); location.reload(); },
+    reset: () => { localStorage.removeItem(KEY); localStorage.removeItem("mock:db:v1"); location.reload(); },
     approveLatestRequest: () => {
       const db = load();
-      const a = [...db.attempts].reverse().find((x) => x.request?.status === "pending");
-      if (!a || !a.request) return "no pending request";
-      a.request.status = "approved"; a.request.note = "Approved by examiner (mock).";
-      if (a.request.type === "unlock") { a.status = "in_progress"; a.extraOpens += 1; }
+      const a = [...db.attempts].reverse().find((x) => pendingReq(x));
+      const r = a && pendingReq(a);
+      if (!a || !r) return "no pending request";
+      Object.assign(r, { status: "approved", decidedAt: iso(Date.now()), decidedBy: "Examiner (console)", note: "Approved (mock)." });
+      if (r.type === "unlock") { a.status = "in_progress"; a.extraOpens += 1; }
       else { a.status = "voided"; db.reattemptGranted[`${a.examId}:${a.userId}`] = true; }
       save(db); return "approved";
     },
