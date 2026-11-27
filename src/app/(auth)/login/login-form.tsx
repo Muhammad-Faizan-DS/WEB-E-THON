@@ -16,12 +16,16 @@ const DEMO = [
   { label: "Admin", email: "admin@exam.test" },
 ];
 const SHOW_DEMO = USE_MOCKS || process.env.NEXT_PUBLIC_DEMO_HINTS === "1";
+/** Homepage "Try it as" links: /login?as=candidate|examiner|admin pre-fills that demo account. */
+const AS_PRESET: Record<string, string> = { candidate: "ali@exam.test", examiner: "examiner@exam.test", admin: "admin@exam.test" };
 
 export function LoginForm() {
   const router = useRouter();
-  const next = useSearchParams().get("next");
-  const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
+  const params = useSearchParams();
+  const next = params.get("next");
+  const preset = SHOW_DEMO ? AS_PRESET[params.get("as") ?? ""] : undefined;
+  const [email, setEmail] = React.useState(preset ?? "");
+  const [password, setPassword] = React.useState(preset ? "Demo@2026" : "");
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [formError, setFormError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);

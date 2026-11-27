@@ -62,3 +62,14 @@ Text selection, caret, focus ring (2 px ink blue, 2 px offset), scrollbars and `
 ## Never
 
 Gradient text, glass or blur decoration, eyebrow labels above headings, a coloured bar down one side of a box, hard offset shadows, emoji as icons, decorative concentric shapes, same-size icon cards as page structure, colour as the only signal.
+
+## Marketing surface: The Record Book (homepage `/`)
+
+The public homepage is a Persuade surface, so it carries its own world, chosen by the owner on 27 Nov: **a bound record book**. It is the direction the app screens will move toward next. The tokens are `--rb-*` in `globals.css`; the components are in `src/components/landing/`.
+
+- **Why a record book:** Fairmark's rules are record-keeping rules. Observations are written down, not judged. Nothing is erased. A copy is kept when the line drops. A second person signs off.
+- **Materials:** black bookcloth cover (`--rb-cover`, with grain) for the hero and the closing section. Engineering-pad green pages (`--rb-page`, 20 px grid with every fifth line stronger) with a double red margin rule. Ink `--rb-ink`. Canary carbon copy (`--rb-canary`) for the primary action and "kept on this device". Ballpoint blue (`--rb-ballpoint`, the app's ink blue) for decisions, sign-offs and links. The grid is the paper itself, not decoration on a plain surface.
+- **Type:** Montserrat 800/900 for display (tight, `-0.035em`, max 6rem). Poppins 400–600 for body. IBM Plex Mono for timestamps, revisions and codes only. Fonts load on the homepage only.
+- **Record grammar:** each section is an entry with a timestamp and entry number in the margin (a page number top-right on phones). The nav becomes the page's running head with the current entry and page number. Superseded decisions are struck through in red (`.ink-strike`), never removed. Severity is a dot plus a word (Info, Review, Priority review).
+- **Motion:** one signature moment. On the cover, the sample record writes itself, groups three observations into one incident, and is signed. On tall desktop screens the first page slides over the cover. Vanta Topology (p5) draws graphite lines on the cloth: it loads after first paint, only at ≥ 768 px without reduced motion, pauses off-screen, and settles after 40 s. Everything else animates only in response to the visitor. React Bits pieces live in `src/components/bits/`.
+- **Honesty:** every claim is a PRD rule. Demonstrations are labelled as sample or fictional data. There are no invented customers, stats or testimonials.
