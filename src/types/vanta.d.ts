@@ -1,12 +1,8 @@
-declare module "vanta/dist/vanta.topology.min" {
-  interface VantaP5 { loop(): void; noLoop(): void }
-  export interface VantaEffect { destroy(): void; resize(): void; p5?: VantaP5 }
-  const TOPOLOGY: (options: Record<string, unknown>) => VantaEffect;
-  export default TOPOLOGY;
+declare module "vanta/dist/vanta.dots.min" {
+  export interface VantaEffect { destroy(): void; resize(): void; setOptions?(o: Record<string, unknown>): void }
+  const DOTS: (options: Record<string, unknown>) => VantaEffect;
+  export default DOTS;
 }
 
-/** p5 is only handed to Vanta as an opaque constructor. */
-declare module "p5" {
-  const p5: unknown;
-  export default p5;
-}
+/** three r134 ships no types; it is only handed to Vanta. */
+declare module "three";

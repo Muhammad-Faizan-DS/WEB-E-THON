@@ -47,23 +47,23 @@ export function Incidents() {
 
   return (
     <>
-      <ol className="mt-12 border-t border-rb-ink/20">
+      <ol className="mt-12 border-t border-border">
         {INCIDENTS.map((inc) => {
           const history = log[inc.id] ?? [];
           const current = history.at(-1);
           return (
-            <li key={inc.id} className="grid gap-x-8 gap-y-3 border-b border-rb-ink/20 py-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
+            <li key={inc.id} className="grid gap-x-8 gap-y-3 border-b border-border py-6 lg:grid-cols-[minmax(0,1fr)_15rem]">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <span className="font-mono text-[13px] text-rb-ink-2 tabular-nums">{inc.at}</span>
+                  <span className="font-mono text-[13px] text-muted-foreground tabular-nums">{inc.at}</span>
                   <SeverityMark level={inc.level} />
-                  <span className="text-[13px] text-rb-ink-2">{inc.category}</span>
+                  <span className="text-[13px] text-muted-foreground">{inc.category}</span>
                 </div>
                 <p className="mt-2.5 max-w-[62ch] text-[16px] leading-[1.6]">{inc.text}</p>
               </div>
               <div className="lg:pt-0.5">
                 {!inc.decidable ? (
-                  <p className="text-[14px] text-rb-ink-2">Info only. No decision needed.</p>
+                  <p className="text-[14px] text-muted-foreground">Info only. No decision needed.</p>
                 ) : (
                   <div>
                     <div className="flex gap-2" role="group" aria-label={`Decision for the incident at ${inc.at}`}>
@@ -74,8 +74,8 @@ export function Incidents() {
                           aria-pressed={current?.d === d}
                           onClick={() => decide(inc.id, d)}
                           className={cn(
-                            "inline-flex min-h-11 flex-1 items-center justify-center rounded-[6px] border px-3 text-[14px] font-medium transition-[background-color,border-color,color] duration-150 active:translate-y-px",
-                            current?.d === d ? "border-rb-ballpoint bg-rb-ballpoint text-white" : "border-rb-ink/40 bg-rb-page hover:border-rb-ink hover:bg-white/60",
+                            "inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-3 text-[14px] font-medium transition-[background-color,border-color,color] duration-150 active:translate-y-px",
+                            current?.d === d ? "border-primary bg-primary text-white" : "border-border-strong bg-surface hover:border-foreground/40 hover:bg-surface-2",
                           )}
                         >
                           {d === "Dismissed" ? "Dismiss" : "Follow up"}
@@ -84,7 +84,7 @@ export function Incidents() {
                     </div>
                     <ul aria-live="polite" className="mt-2.5 space-y-0.5 text-[13px]">
                       {history.map((h, i) => (
-                        <li key={h.at} className={cn(i < history.length - 1 ? "ink-strike text-rb-ink-2" : "font-medium text-rb-ballpoint")}>
+                        <li key={h.at} className={cn(i < history.length - 1 ? "ink-strike text-muted-foreground" : "font-medium text-primary")}>
                           {h.d} by examiner · {new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" }).format(h.at)}
                         </li>
                       ))}
@@ -96,13 +96,13 @@ export function Incidents() {
           );
         })}
       </ol>
-      <p className="mt-4 text-[14px] text-rb-ink-2">Sample incidents with fictional data. A decision never changes marks, status or time.</p>
+      <p className="mt-4 text-[14px] text-muted-foreground">Sample incidents with fictional data. A decision never changes marks, status or time.</p>
 
       <div className="mt-16">
         <h3 className="font-display text-[20px] font-extrabold tracking-[-0.02em]">What this record never contains</h3>
         <ul className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
           {NEVER.map((n) => (
-            <li key={n} className="font-display text-[clamp(1.35rem,2.6vw,2rem)] font-bold tracking-[-0.02em] text-rb-ink-2">
+            <li key={n} className="font-display text-[clamp(1.35rem,2.6vw,2rem)] font-bold tracking-[-0.02em] text-muted-foreground">
               <s className="ink-strike">{n}</s>
               <span className="sr-only"> (never collected)</span>
             </li>

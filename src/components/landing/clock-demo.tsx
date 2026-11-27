@@ -35,28 +35,28 @@ export function ClockDemo() {
   const minutes = Math.round(offset / 60_000);
 
   return (
-    <div className="relative rounded-[4px] border border-rb-ink/25 bg-rb-page-2/70 p-5 shadow-[0_1px_0_rgb(255_255_255/0.5)_inset] sm:p-7">
+    <div className="relative rounded-2xl border border-border bg-surface p-5 shadow-[0_1px_2px_rgb(11_15_13/0.04),0_24px_48px_-24px_rgb(11_15_13/0.18)] sm:p-7">
       <div className="flex items-baseline justify-between gap-4">
         <p className="font-display text-[13px] font-bold">Sample attempt · 20 minutes</p>
-        <p className="text-[12px] text-rb-ink-2">Times in PKT</p>
+        <p className="text-[12px] text-muted-foreground">Times in PKT</p>
       </div>
 
-      <p className="mt-6 text-[13px] text-rb-ink-2" id="left-label">Time left</p>
-      <p aria-labelledby="left-label" className="font-display text-[clamp(3.5rem,9vw,5.5rem)] leading-none font-black tracking-[-0.04em] tabular-nums">
+      <p className="mt-6 text-[13px] text-muted-foreground" id="left-label">Time left</p>
+      <p aria-labelledby="left-label" className="font-display text-[clamp(3.5rem,9vw,5.5rem)] leading-none font-extrabold tracking-[-0.04em] tabular-nums">
         {fmtClock(left)}
       </p>
 
-      <dl className="mt-7 grid grid-cols-2 gap-4 border-t border-rb-ink/20 pt-4">
+      <dl className="mt-7 grid grid-cols-2 gap-4 border-t border-border pt-4">
         <div>
-          <dt className="text-[13px] text-rb-ink-2">Deadline, set by the server</dt>
+          <dt className="text-[13px] text-muted-foreground">Deadline, set by the server</dt>
           <dd className="mt-0.5 font-mono text-[17px] tabular-nums">{deadline}</dd>
         </div>
         <div>
-          <dt className="text-[13px] text-rb-ink-2">Your device clock</dt>
+          <dt className="text-[13px] text-muted-foreground">Your device clock</dt>
           <dd className="mt-0.5 font-mono text-[17px] tabular-nums">
             {device}
             {minutes !== 0 && (
-              <span className="ml-2 align-middle font-display text-[12px] font-bold text-rb-rule">
+              <span className="ml-2 align-middle font-display text-[12px] font-bold text-danger">
                 {minutes > 0 ? "+" : "−"}
                 {Math.abs(minutes)} min
               </span>
@@ -82,7 +82,7 @@ function ClockButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
     <button
       type="button"
       {...props}
-      className="inline-flex min-h-11 items-center rounded-[6px] border border-rb-ink/40 bg-rb-page px-4 text-[14px] font-medium transition-[background-color,border-color] duration-150 hover:border-rb-ink hover:bg-white/60 active:translate-y-px disabled:pointer-events-none disabled:opacity-45"
+      className="inline-flex min-h-11 items-center rounded-full border border-border-strong bg-surface px-4 text-[14px] font-medium transition-[background-color,border-color] duration-150 hover:border-foreground/40 hover:bg-surface-2 active:translate-y-px disabled:pointer-events-none disabled:opacity-45"
     />
   );
 }

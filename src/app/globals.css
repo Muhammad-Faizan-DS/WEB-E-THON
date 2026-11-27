@@ -3,33 +3,33 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Fairmark tokens. See DESIGN.md. "An exam paper": ink on warm paper, one ink-blue accent.
+ * Fairmark tokens. See DESIGN.md. Cool neutral surfaces, one emerald accent, near-black dark mode.
  * Status colours appear on dots/icons; text stays ink except for priority/destructive states.
  */
 :root {
   --radius: 0.5rem;
 
-  --background: #f6f5f1;
-  --foreground: #15171c;
+  --background: #f6f7f6;
+  --foreground: #0b0f0d;
   --surface: #ffffff;
-  --surface-2: #efeee8;
-  --muted-foreground: #555a66;
-  --subtle-foreground: #6c717c;
-  --border: #e3e1d9;
-  --border-strong: #cfccc1;
-  --input: #cfccc1;
-  --ring: #2340c8;
+  --surface-2: #eef1ef;
+  --muted-foreground: #4b5551;
+  --subtle-foreground: #636d68;
+  --border: #e4e7e5;
+  --border-strong: #cbd1cd;
+  --input: #cbd1cd;
+  --ring: #047857;
 
-  --primary: #2340c8;
-  --primary-hover: #1b33a6;
+  --primary: #047857;
+  --primary-hover: #065f46;
   --primary-foreground: #ffffff;
-  --primary-soft: #eaeefc;
+  --primary-soft: #e6f5ee;
 
-  --secondary: #efeee8;
-  --secondary-foreground: #15171c;
+  --secondary: #eef1ef;
+  --secondary-foreground: #0b0f0d;
 
-  --success: #1e7a4c;
-  --success-soft: #e7f2ec;
+  --success: #15803d;
+  --success-soft: #e8f5ec;
   --warning: #a35f00;
   --warning-dot: #d98e04;
   --warning-soft: #fbf2df;
@@ -42,46 +42,39 @@
 
   --q-size: 1.125rem;
 
-  /* Record Book: the public marketing surface (DESIGN.md, "Marketing surface"). A fixed printed object, no dark variant. */
-  --rb-cover: #0f110e;
-  --rb-cover-2: #1a1d17;
-  --rb-cover-ink: #eef2e8;
-  --rb-cover-muted: #aab4a1;
-  --rb-page: #dde7cf;
-  --rb-page-2: #cfdcbe;
-  --rb-grid: rgb(74 110 56 / 0.16);
-  --rb-grid-strong: rgb(74 110 56 / 0.3);
-  --rb-ink: #121410;
-  --rb-ink-2: #3c4737;
-  --rb-rule: #c8362a;
-  --rb-canary: #f2d33d;
-  --rb-canary-2: #e6c32a;
-  --rb-ballpoint: #2340c8;
-  --rb-amber: #b86e00;
+  /* marketing surface: the dark bands of the homepage (fixed, not themed) */
+  --night: #07090a;
+  --night-2: #0e1211;
+  --night-3: #161c1a;
+  --night-line: rgb(255 255 255 / 0.09);
+  --on-night: #edf2ef;
+  --on-night-muted: #9aa6a0;
+  --emerald: #10b981;
+  --emerald-bright: #34d399;
 }
 
 .dark {
-  --background: #101216;
-  --foreground: #ecedef;
-  --surface: #171a20;
-  --surface-2: #1e222a;
-  --muted-foreground: #a9afbb;
-  --subtle-foreground: #8b919d;
-  --border: #2a2f39;
-  --border-strong: #3a404c;
-  --input: #3a404c;
-  --ring: #8ea2ff;
+  --background: #07090a;
+  --foreground: #edf2ef;
+  --surface: #0e1211;
+  --surface-2: #161c1a;
+  --muted-foreground: #a3aea8;
+  --subtle-foreground: #86918b;
+  --border: #1f2623;
+  --border-strong: #2e3733;
+  --input: #2e3733;
+  --ring: #34d399;
 
-  --primary: #8ea2ff;
-  --primary-hover: #a9b8ff;
-  --primary-foreground: #0e1220;
-  --primary-soft: #1d2440;
+  --primary: #34d399;
+  --primary-hover: #6ee7b7;
+  --primary-foreground: #04130d;
+  --primary-soft: #0f2a21;
 
-  --secondary: #1e222a;
-  --secondary-foreground: #ecedef;
+  --secondary: #161c1a;
+  --secondary-foreground: #edf2ef;
 
-  --success: #5cc48d;
-  --success-soft: #16281f;
+  --success: #4ade80;
+  --success-soft: #11251a;
   --warning: #f0b44c;
   --warning-dot: #f0b44c;
   --warning-soft: #2d2412;
@@ -122,34 +115,28 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
 
+  --color-night: var(--night);
+  --color-night-2: var(--night-2);
+  --color-night-3: var(--night-3);
+  --color-night-line: var(--night-line);
+  --color-on-night: var(--on-night);
+  --color-on-night-muted: var(--on-night-muted);
+  --color-emerald: var(--emerald);
+  --color-emerald-bright: var(--emerald-bright);
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
 
-  --color-rb-cover: var(--rb-cover);
-  --color-rb-cover-2: var(--rb-cover-2);
-  --color-rb-cover-ink: var(--rb-cover-ink);
-  --color-rb-cover-muted: var(--rb-cover-muted);
-  --color-rb-page: var(--rb-page);
-  --color-rb-page-2: var(--rb-page-2);
-  --color-rb-ink: var(--rb-ink);
-  --color-rb-ink-2: var(--rb-ink-2);
-  --color-rb-rule: var(--rb-rule);
-  --color-rb-canary: var(--rb-canary);
-  --color-rb-canary-2: var(--rb-canary-2);
-  --color-rb-ballpoint: var(--rb-ballpoint);
-  --color-rb-amber: var(--rb-amber);
-
+  --font-sans: var(--font-poppins);
   --font-display: var(--font-montserrat);
-  --font-body: var(--font-poppins);
-  --font-sans: var(--font-public-sans);
   --font-serif: var(--font-source-serif);
   --font-mono: var(--font-plex-mono);
 
-  --shadow-sm: 0 1px 2px rgb(21 23 28 / 0.06);
-  --shadow-md: 0 2px 6px -1px rgb(21 23 28 / 0.08), 0 1px 2px rgb(21 23 28 / 0.05);
-  --shadow-lg: 0 12px 32px -8px rgb(21 23 28 / 0.18), 0 2px 6px rgb(21 23 28 / 0.06);
+  --shadow-sm: 0 1px 2px rgb(11 15 13 / 0.06);
+  --shadow-md: 0 2px 6px -1px rgb(11 15 13 / 0.08), 0 1px 2px rgb(11 15 13 / 0.05);
+  --shadow-lg: 0 12px 32px -8px rgb(11 15 13 / 0.18), 0 2px 6px rgb(11 15 13 / 0.06);
 }
 
 @layer base {
@@ -163,16 +150,18 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: var(--font-sans), system-ui, sans-serif;
+    font-family: var(--font-poppins), system-ui, sans-serif;
     font-size: 0.875rem;
-    line-height: 1.5;
+    line-height: 1.55;
     caret-color: var(--primary);
   }
   ::selection {
-    background: color-mix(in oklab, var(--primary) 22%, transparent);
+    background: color-mix(in oklab, var(--primary) 24%, transparent);
     color: inherit;
   }
   h1, h2, h3 {
+    font-family: var(--font-montserrat), system-ui, sans-serif;
+    letter-spacing: -0.015em;
     text-wrap: balance;
   }
   p {
@@ -218,62 +207,32 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* ---- Record Book (marketing surface) ---- */
-  .record {
-    font-family: var(--font-poppins), system-ui, sans-serif;
-    color: var(--rb-ink);
-    background: var(--rb-cover);
-    font-size: 1rem;
-    line-height: 1.6;
-  }
-  .record ::selection {
-    background: color-mix(in oklab, var(--rb-canary) 75%, transparent);
-    color: var(--rb-ink);
-  }
-  .record :focus-visible {
-    outline-color: var(--rb-ballpoint);
-  }
-  .record .on-cover :focus-visible {
-    outline-color: var(--rb-canary);
-  }
-  /* engineering pad: 4 mm grid, every fifth line darker */
-  .grid-paper {
-    background-color: var(--rb-page);
-    background-image:
-      linear-gradient(var(--rb-grid-strong) 1px, transparent 1px),
-      linear-gradient(90deg, var(--rb-grid-strong) 1px, transparent 1px),
-      linear-gradient(var(--rb-grid) 1px, transparent 1px),
-      linear-gradient(90deg, var(--rb-grid) 1px, transparent 1px);
-    background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
-    background-position: -1px -1px;
-  }
-  /* bookcloth: fine woven grain over the cover colour */
-  .cloth-grain {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
-      repeating-linear-gradient(0deg, rgb(255 255 255 / 0.018) 0 1px, transparent 1px 3px),
-      repeating-linear-gradient(90deg, rgb(255 255 255 / 0.014) 0 1px, transparent 1px 3px);
-    mix-blend-mode: overlay;
-    opacity: 0.35;
-  }
-  .font-display-tight {
+  /* ---- homepage ---- */
+  .display {
     font-family: var(--font-montserrat), system-ui, sans-serif;
     letter-spacing: -0.035em;
-    line-height: 0.95;
+    line-height: 1;
   }
-  .leader {
-    background-image: radial-gradient(circle, var(--rb-ink-2) 1px, transparent 1.2px);
-    background-size: 7px 3px;
-    background-repeat: repeat-x;
-    background-position: 0 75%;
+  .on-night ::selection {
+    background: color-mix(in oklab, var(--emerald) 45%, transparent);
+    color: #fff;
+  }
+  .on-night :focus-visible {
+    outline-color: var(--emerald-bright);
   }
   .ink-strike {
     text-decoration-line: line-through;
     text-decoration-thickness: 2px;
-    text-decoration-color: var(--rb-rule);
+    text-decoration-color: var(--danger);
   }
 }
 
-@keyframes draw {
-  from { stroke-dashoffset: 420; }
-  to { stroke-dashoffset: 0; }
+/* homepage entrance: CSS-only so server and client render the same; reduced motion collapses it via the base rule */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes rise-far {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: none; }
 }

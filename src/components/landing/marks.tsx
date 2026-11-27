@@ -3,9 +3,9 @@ import { cn } from "@/lib/utils";
 export type Severity = "info" | "review" | "priority";
 
 const SEVERITY: Record<Severity, { label: string; dot: string }> = {
-  info: { label: "Info", dot: "bg-rb-ink-2/60" },
-  review: { label: "Review", dot: "bg-rb-amber" },
-  priority: { label: "Priority review", dot: "bg-rb-rule" },
+  info: { label: "Info", dot: "bg-muted-foreground/60" },
+  review: { label: "Review", dot: "bg-warning-dot" },
+  priority: { label: "Priority review", dot: "bg-danger" },
 };
 
 /** Status is a dot plus a word; the word stays ink. */

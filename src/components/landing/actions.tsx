@@ -11,41 +11,28 @@ const ROLES = [
   { as: "admin", label: "Admin" },
 ] as const;
 
-export function CanaryLink({ href, children, className }: { href: string; children: React.ReactNode; className?: string }) {
+/** Primary action on a dark band: sign in, plus one-click demo roles when demo hints are on. */
+export function NightActions({ className }: { className?: string }) {
   return (
-    <Link
-      href={href}
-      className={cn(
-        "group inline-flex h-12 items-center gap-2.5 rounded-[6px] bg-rb-canary px-6 font-display text-[15px] font-bold tracking-[-0.01em] text-rb-ink",
-        "shadow-[0_1px_0_rgb(0_0_0/0.25),0_10px_24px_-10px_rgb(242_211_61/0.55)] transition-[background-color,transform] duration-200 ease-out",
-        "hover:bg-rb-canary-2 active:translate-y-px",
-        className,
-      )}
-    >
-      {children}
-      <ArrowRight className="size-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" aria-hidden />
-    </Link>
-  );
-}
-
-/** Primary action on the dark cover: sign in, plus one-click demo roles when demo hints are on. */
-export function CoverActions({ className }: { className?: string }) {
-  return (
-    <div className={cn("on-cover flex flex-wrap items-center gap-x-6 gap-y-4", className)}>
-      <CanaryLink href="/login">Sign in</CanaryLink>
+    <div className={cn("flex flex-wrap items-center gap-x-7 gap-y-4", className)}>
+      <Link
+        href="/login"
+        className="group inline-flex h-12 items-center gap-2.5 rounded-full bg-emerald px-6 font-display text-[15px] font-bold tracking-[-0.01em] text-[#04130d] shadow-[0_0_0_1px_rgb(16_185_129/0.4),0_12px_32px_-12px_rgb(16_185_129/0.7)] transition-[background-color,transform,box-shadow] duration-200 ease-out hover:bg-emerald-bright active:scale-[0.98]"
+      >
+        Sign in
+        <ArrowRight className="size-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" aria-hidden />
+      </Link>
       {SHOW_DEMO && (
-        <nav aria-label="Try a demo account" className="flex flex-wrap items-center gap-x-1 gap-y-1 text-[14px] text-rb-cover-muted">
-          <span className="mr-2">Try it as</span>
-          {ROLES.map((r, i) => (
-            <span key={r.as} className="inline-flex items-center">
-              <Link
-                href={`/login?as=${r.as}`}
-                className="inline-flex min-h-11 items-center rounded-[4px] px-1.5 font-medium text-rb-cover-ink underline decoration-rb-cover-muted/50 decoration-1 underline-offset-[6px] transition-colors duration-150 hover:decoration-rb-canary"
-              >
-                {r.label}
-              </Link>
-              {i < ROLES.length - 1 && <span aria-hidden className="px-0.5 text-rb-cover-muted/60">/</span>}
-            </span>
+        <nav aria-label="Try a demo account" className="flex flex-wrap items-center gap-1 text-[14px] text-on-night-muted">
+          <span className="mr-1.5">Try it as</span>
+          {ROLES.map((r) => (
+            <Link
+              key={r.as}
+              href={`/login?as=${r.as}`}
+              className="inline-flex min-h-11 items-center rounded-full border border-night-line px-3.5 font-medium text-on-night transition-colors duration-150 hover:border-emerald/60 hover:bg-white/[0.04]"
+            >
+              {r.label}
+            </Link>
           ))}
         </nav>
       )}
