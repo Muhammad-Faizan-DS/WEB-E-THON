@@ -3,6 +3,8 @@
 import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
+import { Logo } from "@/components/common/brand";
+import { ThemeToggle } from "@/components/common/theme-toggle";
 
 const demoAccounts = [
   ["Administrator", "admin@example.test"],
@@ -46,7 +48,7 @@ export function SignInPanel({ showDemoAccounts = false, institution = "SecureExa
   }
   return <main className="sign-in">
     <section className="sign-in-brand" aria-label="About SecureExam">
-      <div className="brand"><span aria-hidden="true">F</span>Fairmark</div>
+      <div className="brand" style={{ display: "flex", justifyContent: "space-between", width: "100%" }}><Logo /><ThemeToggle className="size-9" /></div>
       <div className="sign-in-pitch">
         {institution !== "SecureExam" && <p className="eyebrow">{institution}</p>}
         <h1>Exams that stay fair when things go wrong.</h1>

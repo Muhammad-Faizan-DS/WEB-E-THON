@@ -223,9 +223,3 @@ code.key{font-size:1rem;letter-spacing:.04em;font-weight:700}
 .portal-root .exam-status>*{box-shadow:var(--shadow-lg)}
 .portal-root .menu,.portal-root .bell-panel{background:var(--surface);border-color:var(--border-strong);box-shadow:var(--shadow-lg)}
 .portal-root table th{font-weight:500;text-transform:uppercase;letter-spacing:.04em;font-size:.72rem}
-/* Sign-in matches Fairmark's single centred column */
-.portal-root .sign-in{grid-template-columns:1fr;background:var(--background)}
-.portal-root .sign-in-brand{display:none}
-.portal-root .sign-in-form{background:var(--background);align-content:center;min-height:100vh}
-.portal-root .sign-in-form form{width:min(100%,360px)}
-.portal-root .sign-in-form h2{font-size:1.6rem;font-weight:600}

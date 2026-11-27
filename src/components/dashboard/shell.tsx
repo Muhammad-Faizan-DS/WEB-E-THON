@@ -4,15 +4,18 @@ import { SignOutButton } from "@/components/backend-preview/sign-in";
 import { roleHome, roleLabel, type SignedInUser } from "./guard";
 import { NotificationBell } from "./notification-bell";
 import { SideNav } from "./side-nav";
+import { Logo } from "@/components/common/brand";
+import { ThemeToggle } from "@/components/common/theme-toggle";
 
 /** Temporary shell for the role dashboards. Replace with the frontend team's AppShell. */
 export function DashboardShell({ user, children }: { user: SignedInUser; children: ReactNode }) {
   return <div>
     <a className="skip" href="#workspace">Skip to workspace</a>
     <header className="topbar">
-      <Link href={roleHome(user.role)} className="brand"><span aria-hidden="true">F</span>Fairmark</Link>
+      <Link href={roleHome(user.role)} className="brand" aria-label="Fairmark home"><Logo /></Link>
       <div className="account">
         <NotificationBell />
+        <ThemeToggle className="size-9" />
         <div><strong>{user.name}</strong><small>{roleLabel[user.role]}</small></div>
         <SignOutButton />
       </div>

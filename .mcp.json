@@ -2,6 +2,10 @@
   "mcpServers": {
     "playwright": { "command": "npx", "args": ["--yes", "@playwright/mcp@0.0.86"] },
     "context7": { "command": "npx", "args": ["--yes", "@upstash/context7-mcp@4.9.0"] },
-    "shadcn": { "command": "npx", "args": ["--yes", "shadcn@4.23.1", "mcp"] }
+    "shadcn": { "command": "npx", "args": ["--yes", "shadcn@4.23.1", "mcp"] },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=pujtjtcqemzrobsdjnmh&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching%2Cfeedback%2Cnotebooks"
+    }
   }
 }
