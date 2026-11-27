@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { workspacePrefs, type WorkspacePreferences } from "@/lib/contracts/operations";
-import { DataTable, Feedback, Heading, Navigation, Status, formatDate } from "./common";
+import { DataTable, Feedback, Heading, Status, formatDate } from "./common";
 import { request, useAction, useResource } from "./client";
 import { AttemptWorkspace } from "./workspace";
+import { DisputesPanel } from "./disputes";
 import { CameraGate, stopCamera } from "./camera";
 import { isDesktop } from "./device";
 
@@ -19,19 +20,18 @@ type Result = { id: string; title: string; score: number; totalMarks: number; pe
   verifyCode: string; verifyUrl: string; qrDataUrl: string; questions: Array<{
   position: number; text: string; marks: number; awarded: number | null; feedback: string | null; regradedAt: string | null;
 }> };
-const links: Array<[string, string]> = [["My exams", "/candidate"], ["Results", "/candidate/results"], ["Workspace settings", "/candidate/settings"]];
 
 export function Candidate({ section, examId, attemptId, userId, name }: { section?: string; examId?: string; attemptId?: string; userId: string; name: string }) {
-  const relevant = section !== "results" && section !== "settings";
+  const relevant = section !== "results" && section !== "settings" && section !== "disputes";
   const exams = useResource<ExamBuckets>(relevant ? "/api/candidate/exams" : null, relevant ? 15_000 : undefined);
   const data = exams.data;
   const exam = data && [...data.available, ...data.upcoming, ...data.completed].find((item) => item.id === examId);
   const path = examId ? "/candidate/exams/" + examId : "/candidate";
-  const current = relevant ? "/candidate" : "/candidate/" + section;
   if (attemptId && examId && exam) return <AttemptWorkspace key={attemptId} attemptId={attemptId} userId={userId} name={name}
     back="/candidate" allowPaste={exam.allowPaste} cameraRequired={exam.cameraCheck} title={exam.title} />;
-  return <><Navigation items={links} selected={current} />
-    {section === "results" ? <Results /> : section === "settings" ? <Preferences /> :
+
+  return <>
+    {section === "disputes" ? <DisputesPanel role="candidate" /> : section === "results" ? <Results /> : section === "settings" ? <Preferences /> :
       <><Feedback error={exams.error} pending={exams.pending} />
         {exam ? <ExamEntry exam={exam} path={path} userId={userId} available={Boolean(data?.available.some((item) => item.id === exam.id))} /> :
           data && (examId ? <Heading title="Exam unavailable" note="Open an exam from your candidate dashboard." /> : <ExamDashboard exams={data} />)}</>}

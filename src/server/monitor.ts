@@ -11,6 +11,7 @@ const onlineWindowMs = 45_000;
 import { fail } from "./errors";
 import { ownedExam } from "./exams";
 import { expiredBy } from "./integrity";
+import { enrolledCandidateIds, notify } from "./notifications";
 
 export async function monitor(actor: Actor, examId: string) {
   const db = database();
@@ -126,7 +127,10 @@ export function postAnnouncement(actor: Actor, examId: string, input: z.infer<ty
         .where(and(eq(attempts.examId, examId), eq(attempts.candidateId, input.candidateId), eq(attempts.status, "in_progress")));
     }
     await audit(tx, actor.id, input.candidateId ? "private_message_sent" : "announcement_sent", "exam", examId,
-      { after: { announcementId: row.id, candidateId: input.candidateId ?? null } });
+      { after: { announcementId: row.id, candidateId: input.candidateId ?? null, message: input.message } });
+    const [exam] = await tx.select({ title: exams.title }).from(exams).where(eq(exams.id, examId));
+    await notify(tx, input.candidateId ? [input.candidateId] : await enrolledCandidateIds(tx, examId), {
+      kind: "message", title: input.candidateId ? `Message from your examiner · ${exam.title}` : `Announcement · ${exam.title}`, body: input.message, link: "/candidate" });
     return row;
   });
 }

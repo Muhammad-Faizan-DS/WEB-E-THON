@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { SignOutButton } from "@/components/backend-preview/sign-in";
 import { roleHome, roleLabel, type SignedInUser } from "./guard";
+import { NotificationBell } from "./notification-bell";
+import { SideNav } from "./side-nav";
 
 /** Temporary shell for the role dashboards. Replace with the frontend team's AppShell. */
 export function DashboardShell({ user, children }: { user: SignedInUser; children: ReactNode }) {
@@ -10,11 +12,13 @@ export function DashboardShell({ user, children }: { user: SignedInUser; childre
     <header className="topbar">
       <Link href={roleHome(user.role)} className="brand"><span aria-hidden="true">SE</span>SecureExam</Link>
       <div className="account">
+        <NotificationBell />
         <div><strong>{user.name}</strong><small>{roleLabel[user.role]}</small></div>
         <SignOutButton />
       </div>
     </header>
-    <main id="workspace" className="workspace">{children}</main>
+    <div className="app-frame"><SideNav role={user.role} />
+      <main id="workspace" className="workspace">{children}</main></div>
   </div>;
 }
 

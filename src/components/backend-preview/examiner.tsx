@@ -9,6 +9,7 @@ import { ExamQuestions } from "./exam-questions";
 import { ExamBuilder, type ExamDetail } from "./exam-builder";
 import { AnalyticsPanel, GradingPanel, MonitorPanel } from "./exam-operations";
 import { RequestsPanel } from "./administrator";
+import { DisputesPanel } from "./disputes";
 import { AttemptWorkspace } from "./workspace";
 import { isDesktop } from "./device";
 
@@ -22,6 +23,7 @@ export function Examiner({ section, examId, attemptId, tab, userId, name }: {
 }) {
   if (examId && attemptId) return <AttemptWorkspace key={attemptId} attemptId={attemptId} userId={userId} name={name} back={"/examiner/exams/" + examId} sandbox />;
   if (section === "requests") return <><Breadcrumb current="Re-attempt requests" /><RequestsPanel admin={false} /></>;
+  if (section === "disputes") return <DisputesPanel role="examiner" />;
   if (examId === "new") return <ExamBuilder />;
   if (examId) return <ManageExam key={examId} examId={examId} tab={tab} userId={userId} />;
   return <><Breadcrumb current="Exam tools" /><Heading title="Exam tools" note="Open one of your exams to manage its questions and settings." /></>;
@@ -123,6 +125,11 @@ function Enrollments({ exam, reload }: { exam: ExamDetail; reload: () => Promise
     }, "Candidates enrolled. Each one has a personal activation key.");
   };
   const regenerate = () => void job.run(() => request(api + "/keys", "POST", { enrollmentIds: selected }), "New keys issued; the old ones no longer work.");
+  const [reason, setReason] = useState("");
+  const remove = () => void job.run(async () => {
+    for (const enrollmentId of selected) await request(api + "/enrollments/remove", "POST", { enrollmentId, reason });
+    setSelected([]); setReason("");
+  }, "Removed. The candidates and administrators were notified with your reason.");
   const active = rows.filter((row) => row.key);
   const exportKeys = () => download(exam.title.replace(/[^a-z0-9]+/gi, "-") + "-keys.csv",
     "Name,Email,Activation key,Status\r\n" + rows.map((row) => [row.name, row.email, row.key ?? "", row.status].map(cell).join(",")).join("\r\n"));
@@ -134,6 +141,9 @@ function Enrollments({ exam, reload }: { exam: ExamDetail; reload: () => Promise
       <button disabled={!rows.length} onClick={exportKeys}>Download CSV</button>
       <button disabled={!rows.length} onClick={() => window.print()}>Print</button>
       <button disabled={!selected.length || job.busy} onClick={regenerate}>Regenerate selected</button></div></div>
+    {selected.length > 0 && <div className="compact remove-row no-print"><label>Reason for removing {selected.length} selected
+      <input value={reason} onChange={(event) => setReason(event.target.value)} minLength={10} maxLength={1000} placeholder="At least 10 characters, shared with the candidate" /></label>
+      <button className="danger" disabled={job.busy || reason.trim().length < 10} onClick={remove}>Remove from exam</button></div>}
     <p className="muted no-print">Every enrolled candidate gets a personal key automatically. The key unlocks the exam and seeds that candidate&apos;s question order.</p>
     <Feedback error={job.error || keys.error} note={job.note} pending={keys.pending} />
     {exam.status !== "published" ? <p className="empty">Publish the exam to enrol candidates and issue keys.</p> :

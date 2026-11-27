@@ -62,3 +62,25 @@ const award = z.number().finite().min(0).max(1_000).multipleOf(0.01);
 export const gradeInput = z.object({ marks: award, feedback: z.string().trim().max(2_000).default("") }).strict();
 export const regradeInput = gradeInput.extend({ attemptId: id, qid: id, reason }).strict();
 export const verifyCode = z.string().regex(/^[0-9a-f]{40}$/);
+
+export const userQuery = z.object({
+  role: role.optional(),
+  q: z.string().trim().max(100).optional(),
+  page: z.coerce.number().int().min(1).max(1_000).default(1),
+}).strict();
+export const notificationRead = z.object({ ids: z.array(id).min(1).max(100).optional(), all: z.boolean().optional() }).strict()
+  .refine(({ ids, all }) => Boolean(ids?.length) || all === true, "Choose notifications to mark as read.");
+export const disputeInput = z.object({
+  examId: id.optional(),
+  category: z.enum(["grading", "conduct", "technical", "accommodation", "other"]),
+  subject: z.string().trim().min(3).max(150),
+  body: z.string().trim().min(10).max(4_000),
+  /** Routes the dispute to administrators only, e.g. a concern about the examiner's own conduct. */
+  aboutExaminer: z.boolean().default(false),
+}).strict();
+export const disputeUpdate = z.object({
+  status: z.enum(["in_review", "resolved", "rejected"]),
+  response: z.string().trim().min(3).max(4_000),
+}).strict();
+/** Removing a candidate from an exam always needs a recorded reason. */
+export const enrollmentRemoval = z.object({ enrollmentId: id, reason: z.string().trim().min(10).max(1_000) }).strict();

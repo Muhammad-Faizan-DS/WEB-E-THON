@@ -5,6 +5,7 @@ import { type ExamInput, type enrollmentInput } from "@/lib/contracts/core";
 import { type z } from "zod";
 import { accountOrigin, readOrgSettings, temporaryPassword } from "./accounts";
 import { audit, knownEmails } from "./admin";
+import { activeAdminIds, notify } from "./notifications";
 import { database, type Tx } from "./database";
 import { fail } from "./errors";
 import { randomUUID } from "node:crypto";
@@ -186,7 +187,7 @@ export function publishExam(examinerId: string, examId: string, publish: boolean
  * Enrols candidates by id or by email (PRD §24.2). An unknown email creates a candidate account (external only when
  * explicitly invited) and returns its one-time temporary password in the response; nothing is emailed.
  */
-export async function enrollCandidates(examinerId: string, examId: string, picks: z.infer<typeof enrollmentInput>["candidates"]) {
+export async function enrollCandidates(examinerId: string, examId: string, picks: z.infer<typeof enrollmentInput>["candidates"], actorId = examinerId) {
   const settings = await readOrgSettings();
   const emails = picks.flatMap((pick) => "email" in pick ? [pick.email] : []);
   const known = await knownEmails(emails);
@@ -209,7 +210,7 @@ export async function enrollCandidates(examinerId: string, examId: string, picks
         const { isExternal } = accountOrigin(email, external, settings);
         [user] = await tx.insert(users).values({ email, name: name ?? email.split("@")[0], role: "candidate", isExternal,
           passwordHash: fresh.passwordHash }).returning({ id: users.id });
-        await audit(tx, examinerId, isExternal ? "external_user_invited" : "candidate_account_created", "user", user.id,
+        await audit(tx, actorId, isExternal ? "external_user_invited" : "candidate_account_created", "user", user.id,
           { after: { role: "candidate", isExternal, examId } });
         created.set(user.id, fresh.password);
       }
@@ -233,7 +234,9 @@ export async function enrollCandidates(examinerId: string, examId: string, picks
     const needKey = rows.filter((row) => row.status === "active" && !row.cooldownUntil && !keyed.some((item) => item.enrollmentId === row.id))
       .map(({ id }) => id);
     const issued = new Map((await createKeys(tx, needKey)).map(({ enrollmentId, key }) => [enrollmentId, key]));
-    await audit(tx, examinerId, "candidates_enrolled", "exam", examId, { after: { enrollments: rows.length, keysIssued: issued.size } });
+    await audit(tx, actorId, "candidates_enrolled", "exam", examId, { after: { enrollments: rows.length, keysIssued: issued.size } });
+    await notify(tx, rows.map(({ candidateId }) => candidateId), { kind: "enrolment", title: `You are enrolled in ${exam.title}`,
+      body: `Opens ${exam.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC.`, link: "/candidate" });
     return rows.map((row) => {
       const person = candidates.find(({ id }) => id === row.candidateId)!;
       return { ...row, email: person.email, isExternal: person.isExternal, temporaryPassword: created.get(row.candidateId) ?? null,
@@ -289,5 +292,35 @@ export function issueKeys(examinerId: string, examId: string, ids: string[]) {
     const keys = await createKeys(tx, ids);
     await audit(tx, examinerId, "keys_regenerated", "exam", examId, { after: { count: keys.length } });
     return keys;
+  });
+}
+
+/** The exam's owning examiner id, for administrator actions that run on the examiner's behalf. */
+export async function examOwner(examId: string) {
+  const [row] = await database().select({ examinerId: exams.examinerId }).from(exams).where(eq(exams.id, examId));
+  if (!row) fail(404, "EXAM_NOT_FOUND", "Exam not found.");
+  return row.examinerId;
+}
+
+/**
+ * Removes a candidate from an exam with a recorded reason (examiner of the exam, or an administrator).
+ * Not allowed once the candidate has an attempt: evidence and answers are kept, so use integrity review instead.
+ */
+export function removeEnrollment(actor: { id: string; role: string }, examId: string, enrollmentId: string, reason: string) {
+  return database().transaction(async (tx) => {
+    const [exam] = await tx.select().from(exams).where(eq(exams.id, examId)).for("update");
+    if (!exam || (actor.role === "examiner" && exam.examinerId !== actor.id)) fail(403, "FORBIDDEN", "This exam is unavailable.");
+    const [row] = await tx.select({ id: enrollments.id, candidateId: enrollments.candidateId, name: users.name }).from(enrollments)
+      .innerJoin(users, eq(users.id, enrollments.candidateId)).where(and(eq(enrollments.id, enrollmentId), eq(enrollments.examId, examId))).for("update", { of: enrollments });
+    if (!row) fail(404, "ENROLLMENT_NOT_FOUND", "This candidate is not enrolled in the exam.");
+    const [started] = await tx.select({ id: attempts.id }).from(attempts).where(eq(attempts.enrollmentId, enrollmentId)).limit(1);
+    if (started) fail(409, "ATTEMPT_EXISTS", "This candidate has already started. Keep the record and use integrity review instead.");
+    await tx.delete(activationKeys).where(eq(activationKeys.enrollmentId, enrollmentId));
+    await tx.delete(enrollments).where(eq(enrollments.id, enrollmentId));
+    await audit(tx, actor.id, "candidate_removed", "exam", examId, { reason, before: { enrollmentId, candidateId: row.candidateId, name: row.name } });
+    await notify(tx, [row.candidateId], { kind: "enrolment", title: `You were removed from ${exam.title}`, body: reason, link: "/candidate" });
+    if (actor.role === "examiner") await notify(tx, await activeAdminIds(tx), { kind: "enrolment",
+      title: `Examiner removed ${row.name} from ${exam.title}`, body: reason, link: "/admin/audit" });
+    return { removed: enrollmentId };
   });
 }

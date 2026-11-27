@@ -6,6 +6,7 @@ import { type Actor } from "./auth";
 import { database, type Tx } from "./database";
 import { ApiError, fail } from "./errors";
 import { gradePracticeOnSubmit } from "./grading";
+import { notify } from "./notifications";
 import { newSessionId } from "./paper";
 import { explain, expiredBy, normalSaveGrace, recordGap, recordSignal, reviewCounts, saveGrace, settleDeparture, writeSignal } from "./integrity";
 import type { eventInput } from "@/lib/contracts/operations";
@@ -274,6 +275,11 @@ export function raiseHand(actor: Actor, attemptId: string, sessionId: string, ra
     assertActive(attempt, now, 0, true);
     await tx.update(attempts).set(raised ? { handRaisedAt: now, handMessage: message || null } : { handRaisedAt: null, handMessage: null })
       .where(eq(attempts.id, attemptId));
+    if (raised && !attempt.handRaisedAt) {
+      const [exam] = await tx.select({ examinerId: exams.examinerId, title: exams.title }).from(exams).where(eq(exams.id, attempt.examId));
+      await notify(tx, [exam.examinerId], { kind: "hand", title: `A candidate asked for help · ${exam.title}`, body: message ?? "",
+        link: `/examiner/exams/${attempt.examId}?tab=monitor` });
+    }
     return { raised, handRaisedAt: raised ? now.toISOString() : null };
   });
 }

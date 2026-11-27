@@ -14,12 +14,19 @@ export async function request<T>(path: string, method = "GET", data?: unknown, h
   const response = await fetch(path, {
     method, headers: wire, body: binary ? data : data === undefined ? undefined : JSON.stringify(data), cache: "no-store",
   });
-  const result = await response.json() as ApiResponse<T>;
+  let result: ApiResponse<T>;
+  try { result = await response.json() as ApiResponse<T>; }
+  catch { throw new RequestError("BAD_RESPONSE", "SecureExam returned an unexpected response. Try again.", response.status); }
   if ("error" in result) throw new RequestError(result.error.code, result.error.message, response.status);
   if (!response.ok) throw new RequestError("REQUEST_FAILED", "The request failed.", response.status);
   return result;
 }
 export const message = (error: unknown) => error instanceof Error ? error.message : "The request could not be completed.";
+/** A navigation or unmount cancelled the request: not a failure the user should see. */
+const cancelled = (error: unknown) => error instanceof DOMException && error.name === "AbortError";
+/** Worth one quiet retry: network blips and transient 5xx responses. */
+const transient = (error: unknown) => !(error instanceof RequestError) || error.status >= 500;
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function useResource<T>(path: string | null, interval?: number) {
   const [current, setCurrent] = useState<{ path: string; data?: T; error?: string }>();
@@ -28,10 +35,18 @@ export function useResource<T>(path: string | null, interval?: number) {
   const reload = useCallback(async () => {
     if (!path) return;
     try {
-      const { data } = await request<T>(path);
-      if (active.current === path) setCurrent({ path, data });
+      let result;
+      try { result = await request<T>(path); }
+      catch (error) {
+        if (cancelled(error) || !transient(error)) throw error;
+        await pause(700);
+        result = await request<T>(path);
+      }
+      // A successful load always clears an earlier error.
+      if (active.current === path) setCurrent({ path, data: result.data });
     } catch (error) {
-      if (active.current === path) setCurrent((previous) => ({ path, data: previous?.path === path ? previous.data : undefined, error: message(error) }));
+      if (cancelled(error) || active.current !== path) return;
+      setCurrent((previous) => ({ path, data: previous?.path === path ? previous.data : undefined, error: message(error) }));
     }
   }, [path]);
   useEffect(() => {

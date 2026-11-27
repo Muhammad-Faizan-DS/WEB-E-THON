@@ -13,6 +13,7 @@ export default async function PortalPage({ params, searchParams }: {
   const { view = [] } = await params;
   if (view[0] === "api") notFound();
   const user = await requireUser();
+  if (view[0] === "disputes") redirect(`${roleHome(user.role)}/disputes`);
   if (view[0] !== user.role || view.length < 2) redirect(roleHome(user.role));
   const { attempt, tab } = await searchParams;
   const section = view[1];
@@ -26,7 +27,7 @@ export default async function PortalPage({ params, searchParams }: {
   }
   return <DashboardShell user={user}>
     {user.role === "examiner" ? <Examiner section={section} examId={examId} attemptId={attempt} tab={tab} userId={user.id} name={user.name} />
-      : user.role === "admin" ? <Administrator section={section} examId={examId} />
+      : user.role === "admin" ? <Administrator section={section} examId={examId} userId={user.id} />
         : <Candidate section={section} examId={examId} attemptId={attempt} userId={user.id} name={user.name} />}
   </DashboardShell>;
 }

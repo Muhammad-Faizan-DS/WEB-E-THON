@@ -622,4 +622,62 @@ describe("SecureExam HTTP API", () => {
     expect(live.data.announcements.find(({ id }: { id: string }) => id === broadcast.data.id)).toMatchObject({ readCount: 1, audience: 2 });
     expect(live.data.announcements.find(({ id }: { id: string }) => id === reply.data.id)).toMatchObject({ readCount: 0, audience: 1, target: "Candidate" });
   });
+
+  it("guards admins against self-lockout, pages users, routes disputes, notifies people and removes candidates only with a reason", async ({ onTestFailed }) => {
+    onTestFailed(() => { console.error(logs); });
+    const admin = await login("admin");
+    const examiner = await login("examiner");
+    const otherExaminer = await login("examiner2");
+    const candidate = await login("candidate");
+
+    expectCode(await request("/api/admin/users", { cookie: admin, method: "PATCH", data: { id: identities.admin, role: "candidate" } }), 403, "SELF_ACTION_FORBIDDEN");
+    expectCode(await request("/api/admin/users", { cookie: admin, method: "PATCH", data: { id: identities.admin, active: false } }), 403, "SELF_ACTION_FORBIDDEN");
+    const examiners = await request("/api/admin/users?role=examiner&page=1", { cookie: admin });
+    expect(examiners.data).toMatchObject({ page: 1, pageSize: 20 });
+    expect(examiners.data.items.every(({ role }: { role: string }) => role === "examiner")).toBe(true);
+    expect((await request("/api/admin/users?q=Other%20cand", { cookie: admin })).data.items.map(({ email }: { email: string }) => email)).toEqual(["candidate2@example.test"]);
+    const reset = await request(`/api/admin/users/${identities.candidate2}/reset-password`, { cookie: admin, method: "POST" });
+    expect(reset.data.temporaryPassword).toEqual(expect.any(String));
+    expectCode(await request(`/api/admin/users/${identities.candidate2}/reset-password`, { cookie: examiner, method: "POST" }), 403, "FORBIDDEN");
+
+    const draft = await createDraft(examiner, { title: "Dispute exam", totalMarks: 1, settings: { integrityMode: "standard" } });
+    await request(draft.questions, { cookie: examiner, method: "POST", data: { type: "single", text: "2 + 2", topic: "Arithmetic", difficulty: 1, marks: 1,
+      options: [{ id: "a", text: "4", isCorrect: true }, { id: "b", text: "5", isCorrect: false }] } });
+    expect((await request(draft.exam + "/publish", { cookie: examiner, method: "POST" })).status).toBe(200);
+    const enrolled = await request(draft.exam + "/enrollments", { cookie: examiner, method: "POST", data: {
+      candidates: [{ candidateId: identities.candidate }, { candidateId: identities.candidate2 }] } });
+    const enrollmentOf = (id: string) => enrolled.data.find(({ candidateId }: { candidateId: string }) => candidateId === id).id;
+    const inbox = async (cookie: string) => (await request("/api/notifications", { cookie })).data;
+    expect((await inbox(candidate)).items).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "enrolment", title: "You are enrolled in Dispute exam" })]));
+
+    await request(draft.exam + "/announcements", { cookie: examiner, method: "POST", data: { message: "Bring a calculator.", candidateId: identities.candidate } });
+    const mine = await inbox(candidate);
+    expect(mine.items[0]).toMatchObject({ kind: "message", body: "Bring a calculator.", readAt: null });
+    expect((await request("/api/notifications", { cookie: candidate, method: "POST", data: { all: true } })).data.unread).toBe(0);
+    const audit = await request("/api/audit", { cookie: admin });
+    expect(audit.data.find(({ action }: { action: string }) => action === "private_message_sent")).toMatchObject({ after: expect.objectContaining({ message: "Bring a calculator." }) });
+
+    const general = await request("/api/disputes", { cookie: candidate, method: "POST", data: { examId: draft.examId, category: "grading", subject: "Question 1 marking", body: "I think option A should also be accepted." } });
+    const sensitive = await request("/api/disputes", { cookie: candidate, method: "POST", data: { examId: draft.examId, category: "conduct", subject: "Examiner comment", body: "The examiner made an inappropriate remark.", aboutExaminer: true } });
+    expect(general.status).toBe(201);
+    const seenBy = async (cookie: string) => (await request("/api/disputes", { cookie })).data.map(({ id }: { id: string }) => id);
+    expect(await seenBy(examiner)).toContain(general.data.id);
+    expect(await seenBy(examiner)).not.toContain(sensitive.data.id);
+    expect(await seenBy(otherExaminer)).not.toContain(general.data.id);
+    expect(await seenBy(admin)).toEqual(expect.arrayContaining([general.data.id, sensitive.data.id]));
+    expect((await inbox(admin)).items.map(({ title }: { title: string }) => title)).toEqual(expect.arrayContaining(["New dispute: Examiner comment", "New dispute: Question 1 marking"]));
+    expect((await inbox(examiner)).items.map(({ title }: { title: string }) => title)).not.toContain("New dispute: Examiner comment");
+    expectCode(await request(`/api/disputes/${sensitive.data.id}`, { cookie: examiner, method: "PATCH", data: { status: "rejected", response: "No." } }), 404, "DISPUTE_NOT_FOUND");
+    expect((await request(`/api/disputes/${general.data.id}`, { cookie: examiner, method: "PATCH", data: { status: "resolved", response: "Accepted; marks updated." } })).data.status).toBe("resolved");
+    expect((await inbox(candidate)).items[0]).toMatchObject({ title: "Your dispute is resolved", body: "Accepted; marks updated." });
+
+    const removal = (cookie: string, enrollmentId: string, reason: string) => request(draft.exam + "/enrollments/remove", { cookie, method: "POST", data: { enrollmentId, reason } });
+    expectCode(await removal(examiner, enrollmentOf(identities.candidate2), "too short"), 400, "VALIDATION_ERROR");
+    expectCode(await removal(otherExaminer, enrollmentOf(identities.candidate2), "Not my exam but trying anyway."), 403, "FORBIDDEN");
+    expect((await removal(examiner, enrollmentOf(identities.candidate2), "Enrolled in the wrong section by mistake.")).status).toBe(200);
+    expect((await inbox(admin)).items[0]).toMatchObject({ title: "Examiner removed Other candidate from Dispute exam", body: "Enrolled in the wrong section by mistake." });
+    const started = await request(draft.exam + "/attempts", { cookie: candidate, method: "POST", data: { deviceCheck: true, key: enrolled.data.find(({ candidateId }: { candidateId: string }) => candidateId === identities.candidate).key } });
+    expect(started.status).toBe(201);
+    expectCode(await removal(admin, enrollmentOf(identities.candidate), "Administrator removal after start attempt."), 409, "ATTEMPT_EXISTS");
+  });
 });

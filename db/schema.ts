@@ -269,3 +269,31 @@ export const announcementReads = pgTable("announcement_reads", {
   candidateId: uuid("candidate_id").notNull().references(() => users.id),
   readAt: time("read_at").notNull().defaultNow(),
 }, (t) => [primaryKey({ columns: [t.announcementId, t.candidateId] }), index("announcement_reads_candidate_idx").on(t.candidateId)]);
+
+/** In-app notification bar items: one row per recipient. Nothing is emailed. */
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull().default(""),
+  link: text("link"),
+  createdAt: time("created_at").notNull().defaultNow(),
+  readAt: time("read_at"),
+}, (t) => [index("notifications_user_idx").on(t.userId, t.createdAt)]);
+
+/** Candidate disputes. about_examiner = routed to administrators only (concerns the exam's own examiner). */
+export const disputes = pgTable("disputes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  candidateId: uuid("candidate_id").notNull().references(() => users.id),
+  examId: uuid("exam_id").references(() => exams.id),
+  category: text("category").$type<"grading" | "conduct" | "technical" | "accommodation" | "other">().notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  aboutExaminer: boolean("about_examiner").notNull().default(false),
+  status: text("status").$type<"open" | "in_review" | "resolved" | "rejected">().notNull().default("open"),
+  response: text("response"),
+  handledBy: uuid("handled_by").references(() => users.id),
+  createdAt: time("created_at").notNull().defaultNow(),
+  updatedAt: time("updated_at").notNull().defaultNow(),
+}, (t) => [index("disputes_candidate_idx").on(t.candidateId), index("disputes_exam_idx").on(t.examId), index("disputes_handler_idx").on(t.handledBy)]);

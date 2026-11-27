@@ -7,6 +7,7 @@ import type { Actor } from "./auth";
 import { database, type Tx } from "./database";
 import { fail } from "./errors";
 import { voidAttempt } from "./integrity";
+import { activeAdminIds, notify } from "./notifications";
 import { createHmac, randomUUID } from "node:crypto";
 import { hashKey } from "./paper";
 
@@ -54,6 +55,7 @@ export async function decideRequest(actor: Actor, input: z.infer<typeof requestP
       const [updated] = await tx.update(reattemptRequests).set({ status: "pending_admin", examinerNote: input.note })
         .where(eq(reattemptRequests.id, request.id)).returning();
       await audit(tx, actor.id, "request_forwarded", "reattempt", request.id, { reason: input.note });
+      await notify(tx, await activeAdminIds(tx), { kind: "request", title: "Re-attempt request needs a decision", body: input.note, link: "/admin/requests" });
       return updated;
     }
     if (request.status !== "pending_admin" || exam.resultsPublished) fail(409, "REQUEST_CLOSED", "This request can no longer be decided.");

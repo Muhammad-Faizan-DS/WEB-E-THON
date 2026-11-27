@@ -21,6 +21,9 @@ declare module "next-auth" {
 }
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
+  // Use the request's own host for callback and sign-out URLs (localhost:any-port, Vercel preview or production).
+  // AUTH_URL is optional and only needed to pin a canonical origin.
+  trustHost: true,
   session: { strategy: "jwt" },
   providers: [Credentials({
     credentials: { email: { type: "email" }, password: { type: "password" } },

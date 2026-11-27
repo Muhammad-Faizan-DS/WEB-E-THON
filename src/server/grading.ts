@@ -6,6 +6,7 @@ import { database, type Tx } from "./database";
 import { fail } from "./errors";
 import { ownedExam } from "./exams";
 import { expiredBy } from "./integrity";
+import { notify } from "./notifications";
 
 export type Attempt = typeof attempts.$inferSelect;
 type GradeDb = Tx | ReturnType<typeof database>;
@@ -188,6 +189,8 @@ export async function publishResults(actorId: string, examId: string) {
       from jsonb_to_recordset(${JSON.stringify(scores)}::jsonb) graded(id uuid, score integer) where attempts.id = graded.id`);
     await tx.update(exams).set({ resultsPublished: true }).where(eq(exams.id, examId));
     await audit(tx, actorId, "results_published", "exam", examId, { after: { candidateCount: scores.length } });
+    await notify(tx, rows.map(({ attempt }) => attempt.candidateId), { kind: "results", title: `Results published · ${exam.title}`,
+      body: "Your result, feedback and verifiable report are ready.", link: "/candidate/results" });
     return { published: true, graded: scores.length };
   });
 }
