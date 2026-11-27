@@ -61,12 +61,18 @@ export const examInput = z.object({
 }).strict();
 export const examPatch = examInput.partial().extend({ id }).strict();
 
+const accommodations = { timeMultiplier: z.number().min(1).max(2).default(1), allowPaste: z.boolean().default(false) };
+/**
+ * Enrol by account id, or by email (PRD §24.2): an unknown email creates a candidate account and returns a one-time
+ * temporary password. Addresses outside the allowed domains need `external: true` (an explicit invite).
+ */
 export const enrollmentInput = z.object({
-  candidates: z.array(z.object({
-    candidateId: id,
-    timeMultiplier: z.number().min(1).max(2).default(1),
-    allowPaste: z.boolean().default(false),
-  }).strict()).min(1).max(100).refine((items) => new Set(items.map((item) => item.candidateId)).size === items.length, "Use each candidate once."),
+  candidates: z.array(z.union([
+    z.object({ candidateId: id, ...accommodations }).strict(),
+    z.object({ email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+      name: z.string().trim().min(1).max(150).optional(), external: z.boolean().default(false), ...accommodations }).strict(),
+  ])).min(1).max(100).refine((items) => new Set(items.map((item) => "email" in item ? item.email : item.candidateId)).size === items.length,
+    "Use each candidate once."),
 }).strict();
 export const keysInput = z.object({
   enrollmentIds: z.array(id).min(1).max(100).refine((ids) => new Set(ids).size === ids.length, "Use each enrollment once."),

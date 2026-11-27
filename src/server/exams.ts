@@ -1,7 +1,10 @@
+import { hash } from "bcryptjs";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { activationKeys, attempts, enrollments, examQuestions, examSections, exams, questions, users } from "../../db/schema";
 import { type ExamInput, type enrollmentInput } from "@/lib/contracts/core";
 import { type z } from "zod";
+import { accountOrigin, readOrgSettings, temporaryPassword } from "./accounts";
+import { audit, knownEmails } from "./admin";
 import { database, type Tx } from "./database";
 import { fail } from "./errors";
 import { checkPaper, hashKey, newActivationKey, reattemptIssues, type PaperQuestion, type PaperSection } from "./paper";
@@ -81,7 +84,7 @@ export function getExam(examinerId: string, examId: string) {
       ...section, questionIds: linked.filter((link) => link.sectionId === section.id).map(({ id }) => id),
     }));
     const candidates = await tx.select({
-      id: enrollments.id, candidateId: enrollments.candidateId, name: users.name, email: users.email,
+      id: enrollments.id, candidateId: enrollments.candidateId, name: users.name, email: users.email, isExternal: users.isExternal,
       timeMultiplier: enrollments.timeMultiplier, allowPaste: enrollments.allowPaste, status: enrollments.status,
     }).from(enrollments).innerJoin(users, eq(users.id, enrollments.candidateId)).where(eq(enrollments.examId, examId));
     return { ...exam, questionIds: linked.map(({ id }) => id), sections, editable: !exam.frozenAt, enrollments: candidates };
@@ -178,21 +181,55 @@ export function publishExam(examinerId: string, examId: string, publish: boolean
   });
 }
 
-export function enrollCandidates(examinerId: string, examId: string, picks: z.infer<typeof enrollmentInput>["candidates"]) {
+/**
+ * Enrols candidates by id or by email (PRD §24.2). An unknown email creates a candidate account (external only when
+ * explicitly invited) and returns its one-time temporary password in the response; nothing is emailed.
+ */
+export async function enrollCandidates(examinerId: string, examId: string, picks: z.infer<typeof enrollmentInput>["candidates"]) {
+  const settings = await readOrgSettings();
+  const emails = picks.flatMap((pick) => "email" in pick ? [pick.email] : []);
+  const known = await knownEmails(emails);
+  const prepared = new Map(await Promise.all(emails.filter((email) => !known.has(email)).map(async (email) => {
+    const password = temporaryPassword();
+    return [email, { password, passwordHash: await hash(password, 10) }] as const;
+  })));
   return database().transaction(async (tx) => {
     const exam = await ownedExam(tx, examinerId, examId);
     if (exam.status !== "published") fail(409, "EXAM_NOT_PUBLISHED", "Publish the exam before enrolling candidates.");
-    const candidates = await tx.select({ id: users.id }).from(users)
-      .where(and(inArray(users.id, picks.map((pick) => pick.candidateId)), eq(users.role, "candidate"), eq(users.active, true)));
-    if (candidates.length !== picks.length) fail(400, "INVALID_CANDIDATE", "Select active candidate accounts.");
+    const created = new Map<string, string>();
+    const resolved = [];
+    for (const pick of picks) {
+      if (!("email" in pick)) { resolved.push(pick); continue; }
+      const { email, name, external, ...rest } = pick;
+      let [user] = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`);
+      if (!user) {
+        const fresh = prepared.get(email);
+        if (!fresh) fail(409, "ACCOUNT_CHANGED", "An account was created for this email meanwhile. Try again.");
+        const { isExternal } = accountOrigin(email, external, settings);
+        [user] = await tx.insert(users).values({ email, name: name ?? email.split("@")[0], role: "candidate", isExternal,
+          passwordHash: fresh.passwordHash }).returning({ id: users.id });
+        await audit(tx, examinerId, isExternal ? "external_user_invited" : "candidate_account_created", "user", user.id,
+          { after: { role: "candidate", isExternal, examId } });
+        created.set(user.id, fresh.password);
+      }
+      resolved.push({ candidateId: user.id, ...rest });
+    }
+    if (new Set(resolved.map(({ candidateId }) => candidateId)).size !== resolved.length) fail(400, "DUPLICATE_CANDIDATE", "Use each candidate once.");
+    const candidates = await tx.select({ id: users.id, email: users.email, isExternal: users.isExternal }).from(users)
+      .where(and(inArray(users.id, resolved.map((pick) => pick.candidateId)), eq(users.role, "candidate"), eq(users.active, true)));
+    if (candidates.length !== resolved.length) fail(400, "INVALID_CANDIDATE", "Select active candidate accounts.");
     const current = await tx.select({ candidateId: enrollments.candidateId }).from(attempts)
       .innerJoin(enrollments, eq(attempts.enrollmentId, enrollments.id)).where(eq(enrollments.examId, examId));
     const started = new Set(current.map(({ candidateId }) => candidateId));
-    if (picks.some(({ candidateId }) => started.has(candidateId))) fail(409, "ATTEMPT_EXISTS", "A selected candidate has already started.");
-    return tx.insert(enrollments).values(picks.map((pick) => ({ ...pick, examId }))).onConflictDoUpdate({
+    if (resolved.some(({ candidateId }) => started.has(candidateId))) fail(409, "ATTEMPT_EXISTS", "A selected candidate has already started.");
+    const rows = await tx.insert(enrollments).values(resolved.map((pick) => ({ ...pick, examId }))).onConflictDoUpdate({
       target: [enrollments.examId, enrollments.candidateId],
       set: { timeMultiplier: sql`excluded.time_multiplier`, allowPaste: sql`excluded.allow_paste` },
     }).returning();
+    return rows.map((row) => {
+      const person = candidates.find(({ id }) => id === row.candidateId)!;
+      return { ...row, email: person.email, isExternal: person.isExternal, temporaryPassword: created.get(row.candidateId) ?? null };
+    });
   });
 }
 

@@ -3,10 +3,12 @@ import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 import { attempts, auditLog, enrollments, exams, incidents, preferences, reattemptRequests, users } from "../../db/schema";
 import { account, accountPatch, workspacePrefs } from "@/lib/contracts/operations";
+import { accountOrigin, readOrgSettings } from "./accounts";
 import { database, type Tx } from "./database";
 import { fail } from "./errors";
 
-const profile = { id: users.id, name: users.name, email: users.email, role: users.role, active: users.active, createdAt: users.createdAt };
+const profile = { id: users.id, name: users.name, email: users.email, role: users.role, active: users.active,
+  isExternal: users.isExternal, createdAt: users.createdAt };
 
 export function audit(tx: Tx, actorId: string, action: string, entity: string, entityId: string, details: {
   reason?: string; before?: unknown; after?: unknown;
@@ -18,17 +20,20 @@ export function listAccounts() {
   return database().select(profile).from(users).orderBy(desc(users.createdAt)).limit(1_000);
 }
 
-export async function createAccount(actorId: string, { password, ...details }: z.infer<typeof account>) {
+/** Admin-created accounts. Addresses outside the allowed domains are accepted only as explicit external invites (PRD §24.2). */
+export async function createAccount(actorId: string, { password, external, ...details }: z.infer<typeof account>) {
+  const { isExternal } = accountOrigin(details.email, external, await readOrgSettings());
   const passwordHash = await hash(password, 12);
   return database().transaction(async (tx) => {
-    const [row] = await tx.insert(users).values({ ...details, passwordHash }).onConflictDoNothing().returning(profile);
+    const [row] = await tx.insert(users).values({ ...details, isExternal, passwordHash }).onConflictDoNothing().returning(profile);
     if (!row) fail(409, "EMAIL_EXISTS", "An account already uses this email.");
-    await audit(tx, actorId, "user_created", "user", row.id, { after: { role: row.role } });
+    await audit(tx, actorId, isExternal ? "external_user_invited" : "user_created", "user", row.id, { after: { role: row.role, isExternal } });
     return row;
   });
 }
 
-export function editAccount(actorId: string, { id, ...patch }: z.infer<typeof accountPatch>) {
+/** Admin only (route guard). Role changes, e.g. candidate → examiner, are audit-logged as `role_changed` with the reason. */
+export function editAccount(actorId: string, { id, reason, ...patch }: z.infer<typeof accountPatch>) {
   if (id === actorId && (patch.active === false || (patch.role && patch.role !== "admin"))) {
     fail(409, "SELF_ADMIN_CHANGE", "Use another active administrator to change your own access.");
   }
@@ -36,7 +41,8 @@ export function editAccount(actorId: string, { id, ...patch }: z.infer<typeof ac
     const [before] = await tx.select(profile).from(users).where(eq(users.id, id)).for("update");
     if (!before) fail(404, "USER_NOT_FOUND", "Account not found.");
     const [after] = await tx.update(users).set(patch).where(eq(users.id, id)).returning(profile);
-    await audit(tx, actorId, "user_updated", "user", id, { before, after });
+    const roleChanged = patch.role !== undefined && patch.role !== before.role;
+    await audit(tx, actorId, roleChanged ? "role_changed" : "user_updated", "user", id, { before, after, reason });
     return after;
   });
 }

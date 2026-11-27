@@ -4,6 +4,7 @@ import { account, type questionImport } from "@/lib/contracts/operations";
 import { questionInput } from "@/lib/contracts/core";
 import { type z } from "zod";
 import { questions } from "../../db/schema";
+import { accountOrigin, readOrgSettings } from "./accounts";
 import { createAccount, knownEmails } from "./admin";
 import { database } from "./database";
 import { ApiError, fail } from "./errors";
@@ -22,6 +23,7 @@ export async function importUsers(actorId: string, content: string, commit: bool
   const { rows, errors } = parseCsv(content);
   if (rows.length > 100) fail(400, "IMPORT_LIMIT", "Import up to 100 accounts at a time.");
   const seen = await knownEmails(rows.map(({ email }) => email?.trim().toLowerCase()).filter(Boolean));
+  const settings = await readOrgSettings();
   const valid = [];
   for (const [index, data] of rows.entries()) {
     const row = index + 1;
@@ -29,6 +31,12 @@ export async function importUsers(actorId: string, content: string, commit: bool
     const parsed = account.safeParse(data);
     if (!parsed.success) { errors.push({ row, message: parsed.error.issues.map((issue) => issue.path.join(".") + ": " + issue.message).join("; ") }); continue; }
     if (seen.has(parsed.data.email)) { errors.push({ row, message: "Email already used." }); continue; }
+    try { accountOrigin(parsed.data.email, parsed.data.external, settings); }
+    catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      errors.push({ row, message: error.message });
+      continue;
+    }
     seen.add(parsed.data.email);
     const { password, ...profile } = parsed.data;
     if (commit) {

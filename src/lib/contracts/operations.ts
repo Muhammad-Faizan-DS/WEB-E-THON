@@ -3,14 +3,25 @@ import { id, mutateAttempt, role } from "./core";
 
 const reason = z.string().trim().min(3).max(2_000);
 const password = z.string().min(12).refine((value) => new TextEncoder().encode(value).length <= 72, "Use at most 72 UTF-8 bytes.");
+const flag = z.preprocess((value) => typeof value === "string" ? ["true", "yes", "1"].includes(value.trim().toLowerCase()) : value, z.boolean());
+export const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 export const account = z.object({
   name: z.string().trim().min(1).max(150),
-  email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+  email,
   password,
   role,
+  /** Explicit invite for an address outside the institution's allowed domains (PRD §24.2). CSV accepts true/yes/1. */
+  external: flag.default(false),
 }).strict();
-export const accountPatch = z.object({ id, active: z.boolean().optional(), role: role.optional(), name: account.shape.name.optional() })
+export const accountPatch = z.object({ id, active: z.boolean().optional(), role: role.optional(), name: account.shape.name.optional(),
+  reason: z.string().trim().max(2_000).optional() })
   .strict().refine(({ active, role, name }) => active !== undefined || role !== undefined || name !== undefined, "Choose a change.");
+const domain = z.string().trim().toLowerCase().min(3).max(253).regex(/^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/, "Use a domain such as umt.edu.pk.");
+export const orgSettingsInput = z.object({
+  name: z.string().trim().min(1).max(150),
+  allowedDomains: z.array(domain).max(20).refine((items) => new Set(items).size === items.length, "Use each domain once."),
+  allowExternalInvites: z.boolean(),
+}).strict();
 export const accountImport = z.object({ csv: z.string().min(1).max(350_000), commit: z.boolean().default(false) }).strict();
 export const questionImport = z.object({
   format: z.enum(["csv", "json", "moodle-xml", "gift"]),
