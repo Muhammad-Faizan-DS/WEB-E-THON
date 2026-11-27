@@ -14,7 +14,7 @@ export function Lede({ children, className }: { children: React.ReactNode; class
   return <p className={cn("mt-5 max-w-[58ch] text-[17px] leading-[1.7] text-muted-foreground", className)}>{children}</p>;
 }
 
-/** A short fact line with an emerald tick, used under ledes instead of feature cards. */
+/** A short fact line with an orange tick, used under ledes instead of feature cards. */
 export function Point({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <li className="grid grid-cols-[1.25rem_1fr] gap-3 py-3.5">

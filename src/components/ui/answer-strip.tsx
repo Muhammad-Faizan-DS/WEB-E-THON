@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Progress drawn as an exam answer strip: one cell per question instead of a generic bar.
- * Filled = answered and accepted by the server, amber stripes = kept on the device (waiting to sync),
+ * Filled orange = answered and accepted by the server, brown stripes = kept on the device (waiting to sync),
  * outlined = the question on screen, empty = not answered yet. Long papers group questions per cell.
  */
 export function AnswerStrip({
@@ -33,15 +33,13 @@ export function AnswerStrip({
   const keptCells = Math.round(kept / per);
   const currentCell = current !== undefined ? Math.floor(current / per) : -1;
 
-  const dark = tone === "dark";
+  void tone; // both themes now share the brand look; kept for API compatibility
   const look = {
-    answered: dark
-      ? "bg-emerald shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]"
-      : "bg-primary shadow-[inset_0_1px_0_rgb(255_255_255/0.25)]",
-    locked: dark ? "bg-white/35" : "bg-muted-foreground/45",
-    kept: "bg-[repeating-linear-gradient(135deg,#f59e0b_0_2px,rgb(245_158_11/0.35)_2px_4px)]",
-    current: dark ? "bg-white/[0.06] ring-[1.5px] ring-inset ring-white/70" : "bg-surface ring-[1.5px] ring-inset ring-foreground/55",
-    empty: dark ? "bg-white/[0.07] ring-1 ring-inset ring-white/[0.06]" : "bg-surface-2 ring-1 ring-inset ring-border",
+    answered: "bg-brand shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]",
+    locked: "bg-muted-foreground/45",
+    kept: "bg-[repeating-linear-gradient(135deg,#796758_0_2px,rgb(121_103_88/0.3)_2px_4px)]",
+    current: "bg-surface ring-[1.5px] ring-inset ring-foreground/60",
+    empty: "bg-foreground/[0.07] ring-1 ring-inset ring-foreground/[0.06]",
   };
 
   return (

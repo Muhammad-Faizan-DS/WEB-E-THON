@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { useMe } from "@/lib/client/me";
 import { Logo } from "./brand";
+import { ThemeToggle } from "./theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/misc";
 import { cn } from "@/lib/utils";
@@ -16,7 +17,7 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
   return (
     <div className="min-h-dvh">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
-      <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur-sm">
+      <header className="sticky top-0 z-30 border-b bg-background">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <Link href={nav[0]?.href ?? "/"} aria-label="Fairmark home"><Logo /></Link>
           <nav aria-label="Main" className="hidden h-full items-stretch gap-5 sm:flex">
@@ -38,6 +39,7 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
             <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-xs font-semibold" aria-hidden>
               {me.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
             </span>
+            <ThemeToggle className="size-9" />
             <Button variant="ghost" size="sm" onClick={logout} aria-label="Sign out"><LogOut /></Button>
           </div>
         </div>

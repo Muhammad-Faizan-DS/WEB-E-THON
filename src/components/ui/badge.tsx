@@ -38,11 +38,11 @@ export function Badge({ className, tone = "neutral", ...props }: React.HTMLAttri
 }
 
 /** Status: a dot and a word (DESIGN.md). */
-export function Status({ tone = "neutral", children, className, pulse }: { tone?: BadgeTone; children: React.ReactNode; className?: string; pulse?: boolean }) {
+/** Status is a dot plus a word. `pulse` is accepted for compatibility but no longer animates (no glow effects). */
+export function Status({ tone = "neutral", children, className }: { tone?: BadgeTone; children: React.ReactNode; className?: string; pulse?: boolean }) {
   return (
     <span className={cn("inline-flex items-center gap-2 whitespace-nowrap text-[13px] font-medium", tone === "danger" && "text-danger", className)}>
       <span className="relative flex size-2" aria-hidden>
-        {pulse && <span className={cn("absolute inline-flex size-full animate-ping rounded-full opacity-50", DOT[tone])} />}
         <span className={cn("relative inline-flex size-2 rounded-full", DOT[tone])} />
       </span>
       {children}

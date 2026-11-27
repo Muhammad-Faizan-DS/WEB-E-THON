@@ -75,7 +75,7 @@ export function Roles() {
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <figure className="overflow-hidden rounded-2xl border border-border bg-surface shadow-[0_1px_2px_rgb(11_15_13/0.04),0_30px_60px_-30px_rgb(11_15_13/0.25)]">
+    <figure className="overflow-hidden rounded-2xl border border-border bg-surface ">
       <figcaption className="flex items-center justify-between border-b border-border px-5 py-3">
         <span className="font-display text-[13px] font-semibold">{title}</span>
         <span className="text-[12px] text-muted-foreground">Sample data</span>

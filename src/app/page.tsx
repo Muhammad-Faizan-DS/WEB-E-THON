@@ -9,6 +9,8 @@ import { Roles } from "@/components/landing/roles";
 import { Features } from "@/components/landing/features";
 import { VerifySlip } from "@/components/landing/verify-slip";
 import { Close } from "@/components/landing/close";
+import { Flow } from "@/components/landing/flow";
+import { Ban, Clock3, CloudOff, Eye, FileText, HardDrive, MonitorSmartphone, PenLine, Server, UserCheck } from "lucide-react";
 
 export const metadata: Metadata = {
   title: { absolute: "Fairmark · Exams you can trust, even when the Wi-Fi can't" },
@@ -18,14 +20,12 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <div className="overflow-x-clip bg-surface text-foreground">
+    <div className="overflow-x-clip bg-background text-foreground">
       <SiteNav />
       <main id="main">
         <Hero />
 
-        {/* light page starts under the product frame */}
-        <section id="how" aria-labelledby="how-title" className="scroll-mt-16 bg-surface py-24 md:py-32">
-          <div id="light-start" aria-hidden />
+        <section id="how" aria-labelledby="how-title" className="scroll-mt-16 py-24 md:py-32">
           <div className={WRAP}>
             <SectionTitle id="how-title">Two questions a candidate never has to ask.</SectionTitle>
             <Lede>
@@ -35,7 +35,16 @@ export default function Home() {
 
             <div className="mt-16 grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-20">
               <div>
-                <h3 className="font-display text-[clamp(1.5rem,2.4vw,2rem)] font-bold tracking-[-0.025em]">The server keeps the clock.</h3>
+                <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-bold tracking-[-0.025em]">How long do I have?</h3>
+                <p className="mt-1 text-[16px] text-muted-foreground">The server keeps the clock, not the device.</p>
+                <Flow
+                  label="Time: the server sets the deadline once; the device clock cannot change it."
+                  nodes={[
+                    { icon: <Server />, label: "Server clock", sub: "starts the attempt" },
+                    { icon: <Clock3 />, label: "Deadline fixed", sub: "stored once", tone: "brand" },
+                    { icon: <MonitorSmartphone />, label: "Device clock", sub: "can't move it", tone: "no" },
+                  ]}
+                />
                 <ul className="mt-4 divide-y divide-border">
                   <Point title="Set once, when the attempt starts">The deadline is the earlier of the window closing and start time plus duration, stored on the server.</Point>
                   <Point title="Nothing on the device can move it">Refreshing, reconnecting, switching devices or changing the computer&apos;s clock changes nothing.</Point>
@@ -47,7 +56,16 @@ export default function Home() {
 
             <div className="mt-24 grid items-center gap-12 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:gap-20">
               <div className="lg:order-2">
-                <h3 className="font-display text-[clamp(1.5rem,2.4vw,2rem)] font-bold tracking-[-0.025em]">Every answer gets a receipt.</h3>
+                <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-bold tracking-[-0.025em]">Is my answer saved?</h3>
+                <p className="mt-1 text-[16px] text-muted-foreground">Every answer gets a receipt, even offline.</p>
+                <Flow
+                  label="Saving: an answer is saved with a receipt; offline it is kept on the device and sent later."
+                  nodes={[
+                    { icon: <PenLine />, label: "You answer", sub: "saved as rev 7" },
+                    { icon: <CloudOff />, label: "Offline?", sub: "kept on device" },
+                    { icon: <HardDrive />, label: "Receipt", sub: "server confirms", tone: "brand" },
+                  ]}
+                />
                 <ul className="mt-4 divide-y divide-border">
                   <Point title="Numbered revisions">&ldquo;Saved&rdquo; appears only when the server&apos;s receipt matches your latest revision.</Point>
                   <Point title="Kept on the device when offline">Work continues during an outage and is sent when the connection returns.</Point>
@@ -59,19 +77,29 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="integrity" aria-labelledby="integrity-title" className="scroll-mt-16 border-y border-border bg-background py-24 md:py-32">
+        <section id="integrity" aria-labelledby="integrity-title" className="scroll-mt-16 border-y border-border bg-surface py-24 md:py-32">
           <div className={WRAP}>
-            <SectionTitle id="integrity-title">Observations are explained, not judged.</SectionTitle>
+            <SectionTitle id="integrity-title">Who decides what an observation means? A person.</SectionTitle>
             <Lede>
               Fairmark notes only what the candidate was told about at the start: leaving the page, exiting full screen,
               blocked pastes, dropped connections. It groups them into incidents with a plain explanation, and a person
               decides what, if anything, happens next.
             </Lede>
+            <Flow
+              className="mt-10 max-w-4xl"
+              label="Integrity: observations are grouped into one explained incident, a person decides, nothing is automatic."
+              nodes={[
+                { icon: <Eye />, label: "3 observations", sub: "hidden, back, paste" },
+                { icon: <FileText />, label: "1 explained incident", sub: "in plain words" },
+                { icon: <UserCheck />, label: "A person decides", sub: "dismiss or follow up", tone: "brand" },
+                { icon: <Ban />, label: "Automatic penalty", sub: "never", tone: "no" },
+              ]}
+            />
             <Incidents />
           </div>
         </section>
 
-        <section id="roles" aria-labelledby="roles-title" className="scroll-mt-16 bg-surface py-24 md:py-32">
+        <section id="roles" aria-labelledby="roles-title" className="scroll-mt-16 py-24 md:py-32">
           <div className={WRAP}>
             <SectionTitle id="roles-title">One platform, three roles.</SectionTitle>
             <Lede>Each role sees only what it needs. Every permission is checked on the server, not just hidden in the interface.</Lede>
@@ -79,7 +107,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="features" aria-labelledby="features-title" className="scroll-mt-16 border-t border-border bg-background py-24 md:py-32">
+        <section id="features" aria-labelledby="features-title" className="scroll-mt-16 border-y border-border bg-surface py-24 md:py-32">
           <div className={WRAP}>
             <div className="grid items-end gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
               <div>
