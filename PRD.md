@@ -658,5 +658,51 @@ Setup steps · env vars list (no values) · test credentials per role · archite
 ## 22. Definition of done
 Feature works on deployed URL · FE + BE validation · server-side auth check · loading/error/empty states · keyboard accessible · no console errors · covered by a T-id check · merged via PR.
 
+## 24. AMENDMENTS — 27 Nov 14:20 (override earlier sections where they conflict)
+
+### 24.1 Authentication — keep Auth.js credentials; Google sign-in is optional
+- Do NOT migrate to a hosted auth provider now (working auth + time risk). Keep Auth.js credentials + dev account buttons.
+- P2 optional: Auth.js Google provider (free Google Cloud OAuth client, no billing). Google sign-in only logs in users who already exist or match an allowed domain — it never creates exam access by itself.
+
+### 24.2 Account access model — institution-controlled, no public self-signup
+- Single institution per deployment. Table `org_settings` (singleton): `name`, `allowed_domains text[]` (e.g. `umt.edu.pk`), `allow_external_invites bool`.
+- **No open sign-up.** Accounts come from: (a) admin create / CSV import, (b) examiner enrolling candidates by email (creates candidate account if missing, sends nothing — shows temp password / key list), (c) Google sign-in auto-creates a CANDIDATE account only if email domain ∈ allowed_domains.
+- **External users** (e.g. gmail.com): only by explicit invite — admin or examiner adds the email; `users.is_external = true`; badge "External" in lists. Gmail domain is never auto-allowed.
+- Role upgrades (candidate → examiner) only by admin. Audit-logged.
+- Pitch: "Self-signup is disabled on purpose — an exam platform must know who its candidates are."
+
+### 24.3 Exam creation wizard + sections + per-exam question upload
+**Wizard (Dev B UI, Dev A presets API)** — `/examiner/exams/new` multi-step:
+1. **Type:** Quiz · Midterm · Final · Assignment · Practice. Each applies presets (editable later):
+
+| Type | Duration | Integrity | Open limit | Camera | Sequential | Results |
+|---|---|---|---|---|---|---|
+| Practice | 20 min | standard | unlimited | off | off | instant after submit |
+| Quiz | 30 min | review | 10 | off | off | manual publish |
+| Assignment | 120 min | review | unlimited | off | off | manual publish |
+| Midterm | 90 min | strict | 5 | optional | on | manual publish |
+| Final | 180 min | strict | 5 | on | on | manual publish |
+
+2. **Basics:** title, course/subject, instructions, window, total marks.
+3. **Sections:** add sections (e.g. "A — MCQs", "B — Written"). Each section: title, instructions, allowed question types, marks per question, shuffle on/off, and a **question source**:
+   - **Pick from bank** (filter by course/topic/difficulty/type) → manual selection or blueprint counts per topic×difficulty;
+   - **Create new** inline;
+   - **Upload file** (CSV/JSON/Moodle XML/GIFT) **into this section** → same preview/error flow; uploaded questions are saved to the bank tagged with the course and linked to this section.
+4. **Integrity & delivery settings** (pre-filled by type).
+5. **Review & checklist** → Save draft / Publish.
+- Questions can be added to a section later (upload or pick) while the exam is draft or published-before-first-attempt (BR-20 still freezes after first attempt).
+
+**Data model changes (Dev A):**
+- `exams.exam_type` (`practice|quiz|assignment|midterm|final`), `exams.course`.
+- `questions.course` (text), `questions.tags text[]`.
+- New `exam_sections(id, exam_id, title, instructions, position, allowed_types text[], shuffle bool, blueprint jsonb, marks_per_question numeric null)`.
+- `exam_questions` gets `section_id` (FK) + `position`.
+- `attempt_questions` gets `section_id`; shuffle happens **within each section**; sections appear in order.
+- Publish checklist: every section has ≥1 question; section marks sum = exam total marks; blueprint cells satisfiable.
+- Question bank page: filter by course + tags + "used in exams".
+
+**New/changed API:** `GET /api/exam-presets`, `POST/PATCH/DELETE /api/exams/:id/sections`, `POST /api/exams/:id/sections/:sid/questions` (attach from bank), `POST /api/exams/:id/sections/:sid/import` (upload → preview/commit), `PATCH /api/exams/:id/sections/reorder`.
+**Workspace:** palette grouped by section headers; section instructions shown when entering a section.
+
 ## 23. Out of scope (do not build)
 Safe Exam Browser integration, screen sharing, audio monitoring, face recognition/biometric identity, numeric cheating scores, encrypted offline hand-in files/QR answer transfer, extra roles, webhooks, dual-marker grading, LTI 1.3, Odoo, separate backend service, Redis, WebSockets. Don't quote unverified statistics in the pitch.
