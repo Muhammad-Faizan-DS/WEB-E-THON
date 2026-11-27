@@ -90,7 +90,7 @@ export function ProductFrame({ className }: { className?: string }) {
                     </div>
                     <div className="hidden sm:block">
                       <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-                        <div className="h-full rounded-full bg-emerald/80 transition-[width] duration-700 ease-out" style={{ width: `${q * 10}%` }} />
+                        <div className="h-full w-full origin-left rounded-full bg-emerald/80 transition-transform duration-700 ease-out" style={{ transform: `scaleX(${q / 10})` }} />
                       </div>
                       <p className="mt-1 text-[11px] text-on-night-muted tabular-nums">Q{q} of 10</p>
                     </div>

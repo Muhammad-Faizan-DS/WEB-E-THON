@@ -12,7 +12,7 @@ const ROLES = [
 ] as const;
 
 /** Primary action on a dark band: sign in, plus one-click demo roles when demo hints are on. */
-export function NightActions({ className }: { className?: string }) {
+export function NightActions({ className, where = "top" }: { className?: string; where?: "top" | "bottom" }) {
   return (
     <div className={cn("flex flex-wrap items-center gap-x-7 gap-y-4", className)}>
       <Link
@@ -23,7 +23,7 @@ export function NightActions({ className }: { className?: string }) {
         <ArrowRight className="size-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" aria-hidden />
       </Link>
       {SHOW_DEMO && (
-        <nav aria-label="Try a demo account" className="flex flex-wrap items-center gap-1 text-[14px] text-on-night-muted">
+        <nav aria-label={where === "top" ? "Try a demo account" : "Try a demo account (end of page)"} className="flex flex-wrap items-center gap-1 text-[14px] text-on-night-muted">
           <span className="mr-1.5">Try it as</span>
           {ROLES.map((r) => (
             <Link

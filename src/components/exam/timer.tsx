@@ -30,7 +30,7 @@ export function ExamTimer({ remainingMs, totalMs }: { remainingMs: number; total
       <span role="timer" aria-live="off" className="num text-[22px] font-semibold leading-none tracking-[-0.01em]">{fmtClock(remainingMs)}</span>
       <span className="hidden text-[12px] font-medium text-muted-foreground sm:inline">{level === "danger" ? "last minute" : "left"}</span>
       <span className="absolute inset-x-2.5 -bottom-1 h-[2px] overflow-hidden rounded-full bg-border" aria-hidden>
-        <span className={cn("block h-full rounded-full transition-[width] duration-1000", level === "normal" ? "bg-foreground/60" : "bg-current")} style={{ width: `${pct}%` }} />
+        <span className={cn("block h-full w-full origin-left rounded-full transition-transform duration-1000 ease-linear", level === "normal" ? "bg-foreground/60" : "bg-current")} style={{ transform: `scaleX(${Math.max(0, Math.min(100, pct)) / 100})` }} />
       </span>
       <span className="sr-only" aria-live="polite">{announce}</span>
     </div>

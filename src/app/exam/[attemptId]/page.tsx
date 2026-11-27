@@ -174,7 +174,7 @@ export default function WorkspacePage() {
             <path d="m5.6 10.4 2.9 2.9 5.9-6.6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <div className="min-w-0 flex-1 md:flex-none md:max-w-[30%]">
-            <p className="truncate text-[13px] font-semibold leading-tight">{ex.attempt.examTitle}{ex.attempt.isSandbox && <span className="ml-2 font-normal text-info">Preview</span>}</p>
+            <h1 className="truncate font-sans text-[13px] font-semibold leading-tight tracking-normal">{ex.attempt.examTitle}{ex.attempt.isSandbox && <span className="ml-2 font-normal text-info">Preview</span>}</h1>
             <p className="truncate text-[12px] text-muted-foreground">{me.name}</p>
           </div>
           {ex.deadline && (

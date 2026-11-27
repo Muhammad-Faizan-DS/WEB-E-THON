@@ -13,7 +13,7 @@ export function Close() {
         <p className="mt-6 max-w-[50ch] text-[17px] leading-[1.65] text-on-night-muted">
           Author it, sit it, review what happened during it and publish results, with every decision written down.
         </p>
-        <NightActions className="mt-10" />
+        <NightActions className="mt-10" where="bottom" />
         <div className="mt-28 flex flex-col gap-3 border-t border-night-line pt-6 text-[13px] text-on-night-muted md:flex-row md:items-center md:justify-between">
           <p>Fairmark · Technoverse 5.0 Web-e-Thon · COMSATS Lahore</p>
           <p>Integrity observations are hints for a person. They never change marks on their own.</p>

@@ -64,7 +64,7 @@ function ExamRow({ e }: { e: ExaminerExamRow }) {
           {e.priorityIncidents > 0 && <span className="inline-flex items-center gap-1 font-medium text-danger"><AlertTriangle className="size-3.5" aria-hidden />{e.priorityIncidents} priority to review</span>}
         </div>
       </div>
-      <dl className="num flex gap-7 text-sm">
+      <dl className="num grid grid-cols-4 gap-x-5 gap-y-2 text-sm sm:flex sm:gap-7">
         <Num label="Enrolled" n={e.enrolled} />
         <Num label="In progress" n={e.inProgress} />
         <Num label="Submitted" n={e.submitted} />
@@ -79,5 +79,5 @@ function ExamRow({ e }: { e: ExaminerExamRow }) {
 }
 
 function Num({ label, n, highlight }: { label: string; n: number; highlight?: boolean }) {
-  return <div><dt className="text-[12px] text-muted-foreground">{label}</dt><dd className={cn("text-[15px] font-semibold", highlight && "text-warning")}>{n}</dd></div>;
+  return <div className="min-w-0"><dt className="text-[12px] leading-tight text-muted-foreground sm:whitespace-nowrap">{label}</dt><dd className={cn("text-[15px] font-semibold tabular-nums", highlight && "text-warning")}>{n}</dd></div>;
 }

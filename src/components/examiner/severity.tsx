@@ -44,7 +44,6 @@ export function ContactIndicator({ contact, lastAt, now }: { contact: ContactSta
   return (
     <span className={cn("num inline-flex items-center gap-2 text-[13px]", cfg.cls)}>
       <span className="relative flex size-2.5" aria-hidden>
-        {contact === "live" && <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60" />}
         <span className={cn("relative inline-flex size-2.5 rounded-full", cfg.dot)} />
       </span>
       <span>{cfg.label} <span className="text-muted-foreground">· {ago}</span></span>
@@ -56,7 +55,7 @@ export function NotEvidenceNote({ className }: { className?: string }) {
   return (
     <p className={cn("flex items-start gap-2 text-[13px] text-muted-foreground", className)}>
       <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-      <span><b className="font-semibold text-foreground">Observations are hints, not proof of misconduct.</b> They come from the candidate&apos;s browser and can be missed or delayed. Review the context and decide; nothing here changes marks.</span>
+      <span><b className="font-semibold text-foreground">Observations are hints, not evidence.</b> They come from the candidate&apos;s browser and can be missed or delayed. Review the context and decide; nothing here changes marks.</span>
     </p>
   );
 }

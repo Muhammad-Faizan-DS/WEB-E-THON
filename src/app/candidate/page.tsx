@@ -101,7 +101,7 @@ function ExamRow({ c, now }: { c: CandidateExamCard; now: number }) {
     <li className="grid gap-x-8 gap-y-3 px-5 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h3 className="text-base font-semibold">{c.title}</h3>
+          <h2 className="text-base font-semibold">{c.title}</h2>
           <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
         </div>
         <p className="mt-1 text-[13px] text-muted-foreground">
