@@ -13,7 +13,8 @@ import { Badge, Status } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, StatStrip } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
-import { Progress, Skeleton } from "@/components/ui/misc";
+import { Skeleton } from "@/components/ui/misc";
+import { AnswerStrip } from "@/components/ui/answer-strip";
 import { cn, fmtAgo, fmtDuration, fmtTime } from "@/lib/utils";
 
 type Filter = "all" | "open" | "priority" | "connectivity";
@@ -90,7 +91,7 @@ export default function TimelinePage() {
       </div>
 
       <StatStrip className="mb-6" items={[
-        { label: "Progress", value: `${a.answered} of ${a.total}`, hint: <Progress value={(a.answered / Math.max(1, a.total)) * 100} label="Answered" className="mt-1.5" /> },
+        { label: "Progress", value: `${a.answered} of ${a.total}`, hint: <AnswerStrip total={a.total} answered={a.answered} state={a.status === "locked" ? "locked" : a.status === "in_progress" ? "live" : "done"} label={`${a.answered} of ${a.total} answered`} className="mt-1.5" /> },
         { label: "Started", value: fmtTime(a.startedAt, false) },
         { label: a.finalizedAt ? "Finished" : "Deadline", value: fmtTime(a.finalizedAt ?? a.deadline, false) },
         { label: "Tabs or devices", value: `${data.sessions.length} of ${data.maxOpens}`, tone: data.sessions.length > data.maxOpens ? "text-warning" : undefined },

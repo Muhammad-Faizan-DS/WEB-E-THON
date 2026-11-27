@@ -83,7 +83,7 @@ export function SiteNav() {
           href={home ?? "/login"}
           className={cn(
             "ml-auto inline-flex h-10 items-center rounded-full px-5 font-display text-[14px] font-bold tracking-[-0.01em] transition-colors duration-200",
-            night ? "bg-white text-night hover:bg-white/85" : "bg-foreground text-surface hover:bg-foreground/85",
+            night ? "bg-white/[0.1] text-white ring-1 ring-inset ring-white/25 shadow-[inset_0_1px_0_rgb(255_255_255/0.25)] backdrop-blur-md hover:bg-white/[0.18]" : "bg-foreground text-surface hover:bg-foreground/85",
           )}
         >
           {home ? "Open your dashboard" : "Sign in"}

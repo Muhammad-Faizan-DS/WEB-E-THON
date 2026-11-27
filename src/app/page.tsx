@@ -24,7 +24,7 @@ export default function Home() {
         <Hero />
 
         {/* light page starts under the product frame */}
-        <section id="how" aria-labelledby="how-title" className="scroll-mt-16 bg-surface pt-[15rem] pb-24 md:pt-[22rem] md:pb-32">
+        <section id="how" aria-labelledby="how-title" className="scroll-mt-16 bg-surface py-24 md:py-32">
           <div id="light-start" aria-hidden />
           <div className={WRAP}>
             <SectionTitle id="how-title">Two questions a candidate never has to ask.</SectionTitle>

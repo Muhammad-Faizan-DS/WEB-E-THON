@@ -22,7 +22,7 @@ export function Hero() {
         </p>
         <NightActions className="mt-10 animate-[rise_0.8s_0.3s_cubic-bezier(0.22,1,0.36,1)_both]" />
 
-        <div className="relative z-10 mt-20 -mb-48 animate-[rise-far_1s_0.45s_cubic-bezier(0.22,1,0.36,1)_both] md:mt-24 md:-mb-64">
+        <div className="relative z-10 mt-20 pb-24 md:mt-24 md:pb-32">
           <ProductFrame />
         </div>
       </div>

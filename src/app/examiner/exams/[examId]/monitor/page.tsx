@@ -21,7 +21,8 @@ import { Badge, Status } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, StatStrip } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
-import { Progress, Skeleton } from "@/components/ui/misc";
+import { Skeleton } from "@/components/ui/misc";
+import { AnswerStrip } from "@/components/ui/answer-strip";
 import { cn, fmtAgo, fmtClock, fmtRelative, fmtTime } from "@/lib/utils";
 
 type Filter = "attention" | "all" | "help" | "in_progress" | "offline" | "locked" | "submitted" | "ended" | "not_started";
@@ -303,10 +304,9 @@ function StatusCell({ r, now, help, onDecide }: { r: MonitorRow; now: number; he
 
 function ProgressCell({ r }: { r: MonitorRow }) {
   if (r.status === "not_started") return <span className="text-sm text-muted-foreground">—</span>;
-  const pct = r.total ? (r.answered / r.total) * 100 : 0;
   return (
-    <div className="space-y-1">
-      <Progress value={pct} label={`${r.candidateName}: ${r.answered} of ${r.total} answered`} />
+    <div className="space-y-1.5">
+      <AnswerStrip total={r.total} answered={r.answered} state={r.status === "locked" ? "locked" : r.status === "in_progress" ? "live" : "done"} label={`${r.candidateName}: ${r.answered} of ${r.total} answered`} />
       <p className="text-xs text-muted-foreground tabular-nums">{r.answered} of {r.total} answered</p>
     </div>
   );

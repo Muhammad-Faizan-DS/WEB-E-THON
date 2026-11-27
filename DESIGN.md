@@ -5,6 +5,7 @@ Built with guidance from impeccable, ibelick/ui-skills, Emil Kowalski's skills a
 
 ## The look: dark brand bands, light working surfaces
 
+- **Glass, on dark bands only:** the homepage product frame is frosted glass (`bg-white/4%`, `backdrop-blur-2xl`, a light top edge, coloured light behind it), with glass inner panels and glass buttons; hero and nav buttons on the dark band are glass pills. Glass never appears on light app screens, and an element with backdrop blur must not sit inside an ancestor that animates opacity or has a filter or mask (that hides the backdrop).
 - **Marketing (homepage, login brand panel):** near-black bands (`--night`) with one emerald glow, a Vanta DOTS emerald floor in the homepage hero, huge tight Montserrat headlines, and real product UI in crisp dark frames. Explanations live on white and cool off-white sections.
 - **App screens (candidate, examiner, admin):** light, calm and dense where needed. Cool neutral surfaces, hairline borders, one emerald accent. People use them under pressure, so the tool disappears into the task (impeccable "Operate" mode).
 - **One accent: emerald.** Primary actions, the current selection, focus and links. Never as decoration or a background wash on app screens.
@@ -45,6 +46,7 @@ Built with guidance from impeccable, ibelick/ui-skills, Emil Kowalski's skills a
 - **Status:** `<Status tone="…">Label</Status>` is a dot plus text. Badges (outlined) only for counts and categorical tags.
 - **Tables:** hairline rows, `surface-2` header, row hover, 44 px+ rows, right-aligned actions.
 - **Tabs:** underline tabs; no pill segmented controls.
+- **Progress is an answer strip** (`AnswerStrip`): one cell per question, like a row of answer-sheet boxes. Filled = answered and accepted by the server, amber stripes = kept on the device, outlined = the question on screen, empty = not answered. Never a generic rounded bar.
 - **Dialogs and sheets:** dialogs only for decisions that need protected focus (submit, approve or deny, close exam). Side sheets for "act without leaving" panels, such as the monitor's candidate panel.
 
 ## Motion
@@ -59,4 +61,4 @@ Text selection, caret, focus ring (2 px emerald, 2 px offset), scrollbars and `a
 
 ## Never
 
-Gradient text, glass or blur decoration, eyebrow labels above headings, a coloured bar down one side of a box, hard offset shadows, emoji as icons, paper or grid textures, colour as the only signal, and invented customers, stats or testimonials (sample data is labelled as sample).
+Gradient text, glass on light app screens, eyebrow labels above headings, a coloured bar down one side of a box, hard offset shadows, emoji as icons, paper or grid textures, colour as the only signal, and invented customers, stats or testimonials (sample data is labelled as sample).

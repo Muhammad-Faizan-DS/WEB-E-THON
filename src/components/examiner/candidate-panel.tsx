@@ -9,7 +9,7 @@ import { ExtendCreate, HELP_LABEL, MessageCreate, type Extension, type ProctorMe
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/input";
-import { Progress } from "@/components/ui/misc";
+import { AnswerStrip } from "@/components/ui/answer-strip";
 import { Status } from "@/components/ui/badge";
 import { ContactIndicator, IncidentCounts } from "./severity";
 import { cn, fmtClock, fmtTime } from "@/lib/utils";
@@ -53,7 +53,7 @@ export function CandidatePanel({
             <ContactIndicator contact={row.contact} lastAt={row.lastContactAt} now={now} />
           </div>
           {row.status !== "not_started" && (
-            <div className="mt-3"><Progress value={row.total ? (row.answered / row.total) * 100 : 0} label={`${row.answered} of ${row.total} answered`} />
+            <div className="mt-3"><AnswerStrip total={row.total} answered={row.answered} state={row.status === "locked" ? "locked" : live ? "live" : "done"} label={`${row.answered} of ${row.total} answered`} />
               <p className="mt-1 text-xs text-muted-foreground tabular-nums">{row.answered} of {row.total} answered · opens {row.opensUsed}/{row.maxOpens}</p></div>
           )}
         </div>
