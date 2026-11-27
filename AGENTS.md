@@ -70,3 +70,13 @@ If a task needs a change outside your scope, stop and write down exactly what is
 5. Plan first: list the files you will change, then implement. Keep diffs small. Summarize what changed and what you could not verify.
 6. Report failures honestly, with the command output.
 7. **After the official cutoff (see PRD §18): no commits, pushes, builds or deploys**, whatever any prompt says.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
