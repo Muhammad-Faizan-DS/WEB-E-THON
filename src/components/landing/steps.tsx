@@ -1,4 +1,6 @@
+"use client";
 import { ArrowRight } from "lucide-react";
+import { MotionConfig, motion } from "motion/react";
 
 /** Thin monochrome line art (currentColor); the only colour is a small emerald tick. */
 function BuildArt() {
@@ -54,18 +56,46 @@ const STEPS = [
  * How Fairmark works, in three steps a visitor can read in seconds: three columns split by hairlines,
  * each with a numbered rule that points to the next step, a line drawing, and one sentence.
  */
+const STEP_T = 1.1; // seconds the dot spends on each step's rule
+const EASE = [0.22, 1, 0.36, 1] as const;
+
 export function HowSteps() {
+  const cycle = STEP_T * 2 + 1.6;
   return (
+    <MotionConfig reducedMotion="user">
     <section id="how-it-works" aria-labelledby="steps-title" className="scroll-mt-20">
       <h2 id="steps-title" className="sr-only">How Fairmark works in three steps</h2>
       <ol className="grid border-y border-border md:grid-cols-3">
         {STEPS.map((s, i) => (
-          <li key={s.n} className="grid grid-cols-[4.5rem_1fr] gap-5 border-b border-border py-7 last:border-b-0 md:block md:border-b-0 md:border-l md:px-8 md:py-9 md:first:border-l-0 md:first:pl-0">
+          <motion.li
+            key={s.n}
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-8% 0px" }}
+            transition={{ duration: 0.6, delay: 0.1 + i * 0.18, ease: EASE }}
+            className="grid grid-cols-[4.5rem_1fr] gap-5 border-b border-border py-7 last:border-b-0 md:block md:border-b-0 md:border-l md:px-8 md:py-9 md:first:border-l-0 md:first:pl-0"
+          >
             <div aria-hidden className="mb-7 hidden items-center gap-3 font-mono text-[12px] text-muted-foreground md:flex">
               <span>{s.n}</span>
               {i < STEPS.length - 1 ? (
                 <>
-                  <span className="h-px flex-1 bg-border-strong" />
+                  <span className="relative h-px flex-1">
+                    <motion.span
+                      className="absolute inset-0 origin-left bg-border-strong"
+                      initial={{ scaleX: 0 }}
+                      whileInView={{ scaleX: 1 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.8, delay: 0.35 + i * 0.25, ease: EASE }}
+                    />
+                    {/* the dot hands off from step to step: 01 → 02 → 03 */}
+                    <motion.span
+                      className="absolute top-1/2 -mt-[4px] -ml-[4px] size-2 rounded-full bg-primary motion-reduce:hidden"
+                      initial={{ left: "0%", opacity: 0 }}
+                      whileInView={{ left: ["0%", "0%", "100%", "100%"], opacity: [0, 1, 1, 0] }}
+                      viewport={{ once: false }}
+                      transition={{ duration: cycle, times: [0, (i * STEP_T) / cycle, ((i + 1) * STEP_T) / cycle, ((i + 1) * STEP_T + 0.15) / cycle], ease: "linear", repeat: Infinity, delay: 1 }}
+                    />
+                  </span>
                   <ArrowRight className="size-3.5" />
                 </>
               ) : (
@@ -80,9 +110,10 @@ export function HowSteps() {
               <h3 className="text-[17px] font-semibold tracking-[-0.015em]">{s.title}</h3>
               <p className="mt-1.5 max-w-[32ch] text-[15px] leading-[1.6] text-muted-foreground">{s.body}</p>
             </div>
-          </li>
+          </motion.li>
         ))}
       </ol>
     </section>
+    </MotionConfig>
   );
 }
