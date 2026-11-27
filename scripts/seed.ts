@@ -61,7 +61,7 @@ async function archivedMidterm(tx: Tx, examiner: string, people: string[], pool:
   const cells = (items: PaperQuestion[]) => items.map(({ topic, difficulty }) => ({ topic, difficulty, count: 1 }));
   const written = selected.filter(({ type }) => type === "written");
   // Same-cell alternatives make the pool larger than one paper, so the fairness simulation has real choices to compare.
-  const alternatives = pool.filter((item) => item.type === "single" && item.difficulty < 3 && !matched.includes(item));
+  const alternatives = pool.filter((item) => item.type === "single" && !matched.includes(item));
   const { exam, members, sections } = await seedExam(tx, examiner, people.slice(0, 31), {
     title: "Midterm — completed", instructions: "Answer each question. Published results include your instructor feedback.",
     startsAt: start, endsAt: end, durationMin: 45, settings: config, examType: "midterm", course,
@@ -103,10 +103,18 @@ async function archivedMidterm(tx: Tx, examiner: string, people: string[], pool:
         const wrong = question.options.filter((option) => !question.answerKey.includes(option.id));
         const colluding = index === 8 || index === 9;
         // Honest candidates err independently (deterministic hash), so only the planted pair shares many wrong answers.
+        // Stronger candidates (two in three) err less, which gives items positive discrimination.
         const [roll, pick] = createHash("sha256").update(`${index}:${question.position}`).digest();
-        const chooseWrong = colluding || roll % 10 < 3;
-        const selectedId = chooseWrong ? wrong[colluding ? 0 : pick % wrong.length].id : question.answerKey[0];
-        response = selectedId;
+        const strong = index % 3 !== 0;
+        const misKeyed = question.questionId === matched[0].id;
+        if (misKeyed && !colluding) {
+          // The planted answer-key error: strong candidates choose the true answer, which the key marks wrong ("Check answer key").
+          const truth = pool.find(({ id }) => id === question.questionId)!.options[0].id;
+          response = strong ? truth : question.answerKey[0];
+        } else {
+          const chooseWrong = colluding || roll % 10 < (strong ? 2 : 6);
+          response = chooseWrong ? wrong[colluding ? 0 : pick % wrong.length].id : question.answerKey[0];
+        }
       }
       scoreCents += awardedCents ?? objectiveMarksCents(question.answerKey, response, question.marks, config.multiSelectRule);
       grades.push({ attemptId: attempt.id, questionId: question.questionId, response, seq: 1, savedAt: end, awardedCents,

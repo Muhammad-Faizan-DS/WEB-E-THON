@@ -12,10 +12,12 @@ import { isDesktop } from "./device";
 
 type CandidateExam = { id: string; title: string; instructions: string; startsAt: string; endsAt: string;
   accessStatus: string; attemptId: string | null; attemptStatus: string | null; availableSeconds: number; allowPaste: boolean;
-  cooldownUntil: string | null; requestStatus: string | null; requestReason: string | null; reattemptKey: string | null; cameraCheck: boolean };
+  cooldownUntil: string | null; requestStatus: string | null; requestReason: string | null; reattemptKey: string | null; cameraCheck: boolean;
+  keyRequired?: boolean; examType?: string; integrityMode?: string };
 type ExamBuckets = { available: CandidateExam[]; upcoming: CandidateExam[]; completed: CandidateExam[] };
-type Result = { id: string; title: string; score: number; totalMarks: number; submittedAt: string; questions: Array<{
-  position: number; marks: number; awarded: number; feedback: string | null; regradedAt: string | null;
+type Result = { id: string; title: string; score: number; totalMarks: number; percentage: number | null; submittedAt: string;
+  verifyCode: string; verifyUrl: string; qrDataUrl: string; questions: Array<{
+  position: number; text: string; marks: number; awarded: number | null; feedback: string | null; regradedAt: string | null;
 }> };
 const links: Array<[string, string]> = [["My exams", "/candidate"], ["Results", "/candidate/results"], ["Workspace settings", "/candidate/settings"]];
 
@@ -27,7 +29,7 @@ export function Candidate({ section, examId, attemptId, userId, name }: { sectio
   const path = examId ? "/candidate/exams/" + examId : "/candidate";
   const current = relevant ? "/candidate" : "/candidate/" + section;
   if (attemptId && examId && exam) return <AttemptWorkspace key={attemptId} attemptId={attemptId} userId={userId} name={name}
-    back="/candidate" allowPaste={exam.allowPaste} cameraRequired={exam.cameraCheck} />;
+    back="/candidate" allowPaste={exam.allowPaste} cameraRequired={exam.cameraCheck} title={exam.title} />;
   return <><Navigation items={links} selected={current} />
     {section === "results" ? <Results /> : section === "settings" ? <Preferences /> :
       <><Feedback error={exams.error} pending={exams.pending} />
@@ -63,7 +65,7 @@ function ExamEntry({ exam, path, userId, available }: { exam: CandidateExam; pat
     const data = new FormData(event.currentTarget);
     void action.run(async () => {
       const result = await request<{ id: string; sessionId: string }>("/api/exams/" + exam.id + "/attempts", "POST", {
-        key: data.get("key"), deviceCheck: isDesktop(), ...(exam.cameraCheck ? { cameraReady } : {}),
+        ...(exam.keyRequired === false ? {} : { key: data.get("key") }), deviceCheck: isDesktop(), ...(exam.cameraCheck ? { cameraReady } : {}),
       });
       sessionStorage.setItem(`secureexam:${userId}:${result.data.id}`, result.data.sessionId);
       handedOff.current = true;
@@ -80,8 +82,10 @@ function ExamEntry({ exam, path, userId, available }: { exam: CandidateExam; pat
       {desktop === false && <p className="error">This exam can only be taken on a desktop or laptop computer.</p>}
       {desktop && reenter && <Link className="button primary" href={path + "/attempt?attempt=" + exam.attemptId}>Resume exam</Link>}
       {desktop && canStart && <form onSubmit={start}>
-        <p>You have <strong>{Math.ceil(exam.availableSeconds / 60)} minutes</strong> available. Keep the exam in fullscreen and submit before time runs out.</p>
-        <label>Activation key<input key={exam.reattemptKey ?? "key"} required autoComplete="off" maxLength={128} name="key" defaultValue={exam.reattemptKey ?? ""} /></label>
+        <p>You have <strong>{Math.ceil(exam.availableSeconds / 60)} minutes</strong> available.{exam.integrityMode === "standard"
+          ? " This is a practice exam: no activation key and no fullscreen requirement." : " Keep the exam in fullscreen and submit before time runs out."}</p>
+        {exam.keyRequired !== false && <label>Activation key<input key={exam.reattemptKey ?? "key"} required autoComplete="off" maxLength={128} name="key"
+          placeholder="ABCD-1234-EF56-7890" defaultValue={exam.reattemptKey ?? ""} /><small>Your personal key also decides your question order.</small></label>}
         <div><button className="primary" disabled={action.busy || (exam.cameraCheck && !cameraReady)}>Start exam</button></div>
       </form>}
       {!reenter && !canStart && <p className="muted">{exam.accessStatus === "blocked" ? "Contact an administrator about your blocked enrollment." : "There is no active exam entry for you right now."}</p>}
@@ -95,10 +99,15 @@ function Results() {
     <Feedback error={results.error} pending={results.pending} />
     <div className="stack">{results.data?.length === 0 && <section className="panel"><p className="empty">Your published results will appear here.</p></section>}
       {results.data?.map((result) => <section className="panel" key={result.id}><div className="section-row">
-        <div><h2>{result.title}</h2><p>{result.score} / {result.totalMarks} · {formatDate(result.submittedAt)}</p></div>
-        <a className="button primary" href={"/api/reports/" + result.id + "/pdf"}>Download result PDF</a></div>
-        <DataTable headers={["Question", "Marks", "Feedback"]} rows={result.questions.map((item) => [
-          item.position, `${item.awarded} / ${item.marks}`, <div key="feedback">{item.feedback ?? "—"}{item.regradedAt && <small>Regraded {formatDate(item.regradedAt)}</small>}</div>,
+        <div><h2>{result.title}</h2><p className="result-score"><strong>{result.score} / {result.totalMarks}</strong>{result.percentage !== null && ` · ${result.percentage}%`}</p>
+          <p className="muted">Submitted {formatDate(result.submittedAt)}</p></div>
+        <div className="verify-box"><img src={result.qrDataUrl} alt={`QR code to verify ${result.title}`} width={112} height={112} />
+          <small>Verification code</small><code>{result.verifyCode.slice(0, 10)}…</code>
+          <a href={result.verifyUrl} target="_blank" rel="noreferrer">Open verify page</a>
+          <a className="button primary" href={"/api/reports/" + result.id + "/pdf"}>Download PDF</a></div></div>
+        <DataTable headers={["#", "Question", "Marks", "Feedback"]} rows={result.questions.map((item) => [
+          item.position, <span key="text" className="clamp">{item.text}</span>, item.awarded === null ? `— / ${item.marks}` : `${item.awarded} / ${item.marks}`,
+          <div key="feedback">{item.feedback ?? "—"}{item.regradedAt && <small>Regraded {formatDate(item.regradedAt)}</small>}</div>,
         ])} /></section>)}</div>
   </>;
 }

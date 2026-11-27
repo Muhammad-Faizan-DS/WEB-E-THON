@@ -1,27 +1,32 @@
-import Link from "next/link";
-import { auth } from "@/server/auth";
-import { SignInPanel, SignOutButton } from "@/components/backend-preview/sign-in";
+import { notFound, redirect } from "next/navigation";
 import { Examiner } from "@/components/backend-preview/examiner";
 import { Candidate } from "@/components/backend-preview/candidate";
 import { Administrator } from "@/components/backend-preview/administrator";
+import { requireUser, roleHome } from "@/components/dashboard/guard";
+import { DashboardShell } from "@/components/dashboard/shell";
 
+// Role dashboards live at /admin, /examiner and /candidate. This catch-all only serves "/" (redirect)
+// and the deeper reference tools, e.g. /admin/users or /examiner/exams/:id.
 export default async function PortalPage({ params, searchParams }: {
   params: Promise<{ view?: string[] }>; searchParams: Promise<{ attempt?: string; tab?: string }>;
 }) {
-  const user = (await auth())?.user;
-  if (!user?.id || !user.role) return <SignInPanel />;
   const { view = [] } = await params;
+  if (view[0] === "api") notFound();
+  const user = await requireUser();
+  if (view[0] !== user.role || view.length < 2) redirect(roleHome(user.role));
   const { attempt, tab } = await searchParams;
-  const role = user.role;
-  const section = view[0] === role ? view[1] : undefined;
-  return <div>
-    <a className="skip" href="#workspace">Skip to workspace</a>
-    <header className="topbar"><Link href={`/${role}`} className="brand"><span aria-hidden="true">SE</span>SecureExam</Link>
-      <div className="account"><div><strong>{user.name}</strong><small>{role === "admin" ? "Administrator" : role}</small></div><SignOutButton /></div>
-    </header>
-    <main id="workspace" className="workspace">
-      {role === "examiner" ? <Examiner section={section} examId={section === "exams" ? view[2] : undefined} attemptId={attempt} tab={tab} userId={user.id} name={user.name ?? "Examiner"} />
-        : role === "admin" ? <Administrator section={section} examId={section === "exams" ? view[2] : undefined} /> : <Candidate section={section} examId={section === "exams" ? view[2] : undefined} attemptId={attempt} userId={user.id} name={user.name ?? "Candidate"} />}
-    </main>
-  </div>;
+  const section = view[1];
+  if (user.role === "examiner" && section === "questions") redirect("/examiner");
+  const examId = section === "exams" ? view[2] : undefined;
+  if (attempt && examId) {
+    return <main id="workspace" className="workspace exam-focus">
+      {user.role === "examiner" ? <Examiner section={section} examId={examId} attemptId={attempt} tab={tab} userId={user.id} name={user.name} />
+        : <Candidate section={section} examId={examId} attemptId={attempt} userId={user.id} name={user.name} />}
+    </main>;
+  }
+  return <DashboardShell user={user}>
+    {user.role === "examiner" ? <Examiner section={section} examId={examId} attemptId={attempt} tab={tab} userId={user.id} name={user.name} />
+      : user.role === "admin" ? <Administrator section={section} examId={examId} />
+        : <Candidate section={section} examId={examId} attemptId={attempt} userId={user.id} name={user.name} />}
+  </DashboardShell>;
 }

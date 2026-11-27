@@ -4,5 +4,5 @@ import "./secureexam.css";
 
 export const metadata: Metadata = { title: "SecureExam", description: "Secure examination management" };
 export default function PortalLayout({ children }: { children: ReactNode }) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body suppressHydrationWarning>{children}</body></html>;
 }

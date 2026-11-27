@@ -2,10 +2,18 @@
 
 import { signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
-export function SignInPanel() {
+const demoAccounts = [
+  ["Administrator", "admin@example.test"],
+  ["Examiner", "examiner@example.test"],
+  ["Candidate", "candidate@example.test"],
+] as const;
+
+export function SignInPanel({ showDemoAccounts = false }: { showDemoAccounts?: boolean }) {
   const router = useRouter();
+  const email = useRef<HTMLInputElement>(null);
+  const password = useRef<HTMLInputElement>(null);
   const [state, setState] = useState({ busy: false, message: "" });
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -17,12 +25,16 @@ export function SignInPanel() {
         setState({ busy: false, message: "Sign-in failed. Check your email and password." });
         return;
       }
+      // "/" resolves the signed-in role on the server and redirects to /admin, /examiner or /candidate.
       router.replace("/");
       router.refresh();
-      setState({ busy: false, message: "" });
     } catch {
       setState({ busy: false, message: "Could not reach SecureExam. Try again." });
     }
+  }
+  function fillDemo(address: string) {
+    if (email.current) email.current.value = address;
+    password.current?.focus();
   }
   return <main className="sign-in">
     <section className="sign-in-brand">
@@ -32,13 +44,19 @@ export function SignInPanel() {
     </section>
     <section className="sign-in-form"><form onSubmit={submit}>
       <h2>Sign in</h2><p>Use the account assigned to you.</p>
-      <label>Email<input required name="email" type="email" autoComplete="username" /></label>
-      <label>Password<input required name="password" type="password" autoComplete="current-password" /></label>
+      <label>Email<input ref={email} required name="email" type="email" autoComplete="username" /></label>
+      <label>Password<input ref={password} required name="password" type="password" autoComplete="current-password" /></label>
       {state.message && <p role="alert" className="error">{state.message}</p>}
       <button disabled={state.busy} className="primary">{state.busy ? "Signing in…" : "Sign in"}</button>
+      {showDemoAccounts && <fieldset className="demo-accounts">
+        <legend>Development accounts</legend>
+        <div className="actions">{demoAccounts.map(([label, address]) =>
+          <button key={address} type="button" onClick={() => fillDemo(address)}>{label}</button>)}</div>
+        <small>Fills the email. The password is <code>SEED_PASSWORD</code> from <code>.env.local</code>.</small>
+      </fieldset>}
     </form></section>
   </main>;
 }
 export function SignOutButton() {
-  return <button onClick={() => void signOut({ redirectTo: "/" })}>Sign out</button>;
+  return <button onClick={() => void signOut({ redirectTo: "/login" })}>Sign out</button>;
 }

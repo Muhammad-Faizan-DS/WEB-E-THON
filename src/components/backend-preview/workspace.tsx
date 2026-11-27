@@ -10,11 +10,14 @@ import { message, request, RequestError, useResource } from "./client";
 import { isDesktop } from "./device";
 import { monitorCamera, stopCamera } from "./camera";
 
-type Props = { attemptId: string; userId: string; name: string; back: string; sandbox?: boolean; allowPaste?: boolean; cameraRequired?: boolean };
+type Props = { attemptId: string; userId: string; name: string; back: string; sandbox?: boolean; allowPaste?: boolean; cameraRequired?: boolean; title?: string };
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 type Signal = "fullscreen_exit" | "visibility_hidden" | "window_blur" | "return" | "paste_blocked" | "copy_blocked" | "cut_blocked"
   | "contextmenu_blocked" | "drop_blocked" | "page_hidden" | "camera_no_face" | "camera_multiple_faces" | "camera_out_of_frame";
 
-export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allowPaste, cameraRequired }: Props) {
+export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allowPaste, cameraRequired, title }: Props) {
+  const heading = sandbox ? `Sandbox · ${title ?? "exam preview"}` : title ?? "Exam";
+  const shortId = userId.slice(0, 8).toUpperCase();
   const api = "/api/attempts/" + encodeURIComponent(attemptId);
   const scope = `secureexam:${userId}:${attemptId}`;
   const shell = useRef<HTMLDivElement>(null);
@@ -92,7 +95,7 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
         if (changes.current.size) {
           window.clearTimeout(retry.current);
           retry.current = window.setTimeout(() => void send(), 800);
-        } else setNotice("All changes saved.");
+        } else { setNotice("All changes saved."); setError(""); }
         return true;
       } catch (cause) {
         if (cause instanceof RequestError) updateError(cause);
@@ -117,6 +120,7 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
       sessionStorage.setItem(scope, result.data.sessionId);
     }
     apply(result);
+    setError((current) => current === "Exam continued in another window." ? current : "");
     return result.data;
   }, [api, scope, apply]);
 
@@ -232,7 +236,13 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
     setBusy(true); setError("");
     try {
       if (!isDesktop()) throw new Error("This exam can only be taken on a desktop or laptop computer.");
-      await shell.current?.requestFullscreen();
+      // Standard mode only logs signals, so it never requires fullscreen. Review and strict modes do.
+      if (attempt?.integrityMode !== "standard" && !document.fullscreenElement) {
+        try { await shell.current?.requestFullscreen(); }
+        catch {
+          throw new Error("Your browser did not allow fullscreen. Select Try again and accept the fullscreen prompt.");
+        }
+      }
       const stored = sessionStorage.getItem(scope);
       token.current = stored ?? "";
       const data = await heartbeat(true);
@@ -296,13 +306,22 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
     setResponse(question?.type === "multi" ? (Array.isArray(answer) && answer.includes(id) ? answer.filter((value) => value !== id) : [...Array.isArray(answer) ? answer : [], id]) : id);
   }
 
-  if (attempt && !inProgress) return <section className="panel">
-    <Heading title={superseded ? "Exam continued elsewhere" : attempt.status === "voided" ? "Attempt voided" : "Attempt submitted"}
+  if (attempt && !inProgress) return <section className="panel submitted" aria-live="polite">
+    <Heading title={superseded ? "Exam continued elsewhere" : attempt.status === "voided" ? "Attempt voided" : `${heading} submitted`}
       note={superseded ? "Your active session is in another tab or device." : attempt.status === "voided"
-        ? "Review the re-attempt status on your candidate dashboard." : "Results will appear when your examiner publishes them."} />
-    {!superseded && <p>{attempt.incidentCount} incident{attempt.incidentCount === 1 ? "" : "s"} recorded for review.</p>}
-    <Link href={back} className="button">Return to workspace</Link>
+        ? "Review the re-attempt status on your candidate dashboard."
+        : attempt.result ? "Practice result, marked automatically." : "Results will appear when your examiner publishes them."} />
+    {attempt.result && <p className="result-score"><strong>{attempt.result.score} / {attempt.result.totalMarks}</strong> · {attempt.result.percentage}%</p>}
+    {!superseded && attempt.status !== "voided" && <dl className="facts">
+      {attempt.submittedAt && <div><dt>Submitted</dt><dd>{new Date(attempt.submittedAt).toLocaleString()}</dd></div>}
+      <div><dt>Questions answered</dt><dd>{attempt.palette.filter((item) => item.answered).length} of {attempt.totalQuestions}</dd></div>
+      <div><dt>Signals for review</dt><dd>{plural(attempt.incidentCount, "incident")}</dd></div></dl>}
+    <div className="actions"><Link href={back} className="button primary">Back to my exams</Link>
+      {attempt.result && !sandbox && <Link href="/candidate/results" className="button">View result details</Link>}</div>
   </section>;
+  const sectionOf = (sectionId: string | null | undefined) => attempt?.sections?.find((item) => item.id === sectionId);
+  const currentSection = sectionOf(question?.sectionId);
+  const urgency = remaining <= 60 ? "critical" : remaining <= 300 ? "warning" : "normal";
 
   return <div className="exam-shell" ref={shell} data-theme={prefs.data?.theme} data-font={prefs.data?.fontSize} onKeyDown={(event) => {
     if (blocked || !question || /INPUT|TEXTAREA|SELECT|BUTTON/.test((event.target as HTMLElement).tagName)) return;
@@ -314,18 +333,29 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
     if (key === "l") lock();
     if (key === "f") flag();
   }}>
-    <Feedback error={error} note={notice} pending={!attempt && !error} />
-    {!started && attempt && <section className="panel"><Heading title={sandbox ? "Sandbox exam" : "Enter exam workspace"}
-      note="The workspace opens in fullscreen. Your timer continues on the server." />
-      <button className="primary" disabled={busy || !remaining} onClick={() => void enter()}>{countdown ? "Starting in " + countdown : busy ? "Opening…" : "Enter fullscreen"}</button>
-      <Link href={back} className="button">Back</Link></section>}
+    <div className="exam-status" aria-live="polite"><Feedback error={error} note={notice} pending={!attempt && !error} />
+      {started && remaining > 0 && remaining <= 300 && <p className="notice">{remaining <= 60 ? "Less than one minute remains." : "Less than five minutes remain."}</p>}
+      {started && remaining === 0 && <p className="notice" role="status">Time is up. SecureExam is finalizing your attempt.</p>}</div>
+    {!started && attempt && <section className="panel start-screen"><Heading title={heading}
+      note={`${plural(attempt.totalQuestions, "question")} · ${Math.ceil(remaining / 60)} minutes left on the server clock`} />
+      <ul className="rules">
+        {attempt.integrityMode !== "standard" && <li>The exam runs in fullscreen. Leaving it or switching tabs is recorded{attempt.integrityMode === "strict"
+          ? " and voids the attempt; an administrator decides on any re-attempt" : " and pauses you for a short explanation"}.</li>}
+        {attempt.integrityMode === "standard" && <li>Practice mode: fullscreen is optional and activity is only logged.</li>}
+        <li>Answers save automatically, even offline. Your timer keeps running on the server.</li>
+        <li>Copy, paste and right-click are blocked inside the exam{allowPaste ? " (paste is allowed for you)" : ""}.</li>
+        {attempt.openLimit !== null && <li>You can keep up to {plural(attempt.openLimit, "open question")} before you must lock one to continue.</li>}
+      </ul>
+      {countdown > 0 ? <p className="countdown" aria-live="assertive">{countdown}</p> : <div className="actions">
+        <button className="primary" disabled={busy || !remaining} onClick={() => void enter()}>{busy ? "Opening…" : error ? "Try again"
+          : attempt.integrityMode === "standard" ? "Start" : "Enter fullscreen and start"}</button>
+        <Link href={back} className="button">Back</Link></div>}</section>}
     {started && attempt && <>
-      <section className="panel exam-toolbar"><div><h2>{sandbox ? "Sandbox exam" : "Exam workspace"}</h2>
-        <p className="watermark">{name} · {userId}</p></div><div>
-        <span className="timer" aria-label={`${Math.floor(remaining / 60)} minutes and ${seconds} seconds remaining`}>{Math.floor(remaining / 60)}:{seconds}</span>
-        <p role="status">{online ? pending ? `Saving · ${pending} queued` : "Saved" : `Offline · ${pending} queued`}</p></div></section>
-      {remaining > 0 && remaining <= 300 && <p aria-live="polite" className="notice">{remaining <= 60 ? "Less than one minute remains." : "Less than five minutes remain."}</p>}
-      {remaining === 0 && <p className="notice" role="status">Time is up. SecureExam is finalizing your attempt.</p>}
+      <div className="exam-watermark" aria-hidden="true">{Array.from({ length: 12 }, (_, i) => <span key={i}>{name} · {shortId}</span>)}</div>
+      <section className="panel exam-toolbar"><div><h2>{heading}</h2>
+        <p className="watermark">{name} · ID {shortId}{currentSection && (attempt.sections?.length ?? 0) > 1 ? ` · ${currentSection.title}` : ""}</p></div>
+        <div className="exam-clock"><span className="timer" data-urgency={urgency} aria-label={`${Math.floor(remaining / 60)} minutes and ${seconds} seconds remaining`}>{Math.floor(remaining / 60)}:{seconds}</span>
+        <span className="save-chip" data-state={online ? pending ? "saving" : "saved" : "offline"} role="status">{online ? pending ? `Saving · ${pending} queued` : "Saved ✓" : `Offline · ${pending} queued`}</span></div></section>
       {away && <section className="panel"><h2>Return to the exam</h2><p>Return to fullscreen within three seconds to avoid interrupting the attempt.</p>
         <button onClick={() => void shell.current?.requestFullscreen().catch(updateError)}>Return to fullscreen</button></section>}
       {attempt.reviewUntil && <section className="panel"><h2>Integrity review pause</h2>
@@ -349,8 +379,9 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
       onContextMenu={(event) => { event.preventDefault(); void signal("contextmenu_blocked"); }}
       onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void signal("drop_blocked"); }}>
         {question ? <><div className="section-row"><h2>Question {question.position} of {attempt.totalQuestions}</h2>{question.locked && <Status value="locked" />}</div>
+          {currentSection?.instructions && question.position === currentSection.firstPosition && <p className="notice section-note"><strong>{currentSection.title}.</strong> {currentSection.instructions}</p>}
           <div className="exam-split" data-layout={prefs.data?.layout}>
-            <div className="stem"><p>{question.text}</p><small>{question.marks} marks</small></div>
+            <div className="stem"><p>{question.text}</p><small>{plural(question.marks, "mark")}</small></div>
             <fieldset disabled={blocked || question.locked}><legend>Your answer</legend>
               {question.type === "written" ? <label>Written response<textarea value={typeof answer === "string" ? answer : ""} onChange={(event) => setResponse(event.target.value)} maxLength={24_000} /></label>
                 : <div className="option-list">{question.options.map(({ id, text }, index) => <label className="check answer" key={id}>
@@ -363,15 +394,22 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
             <button disabled={busy || blocked} onClick={flag}>{question.flagged ? "Remove flag" : "Flag for review"}</button>
             <button className="primary" disabled={busy || blocked || question.position >= attempt.totalQuestions} onClick={() => go(question.position + 1)}>Next question</button></div>
         </> : <p className="muted">The current question will appear when the workspace is ready.</p>}
-      </section><aside className="panel"><h2>Question navigator</h2><p>{attempt.openCount} open{attempt.openLimit === null ? "" : ` of ${attempt.openLimit} allowed`}</p>
-        <div className="palette">{attempt.palette.map((item) => <button key={item.position} disabled={busy || blocked || !item.seen}
-          aria-label={`Question ${item.position}${item.locked ? ", locked" : ""}${item.flagged ? ", flagged" : ""}`}
-          aria-current={question?.position === item.position} data-answered={item.answered} onClick={() => go(item.position)}>{item.position}{item.flagged ? "•" : ""}</button>)}</div>
+      </section><aside className="panel"><h2>Question navigator</h2><p>{plural(attempt.openCount, "open question")}{attempt.openLimit === null ? "" : ` of ${attempt.openLimit} allowed`}</p>
+        {(attempt.sections?.length ? attempt.sections : [{ id: "all", title: "", firstPosition: 1, count: attempt.totalQuestions }]).map((group) => <div key={group.id}>
+          {(attempt.sections?.length ?? 0) > 1 && <h3 className="palette-heading">{group.title}</h3>}
+          <div className="palette">{attempt.palette.filter((item) => item.position >= group.firstPosition && item.position < group.firstPosition + group.count).map((item) =>
+            <button key={item.position} disabled={busy || blocked || !item.seen}
+              aria-label={`Question ${item.position}${item.locked ? ", locked" : ""}${item.flagged ? ", flagged" : ""}${!item.seen ? ", not released" : ""}`}
+              aria-current={question?.position === item.position} data-answered={item.answered} data-locked={item.locked} data-flagged={item.flagged}
+              data-seen={item.seen} onClick={() => go(item.position)}>{item.position}{item.flagged ? "•" : ""}</button>)}</div></div>)}
+        <p className="palette-legend"><span data-k="answered">Answered</span><span data-k="locked">Locked</span><span data-k="flagged">Flagged</span><span data-k="unseen">Not released</span></p>
         <p><small>Keyboard shortcuts: 1–4 answer, N/P navigate, L lock, F flag.</small></p>
         <button className="primary" disabled={busy || blocked} onClick={() => void action(async () => {
           apply(await request<AttemptState>(api)); setConfirm(true);
         }, true)}>Review and submit</button>
         {confirm && <div role="group" aria-label="Submission summary"><p>{attempt.palette.filter((item) => !item.answered).length} unanswered · {attempt.openCount} open · {attempt.palette.filter((item) => item.flagged).length} flagged</p>
+          <div className="palette">{attempt.palette.filter((item) => item.seen && (!item.answered || !item.locked || item.flagged)).map((item) =>
+            <button key={item.position} onClick={() => { setConfirm(false); go(item.position); }} aria-label={`Go to question ${item.position}`}>{item.position}</button>)}</div>
           <div className="actions"><button onClick={() => setConfirm(false)}>Keep working</button>
             <button className="primary" disabled={busy || blocked} onClick={() => void action(async () => {
               apply(await request<AttemptState>(api + "/submit", "POST", { sessionId: token.current }));

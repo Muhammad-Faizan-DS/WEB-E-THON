@@ -9,8 +9,11 @@ export class RequestError extends Error {
 
 export async function request<T>(path: string, method = "GET", data?: unknown, headers?: HeadersInit) {
   const wire = new Headers(headers);
-  if (data !== undefined) wire.set("content-type", "application/json");
-  const response = await fetch(path, { method, headers: wire, body: data === undefined ? undefined : JSON.stringify(data), cache: "no-store" });
+  const binary = typeof Blob !== "undefined" && data instanceof Blob;
+  if (data !== undefined && !binary) wire.set("content-type", "application/json");
+  const response = await fetch(path, {
+    method, headers: wire, body: binary ? data : data === undefined ? undefined : JSON.stringify(data), cache: "no-store",
+  });
   const result = await response.json() as ApiResponse<T>;
   if ("error" in result) throw new RequestError(result.error.code, result.error.message, response.status);
   if (!response.ok) throw new RequestError("REQUEST_FAILED", "The request failed.", response.status);

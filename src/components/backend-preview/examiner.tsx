@@ -3,38 +3,32 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { DataTable, Feedback, Heading, Navigation, Status, formatDate } from "./common";
+import { DataTable, Feedback, Heading, Status } from "./common";
 import { request, useAction, useResource } from "./client";
-import { QuestionBank } from "./question-bank";
-import { ExamBuilder, type Exam, type ExamDetail } from "./exam-builder";
+import { ExamQuestions } from "./exam-questions";
+import { ExamBuilder, type ExamDetail } from "./exam-builder";
 import { AnalyticsPanel, GradingPanel, MonitorPanel } from "./exam-operations";
 import { RequestsPanel } from "./administrator";
 import { AttemptWorkspace } from "./workspace";
 import { isDesktop } from "./device";
 
-const links: Array<[string, string]> = [["Exams", "/examiner"], ["Question bank", "/examiner/questions"], ["Re-attempt requests", "/examiner/requests"]];
+const tools: Array<[string, string]> = [
+  ["Questions", "questions"], ["Settings", "settings"], ["Candidates & keys", "candidates"],
+  ["Live monitor", "monitor"], ["Grading & results", "grading"], ["Analytics", "analytics"],
+];
 
 export function Examiner({ section, examId, attemptId, tab, userId, name }: {
   section?: string; examId?: string; attemptId?: string; tab?: string; userId: string; name: string;
 }) {
   if (examId && attemptId) return <AttemptWorkspace key={attemptId} attemptId={attemptId} userId={userId} name={name} back={"/examiner/exams/" + examId} sandbox />;
-  const current = section === "questions" || section === "requests" ? "/examiner/" + section : "/examiner";
-  return <><Navigation items={links} selected={current} />
-    {section === "questions" ? <QuestionBank /> : section === "requests" ? <RequestsPanel admin={false} />
-      : examId === "new" ? <ExamBuilder /> : examId ? <ManageExam key={examId} examId={examId} tab={tab} userId={userId} /> : <ExamList />}</>;
+  if (section === "requests") return <><Breadcrumb current="Re-attempt requests" /><RequestsPanel admin={false} /></>;
+  if (examId === "new") return <ExamBuilder />;
+  if (examId) return <ManageExam key={examId} examId={examId} tab={tab} userId={userId} />;
+  return <><Breadcrumb current="Exam tools" /><Heading title="Exam tools" note="Open one of your exams to manage its questions and settings." /></>;
 }
 
-function ExamList() {
-  const exams = useResource<Exam[]>("/api/exams");
-  return <><Heading title="Examiner workspace" note="Build exams, monitor candidates, and publish results." action={<Link className="button primary" href="/examiner/exams/new">Create exam</Link>} />
-    <Feedback error={exams.error} pending={exams.pending} />
-    <section className="panel"><h2>Your exams</h2>
-      <DataTable headers={["Exam", "Status", "Schedule", "Duration", "Actions"]} rows={(exams.data ?? []).map((exam) => [
-        <strong key="title">{exam.title}</strong>, <Status key="status" value={exam.resultsPublished ? "results_published" : exam.status} />,
-        <div key="dates">{formatDate(exam.startsAt)}<small>Closes {formatDate(exam.endsAt)}</small></div>,
-        exam.durationMin + " min", <Link key="manage" href={"/examiner/exams/" + exam.id}>Manage exam</Link>,
-      ])} />
-    </section></>;
+function Breadcrumb({ current }: { current: string }) {
+  return <nav className="exam-crumbs" aria-label="Breadcrumb"><Link href="/examiner">Exams</Link><span aria-hidden="true">/</span><span aria-current="page">{current}</span></nav>;
 }
 
 function ManageExam({ examId, tab, userId }: { examId: string; tab?: string; userId: string }) {
@@ -46,75 +40,124 @@ function ManageExam({ examId, tab, userId }: { examId: string; tab?: string; use
   const action = useAction(refresh);
   const router = useRouter();
   const exam = detail.data;
-  const current = ["settings", "candidates", "monitor", "grading", "analytics"].includes(tab ?? "") ? tab! : "settings";
+  const current = tools.some(([, key]) => key === tab) ? tab! : "questions";
+
   async function sandbox() {
     const result = await action.run(() => request<{ id: string; sessionId: string }>(api + "/attempts", "POST", { sandbox: true, deviceCheck: isDesktop() }), "Sandbox ready.");
     if (!result) return;
     sessionStorage.setItem(`secureexam:${userId}:${result.data.id}`, result.data.sessionId);
     router.push(path + "?attempt=" + result.data.id);
   }
-  return <><Heading title={exam?.title ?? "Manage exam"} note={exam?.instructions} action={<Link href="/examiner" className="button">All exams</Link>} />
+
+  return <>
+    <Breadcrumb current={exam?.title ?? "Manage exam"} />
+    <div className="heading exam-heading">
+      <div><h1>{exam?.title ?? "Manage exam"}</h1>
+        {exam && <div className="exam-meta"><Status value={exam.resultsPublished ? "results_published" : exam.status} />
+          {exam.course && <span>{exam.course}</span>}<span>{exam.durationMin} min</span><span>{exam.totalMarks} marks</span></div>}</div>
+      {exam && <div className="actions exam-actions">
+        <button disabled={action.busy || !checklist.data?.canPublish} onClick={() => void sandbox()}>Sandbox preview</button>
+        {exam.status === "draft" ? <button className="primary" disabled={action.busy || !checklist.data?.canPublish}
+          onClick={() => void action.run(() => request(api + "/publish", "POST"), "Exam published.")}>Publish exam</button>
+          : !exam.frozenAt && <button disabled={action.busy} onClick={() => void action.run(() => request(api + "/unpublish", "POST"), "Exam returned to draft.")}>Unpublish</button>}
+      </div>}
+    </div>
     <Feedback error={detail.error || action.error || checklist.error} pending={detail.pending} note={action.note} />
     {exam && <>
-      <div className="section-row"><div className="actions"><Status value={exam.resultsPublished ? "results_published" : exam.status} /><span>{exam.durationMin} minutes · {exam.totalMarks} marks</span></div>
-        <div className="actions"><button disabled={action.busy} onClick={() => void sandbox()}>Sandbox preview</button>
-          {exam.status === "draft" ? <button className="primary" disabled={action.busy || !checklist.data?.canPublish}
-            onClick={() => void action.run(() => request(api + "/publish", "POST"), "Exam published.")}>Publish exam</button>
-            : !exam.frozenAt && <button disabled={action.busy} onClick={() => void action.run(() => request(api + "/unpublish", "POST"), "Exam returned to draft.")}>Unpublish</button>}</div></div>
-      <Navigation items={[["Settings & blueprint", "settings"], ["Candidates & keys", "candidates"], ["Live monitor", "monitor"],
-        ["Grading & results", "grading"], ["Analytics", "analytics"]].map(([label, key]) => [label, path + "?tab=" + key])} selected={path + "?tab=" + current} />
-      {current === "settings" && <div className="layout"><ExamBuilder exam={exam} reload={refresh} /><aside className="panel"><h2>Publish checklist</h2>
-        {checklist.data?.canPublish ? <p className="notice">Ready to publish.</p> : <ul>{checklist.data?.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}
-          <dl className="facts"><div><dt>Opens</dt><dd>{formatDate(exam.startsAt)}</dd></div><div><dt>Closes</dt><dd>{formatDate(exam.endsAt)}</dd></div></dl></aside></div>}
+      <nav className="exam-tabs" aria-label="Exam tools">{tools.map(([label, key]) =>
+        <Link key={key} href={path + "?tab=" + key} aria-current={key === current ? "page" : undefined}>{label}</Link>)}</nav>
+      {current === "questions" && <><ExamQuestions exam={exam} reload={refresh} /><PublishChecklist checklist={checklist.data} /></>}
+      {current === "settings" && <><ExamBuilder exam={exam} reload={refresh} /><PublishChecklist checklist={checklist.data} /></>}
       {current === "candidates" && <Enrollments exam={exam} reload={detail.reload} />}
       {current === "monitor" && <MonitorPanel examId={examId} />}
       {current === "grading" && <GradingPanel exam={exam} reload={detail.reload} />}
       {current === "analytics" && <AnalyticsPanel examId={examId} />}
-    </>}</>;
+    </>}
+  </>;
 }
 
+type Checklist = { canPublish: boolean; issues: string[]; paper?: { questions: number; marks: number; totalMarks: number };
+  sections?: Array<{ title: string; poolQuestions: number; paperQuestions: number; paperMarks: number; drawsSubset: boolean }> };
+
+function PublishChecklist({ checklist }: { checklist?: Checklist }) {
+  if (!checklist) return null;
+  return <section className="panel publish-checklist">
+    <h2>Publish checklist</h2>
+    {checklist.canPublish ? <p className="notice">Ready to publish.</p> : <ul>{checklist.issues.map((issue) => <li key={issue}>{issue}</li>)}</ul>}
+    {checklist.paper && <p>Each candidate paper: <strong>{checklist.paper.questions} questions · {checklist.paper.marks} marks</strong> (exam total {checklist.paper.totalMarks}).</p>}
+    {checklist.sections?.some((section) => section.drawsSubset) && <ul className="muted">{checklist.sections.filter((section) => section.drawsSubset).map((section) =>
+      <li key={section.title}>{section.title}: draws {section.paperQuestions} of {section.poolQuestions} questions per candidate, seeded by their activation key.</li>)}</ul>}
+  </section>;
+}
+
+type KeyRow = { enrollmentId: string; candidateId: string; name: string; email: string; isExternal: boolean; enrollmentStatus: string;
+  status: string; key: string | null; hint: string | null; failedTries: number | null; usedAt: string | null };
+type Enrolled = { candidateId: string; email: string; isExternal: boolean; temporaryPassword: string | null; key: string | null };
+
+function download(name: string, csv: string) {
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = name; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+const cell = (value: string) => /[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+
 function Enrollments({ exam, reload }: { exam: ExamDetail; reload: () => Promise<void> }) {
-  const job = useAction(reload);
-  const [keys, setKeys] = useState<Array<{ enrollmentId: string; key: string }>>([]);
-  const [selected, setSelected] = useState<string[]>([]);
   const api = "/api/exams/" + exam.id;
+  const keys = useResource<KeyRow[]>(exam.status === "published" ? api + "/keys" : null);
+  const job = useAction(async () => { await Promise.all([reload(), keys.reload()]); });
+  const [selected, setSelected] = useState<string[]>([]);
+  const [created, setCreated] = useState<Enrolled[]>([]);
+  const rows = keys.data ?? [];
   const enroll = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const candidates = String(data.get("ids")).split(/[\s,]+/).filter(Boolean).map((candidateId) => ({
-      candidateId, timeMultiplier: Number(data.get("multiplier")), allowPaste: data.has("paste"),
-    }));
-    void job.run(() => request(api + "/enrollments", "POST", { candidates }), "Candidates enrolled.");
-  };
-  function issue() {
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const accommodations = { timeMultiplier: Number(data.get("multiplier")), allowPaste: data.has("paste") };
+    const candidates = String(data.get("people")).split(/[\n,;]+/).map((value) => value.trim()).filter(Boolean).map((value) =>
+      /^[0-9a-f-]{36}$/i.test(value) ? { candidateId: value, ...accommodations } : { email: value, external: data.has("external"), ...accommodations });
     void job.run(async () => {
-      const result = await request<typeof keys>(api + "/keys", "POST", { enrollmentIds: selected });
-      setKeys(result.data);
-    }, "Keys generated. Copy or download them now.");
-  }
-  function exportKeys() {
-    const csv = "Enrollment ID,Activation key\r\n" + keys.map(({ enrollmentId, key }) => enrollmentId + "," + key).join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url; link.download = "activation-keys.csv"; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 500);
-  }
-  return <div className="layout"><section className="panel"><div className="section-row"><h2>Enrolled candidates</h2>
-    <button disabled={!selected.length || job.busy} onClick={issue}>Generate keys</button></div>
-    <Feedback error={job.error} note={job.note} />
-    <DataTable headers={["Select", "Candidate", "Time", "Access"]} rows={exam.enrollments.map((item) => [
-      <input key="select" type="checkbox" aria-label={"Select " + item.name} checked={selected.includes(item.id)}
-        onChange={(event) => setSelected((current) => event.target.checked ? [...current, item.id] : current.filter((value) => value !== item.id))} />,
-      <span key="name">{item.name}<small>{item.email}</small></span>, item.timeMultiplier + "×", <Status key="status" value={item.status} />,
-    ])} />
-    {keys.length > 0 && <details open><summary>New activation keys</summary><DataTable headers={["Candidate", "Key"]} rows={keys.map((item) => [
-      exam.enrollments.find(({ id }) => id === item.enrollmentId)?.name ?? item.enrollmentId, <code key="key">{item.key}</code>,
-    ])} /><div className="actions"><button onClick={exportKeys}>Download CSV</button><button onClick={() => window.print()}>Print</button></div></details>}
-  </section><section className="panel"><h2>Enroll candidates</h2>
-    <form onSubmit={enroll}><label>Candidate account IDs<textarea required name="ids" placeholder="Paste one candidate ID per line" /></label>
+      const result = await request<Enrolled[]>(api + "/enrollments", "POST", { candidates });
+      setCreated(result.data.filter((item) => item.temporaryPassword));
+      form.reset();
+    }, "Candidates enrolled. Each one has a personal activation key.");
+  };
+  const regenerate = () => void job.run(() => request(api + "/keys", "POST", { enrollmentIds: selected }), "New keys issued; the old ones no longer work.");
+  const active = rows.filter((row) => row.key);
+  const exportKeys = () => download(exam.title.replace(/[^a-z0-9]+/gi, "-") + "-keys.csv",
+    "Name,Email,Activation key,Status\r\n" + rows.map((row) => [row.name, row.email, row.key ?? "", row.status].map(cell).join(",")).join("\r\n"));
+  const copyKeys = () => void navigator.clipboard.writeText(active.map((row) => `${row.name}\t${row.email}\t${row.key}`).join("\n"))
+    .then(() => job.run(async () => {}, "Keys copied to the clipboard."));
+  return <div className="layout"><section className="panel keys-panel"><div className="section-row"><h2>Candidates and keys</h2>
+    <div className="actions no-print">
+      <button disabled={!active.length} onClick={copyKeys}>Copy keys</button>
+      <button disabled={!rows.length} onClick={exportKeys}>Download CSV</button>
+      <button disabled={!rows.length} onClick={() => window.print()}>Print</button>
+      <button disabled={!selected.length || job.busy} onClick={regenerate}>Regenerate selected</button></div></div>
+    <p className="muted no-print">Every enrolled candidate gets a personal key automatically. The key unlocks the exam and seeds that candidate&apos;s question order.</p>
+    <Feedback error={job.error || keys.error} note={job.note} pending={keys.pending} />
+    {exam.status !== "published" ? <p className="empty">Publish the exam to enrol candidates and issue keys.</p> :
+    <DataTable headers={[
+      <input key="all" type="checkbox" aria-label="Select all candidates" checked={rows.length > 0 && selected.length === rows.length}
+        onChange={(event) => setSelected(event.target.checked ? rows.map((row) => row.enrollmentId) : [])} /> as unknown as string,
+      "Candidate", "Activation key", "Key status"]} rows={rows.map((row) => [
+      <input key="select" type="checkbox" aria-label={"Select " + row.name} checked={selected.includes(row.enrollmentId)}
+        onChange={(event) => setSelected((current) => event.target.checked ? [...current, row.enrollmentId] : current.filter((value) => value !== row.enrollmentId))} />,
+      <span key="name">{row.name}{row.isExternal && <span className="pill external">External</span>}<small>{row.email}</small></span>,
+      row.key ? <code key="key" className="key">{row.key}</code> : <span key="key" className="muted">{row.status === "used" ? "Used to start" : row.hint ? `…${row.hint}` : "—"}</span>,
+      <span key="status"><Status value={row.status} />{row.failedTries ? <small>{row.failedTries} wrong {row.failedTries === 1 ? "try" : "tries"}</small> : null}</span>,
+    ])} />}
+    {created.length > 0 && <details open className="notice"><summary>New candidate accounts (share these temporary passwords now)</summary>
+      <DataTable headers={["Email", "Temporary password", "Activation key"]} rows={created.map((item) => [
+        <span key="email">{item.email}{item.isExternal && <span className="pill external">External</span>}</span>,
+        <code key="pw">{item.temporaryPassword}</code>, <code key="key">{item.key ?? "—"}</code>])} /></details>}
+  </section><section className="panel no-print"><h2>Enrol candidates</h2>
+    <form onSubmit={enroll}><label>Candidate emails<textarea required name="people" placeholder={"student1@umt.edu.pk\nstudent2@umt.edu.pk"} />
+      <small>One per line. Unknown emails get a candidate account and a temporary password.</small></label>
+      <label className="check"><input type="checkbox" name="external" />Invite addresses outside the institution as external users</label>
       <label>Time multiplier<input type="number" name="multiplier" required min="1" max="2" step=".05" defaultValue="1" /></label>
       <label className="check"><input type="checkbox" name="paste" />Allow paste accommodation</label>
-      <button className="primary" disabled={job.busy || exam.status !== "published"}>Enroll candidates</button></form>
+      <button className="primary" disabled={job.busy || exam.status !== "published"}>Enrol and issue keys</button></form>
       {exam.enrollments.length > 0 && <details><summary>Camera exception</summary><form onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
