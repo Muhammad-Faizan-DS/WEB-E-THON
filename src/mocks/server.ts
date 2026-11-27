@@ -18,7 +18,7 @@ import type {
 } from "@/contracts";
 import { DEFAULT_PREFERENCES } from "@/contracts";
 import { countBySeverity, groupIncidents, type StoredObservation } from "@/server/incidents/group";
-import { DEMO_PASSWORD, EXAMS, PUBLISHED_SCORES, SIMULATED, STAT_Q1_QUESTION_COUNT, USERS, type MockExam, type MockUser } from "./fixtures";
+import { DEMO_PASSWORD, EXAMS, PUBLISHED_SCORES, SIMULATED, STAT_Q1_QUESTION_COUNT, USERS, type MockExam, type MockQuestion, type MockUser } from "./fixtures";
 
 const KEY = "mock:db:v2";
 const GRACE_MS = 2000;
@@ -80,9 +80,18 @@ const adm = (db: MDb): MAdmin => ((db as MDb & { admin?: MAdmin }).admin ??= { d
 const uid = () => crypto.randomUUID();
 const iso = (ms: number) => new Date(ms).toISOString();
 
+/** Exams examiners create in this browser live in the mock DB and join the fixture list on every load. */
+function mergeCustomExams(db: MDb) {
+  for (const e of (db as MDb & { customExams?: MockExam[] }).customExams ?? []) {
+    const i = EXAMS.findIndex((x) => x.id === e.id);
+    if (i < 0) EXAMS.push(e);
+    else EXAMS[i] = e;
+  }
+}
+
 function load(): MDb {
   const raw = typeof localStorage !== "undefined" ? localStorage.getItem(KEY) : null;
-  if (raw) return JSON.parse(raw) as MDb;
+  if (raw) { const db = JSON.parse(raw) as MDb; mergeCustomExams(db); return db; }
   const db: MDb = { epoch: Date.now(), session: null, prefs: {}, attempts: [], announcements: [], reattemptGranted: {}, reviews: {} };
   seedSimulated(db);
   save(db);
@@ -552,6 +561,49 @@ on("POST", "/api/attempts/:id/requests", ([id], b, db) => {
 });
 
 // ---------- examiner ----------
+// ---------- authoring: create an exam (draft or published) with enrolment ----------
+on("GET", "/api/candidates", (_p, _b, db) => {
+  const u = me(db)!;
+  if (u.role === "candidate") return fail(403, "FORBIDDEN", "Examiners only.");
+  return ok({ candidates: USERS.filter((x) => x.role === "candidate" && x.isActive && !adm(db).disabled.includes(x.id)).map((x) => ({ id: x.id, name: x.name, email: x.email, studentId: x.studentId ?? null })) });
+});
+on("POST", "/api/exams", (_p, b, db) => {
+  const u = me(db)!;
+  if (u.role === "candidate") return fail(403, "FORBIDDEN", "Examiners only.");
+  type QIn = { type: "single" | "multi" | "written"; topic: string; prompt: string; marks: number; options?: string[]; correct?: number[]; multiRule?: "exact" | "partial" };
+  const title = String(b.title ?? "").trim(); const code = String(b.code ?? "").trim().toUpperCase();
+  const qs = (Array.isArray(b.questions) ? b.questions : []) as QIn[];
+  const durationMin = Number(b.durationMin); const opensInMin = Number(b.opensInMin ?? 0); const openForMin = Number(b.openForMin ?? 1440);
+  if (title.length < 3 || code.length < 2 || !(durationMin >= 1) || !(openForMin >= durationMin)) return fail(422, "VALIDATION", "Check the title, code, duration and window.");
+  if (EXAMS.some((e) => e.code === code)) return fail(409, "CONFLICT", `The code ${code} is already used by another exam.`, { fields: { code: "Already used" } });
+  if (b.publish && qs.length === 0) return fail(422, "VALIDATION", "Add at least one question before publishing.");
+  const questions: MockQuestion[] = qs.map((q) => {
+    const options = q.type === "written" ? undefined : (q.options ?? []).map((label) => ({ id: uid(), label: String(label) }));
+    return {
+      id: uid(), type: q.type, topic: String(q.topic || "General"), prompt: String(q.prompt), marks: Math.max(1, Number(q.marks) || 1),
+      options, key: options ? (q.correct ?? []).map((i) => options[i]?.id).filter(Boolean) as string[] : undefined,
+      multiRule: q.type === "multi" ? (q.multiRule === "partial" ? "partial" : "exact") : undefined,
+    };
+  });
+  const sinceEpoch = (Date.now() - db.epoch) / 60000;
+  const e: MockExam = {
+    id: uid(), code, title, ownerId: u.id, status: b.publish ? "published" : "draft",
+    opensOffsetMin: sinceEpoch + Math.max(0, opensInMin) - 0.05, closesOffsetMin: sinceEpoch + Math.max(0, opensInMin) + openForMin,
+    durationMin, totalMarks: questions.reduce((s, q) => s + q.marks, 0), instructions: String(b.instructions ?? "").trim() || "Answer every question. The timer is kept by the server.",
+    settings: {
+      shuffleQuestions: false, shuffleOptions: true, pastePolicy: b.pastePolicy === "allow" || b.pastePolicy === "log" ? b.pastePolicy : "block",
+      fullscreenRequired: !!b.fullscreenRequired, allowMobile: true, maxOpens: 3, maxReattempts: 1, showBreakdown: true, cameraCheck: "off",
+    },
+    questions, enrolled: (Array.isArray(b.enrolled) ? b.enrolled : []).map(String).filter((id: string) => USERS.some((x) => x.id === id && x.role === "candidate")),
+    resultsPublished: false,
+  };
+  const store = db as MDb & { customExams?: MockExam[] };
+  (store.customExams ??= []).push(e);
+  mergeCustomExams(db);
+  adm(db).audit.push({ id: uid(), at: iso(Date.now()), by: u.email, action: b.publish ? "Published exam" : "Saved exam draft", target: `${title} (${code})`, note: `${questions.length} questions · ${e.enrolled.length} enrolled` });
+  return ok({ examId: e.id, status: e.status }, 201);
+});
+
 on("GET", "/api/exams", (_p, _b, db) => {
   const u = me(db)!;
   if (u.role === "candidate") return fail(403, "FORBIDDEN", "Examiners only.");
@@ -735,10 +787,19 @@ on("POST", "/api/attempts/:id/messages", ([id], b, db) => {
   const kind = b.kind === "reminder" ? "reminder" : "message";
   const now = iso(Date.now());
   const P = px(db);
-  P.messages.filter((m) => m.attemptId === a.id && m.kind === "help" && !m.resolvedAt).forEach((m) => { m.resolvedAt = now; });
+  // a reply (or a reminder) never closes a help request on its own; the examiner resolves each one explicitly
   const m: MMessage = { id: uid(), examId: a.examId, attemptId: a.id, from: "examiner", kind, category: null, body, createdAt: now, by: me(db)!.name, resolvedAt: null };
   P.messages.push(m);
   return ok(m, 201);
+});
+
+on("POST", "/api/attempts/:id/help/:msgId/resolve", ([id, msgId], _b, db) => {
+  const a = examinerAttempt(db, id);
+  if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
+  const m = px(db).messages.find((x) => x.id === msgId && x.attemptId === a.id && x.kind === "help");
+  if (!m) return fail(404, "NOT_FOUND", "Help request not found.");
+  m.resolvedAt ??= iso(Date.now());
+  return ok(m);
 });
 
 function extend(db: MDb, a: MAttempt, minutes: number) {

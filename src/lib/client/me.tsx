@@ -14,6 +14,10 @@ export const ROLE_HOME: Record<Role, string> = { admin: "/admin", examiner: "/ex
 export function MeProvider({ role, children, fallback }: { role: Role | Role[]; children: React.ReactNode; fallback: React.ReactNode }) {
   const router = useRouter();
   const { setTheme } = useTheme();
+  // next-themes gives setTheme a new identity when the theme changes; reading it through a ref keeps the
+  // load effect from re-running and snapping the theme back to the saved one after every toggle
+  const setThemeRef = React.useRef(setTheme);
+  React.useEffect(() => { setThemeRef.current = setTheme; }, [setTheme]);
   const [me, setMe] = React.useState<Me | null>(null);
   const roles = Array.isArray(role) ? role : [role];
   const roleKey = roles.join(",");
@@ -25,13 +29,13 @@ export function MeProvider({ role, children, fallback }: { role: Role | Role[]; 
         if (!alive) return;
         if (!roleKey.split(",").includes(m.role)) { router.replace(ROLE_HOME[m.role]); return; }
         setMe(m);
-        if (m.role === "candidate") setTheme(m.preferences.theme);
+        if (m.role === "candidate") setThemeRef.current(m.preferences.theme);
         document.documentElement.classList.toggle("reduce-motion", m.preferences.reduceMotion);
       },
       () => router.replace(`/login?next=${encodeURIComponent(location.pathname)}`),
     );
     return () => { alive = false; };
-  }, [roleKey, router, setTheme]);
+  }, [roleKey, router]);
 
   const value = React.useMemo<MeCtx | null>(() => me && {
     me,

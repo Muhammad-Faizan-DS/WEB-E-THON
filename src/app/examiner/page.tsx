@@ -1,7 +1,8 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Flag, Radio } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { AlertTriangle, Flag, Hand, Plus, Radio } from "lucide-react";
 import { ExaminerDashboard, type ExaminerExamRow } from "@/contracts";
 import { api } from "@/lib/client/api";
 import { PageHeader } from "@/components/common/app-shell";
@@ -17,6 +18,7 @@ export default function ExaminerHome() {
   const [data, setData] = React.useState<ExaminerDashboard | null>(null);
   const [error, setError] = React.useState(false);
   const [reporting, setReporting] = React.useState(false);
+  const router = useRouter();
 
   React.useEffect(() => {
     const load = () => api.get("/api/exams", ExaminerDashboard).then((d) => { setData(d); setError(false); }, () => setError(true));
@@ -26,22 +28,31 @@ export default function ExaminerHome() {
   }, []);
 
   const ex = data?.exams ?? [];
-  const tiles: { label: string; n: number; alert?: boolean }[] = [
+  const firstWith = (k: "pendingRequests" | "priorityIncidents") => ex.find((e) => e[k] > 0) ?? ex.find((e) => e.phase === "ongoing") ?? ex[0];
+  const tiles: { label: string; n: number; alert?: boolean; go?: string }[] = [
     { label: "Live now", n: ex.filter((e) => e.phase === "ongoing").length },
     { label: "Scheduled", n: ex.filter((e) => e.phase === "scheduled").length },
     { label: "Drafts", n: ex.filter((e) => e.phase === "draft").length },
     { label: "Awaiting grading", n: ex.reduce((s, e) => s + e.awaitingGrading, 0) },
-    { label: "Pending requests", n: ex.reduce((s, e) => s + e.pendingRequests, 0), alert: true },
-    { label: "Unreviewed priority", n: ex.reduce((s, e) => s + e.priorityIncidents, 0), alert: true },
+    { label: "Pending requests", n: ex.reduce((s, e) => s + e.pendingRequests, 0), alert: true, go: firstWith("pendingRequests") && `/examiner/exams/${firstWith("pendingRequests")!.examId}/requests` },
+    { label: "Unreviewed priority", n: ex.reduce((s, e) => s + e.priorityIncidents, 0), alert: true, go: firstWith("priorityIncidents") && `/examiner/exams/${firstWith("priorityIncidents")!.examId}/monitor` },
   ];
 
   return (
     <>
       <PageHeader title="Dashboard" description="What needs your attention across your exams."
-        actions={<Button variant="outline" size="sm" onClick={() => setReporting(true)}><Flag /> Report an issue</Button>} />
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setReporting(true)}><Flag /> Report an issue</Button>
+            <Button asChild size="sm"><Link href="/examiner/exams/new"><Plus /> New exam</Link></Button>
+          </div>
+        } />
       <ReportIssueDialog open={reporting} onOpenChange={setReporting} />
       {error && <Alert tone="warning" className="mb-4">Couldn&apos;t refresh. Showing the last data loaded.</Alert>}
-      <StatStrip className="mb-10" items={tiles.map((t) => ({ label: t.label, value: data ? t.n : "–", tone: data && t.n > 0 && t.alert ? "text-danger" : undefined }))} />
+      <StatStrip className="mb-10" items={tiles.map((t) => ({
+        label: t.go ? `${t.label} →` : t.label, value: data ? t.n : "–", tone: data && t.n > 0 && t.alert ? "text-danger" : undefined,
+        onClick: t.go && data ? () => router.push(t.go!) : undefined,
+      }))} />
       <h2 className="mb-3 text-base font-semibold">Your exams</h2>
       {!data ? (
         <div className="space-y-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-20" />)}</div>
@@ -76,6 +87,11 @@ function ExamRow({ e }: { e: ExaminerExamRow }) {
       </dl>
       <div className="flex gap-2">
         {e.phase === "ongoing" && <Button asChild size="sm"><Link href={`/examiner/exams/${e.examId}/monitor`}><Radio /> Monitor</Link></Button>}
+        {e.phase !== "draft" && (
+          <Button asChild size="sm" variant={e.pendingRequests > 0 ? "outline" : "ghost"}>
+            <Link href={`/examiner/exams/${e.examId}/requests`}><Hand /> Requests{e.pendingRequests > 0 && <span className="num"> ({e.pendingRequests})</span>}</Link>
+          </Button>
+        )}
         <Button asChild size="sm" variant="ghost"><Link href={`/examiner/exams/${e.examId}`}>Open</Link></Button>
       </div>
     </li>

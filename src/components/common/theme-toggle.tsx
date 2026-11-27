@@ -10,7 +10,7 @@ type DocWithVT = Document & { startViewTransition?: (cb: () => void) => { ready:
  * circle (about 500 ms); otherwise, or with reduced motion, it switches instantly. next-themes keeps the
  * saved choice.
  */
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({ className, onChange }: { className?: string; onChange?: (theme: "light" | "dark") => void }) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -27,6 +27,7 @@ export function ThemeToggle({ className }: { className?: string }) {
       document.documentElement.classList.toggle("dark", next === "dark");
       document.documentElement.style.colorScheme = next;
       setTheme(next);
+      onChange?.(next); // signed in: also save it to the account, so it sticks across pages and devices
     };
     if (!doc.startViewTransition || reduce) { apply(); return; }
     const r = e.currentTarget.getBoundingClientRect();

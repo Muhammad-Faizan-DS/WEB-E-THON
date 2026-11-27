@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 export interface NavItem { href: string; label: string }
 
 export function AppShell({ nav, children }: { nav: NavItem[]; children: React.ReactNode }) {
-  const { me, logout } = useMe();
+  const { me, logout, setPreferences } = useMe();
   const path = usePathname();
   return (
     <div className="min-h-dvh">
@@ -39,7 +39,7 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
             <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-xs font-semibold" aria-hidden>
               {me.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
             </span>
-            <ThemeToggle className="size-9" />
+            <ThemeToggle className="size-9" onChange={(theme) => void setPreferences({ theme })} />
             <Button variant="ghost" size="sm" onClick={logout} aria-label="Sign out"><LogOut /></Button>
           </div>
         </div>

@@ -64,10 +64,16 @@ export function CandidatePanel({
               <h3 id="help-h" className="flex items-center gap-2 text-sm font-semibold"><Hand className="size-4 text-flag" aria-hidden />Asking for help</h3>
               <ul className="mt-2 space-y-2 text-sm">
                 {openHelp.map((m) => (
-                  <li key={m.id}><span className="font-medium">{m.category ? HELP_LABEL[m.category] : "Help"}</span> · <span className="num text-muted-foreground">{fmtTime(m.createdAt, false)}</span><p className="prose-read mt-0.5 text-[15px]">“{m.body}”</p></li>
+                  <li key={m.id} className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="font-medium">{m.category ? HELP_LABEL[m.category] : "Help"}</span> · <span className="num text-muted-foreground">{fmtTime(m.createdAt, false)}</span>
+                      <p className="prose-read mt-0.5 text-[15px]">“{m.body}”</p>
+                    </div>
+                    <ResolveHelp attemptId={row.attemptId!} msgId={m.id} onDone={onChanged} />
+                  </li>
                 ))}
               </ul>
-              <p className="mt-2 text-xs text-muted-foreground">Replying below marks these as answered. A break never pauses the clock; add time if it&apos;s fair.</p>
+              <p className="mt-2 text-xs text-muted-foreground">Replying doesn&apos;t close a request; mark each one resolved when it&apos;s handled. A break never pauses the clock; add time if it&apos;s fair.</p>
             </section>
           )}
 
@@ -95,6 +101,18 @@ export function CandidatePanel({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function ResolveHelp({ attemptId, msgId, onDone }: { attemptId: string; msgId: string; onDone: () => void }) {
+  const [busy, setBusy] = React.useState(false);
+  return (
+    <Button size="sm" variant="outline" className="shrink-0" disabled={busy} onClick={async () => {
+      setBusy(true);
+      try { await api.post(`/api/attempts/${attemptId}/help/${msgId}/resolve`); toast.success("Marked as resolved"); onDone(); }
+      catch (e) { toast.error("Couldn't mark it resolved", { description: (e as ApiError).message }); }
+      finally { setBusy(false); }
+    }}>Mark resolved</Button>
   );
 }
 

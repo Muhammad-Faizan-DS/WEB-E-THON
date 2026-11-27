@@ -44,6 +44,7 @@ export default function ReceiptPage() {
 
   const r = data.receipt;
   const expired = r.reason === "expiry";
+  const closedByExaminer = r.reason === "examiner_close";
   return (
     <div className="min-h-dvh bg-background">
       <header className="border-b bg-surface"><div className="mx-auto flex h-14 max-w-2xl items-center px-4"><Logo /></div></header>
@@ -52,7 +53,7 @@ export default function ReceiptPage() {
           <div className="mx-auto grid size-14 place-items-center rounded-full border border-success/30 bg-success-soft">
             {expired ? <Hourglass className="size-7 text-success" aria-hidden /> : <CheckCircle2 className="size-7 text-success" aria-hidden />}
           </div>
-          <h1 className="mt-5 text-[26px] font-semibold tracking-[-0.01em]">{expired ? "Time's up. Your exam was submitted" : "Your exam has been submitted"}</h1>
+          <h1 className="mt-5 text-[26px] font-semibold tracking-[-0.01em]">{expired ? "Time's up. Your exam was submitted" : closedByExaminer ? "Your examiner ended the exam. Your answers were submitted" : "Your exam has been submitted"}</h1>
           <p className="mt-1.5 text-muted-foreground">{r.examTitle}</p>
         </div>
 
@@ -66,7 +67,7 @@ export default function ReceiptPage() {
           </div>
           <dl className="divide-y text-sm">
             <Item label="Received by the server" value={`${fmtDateTime(r.finalizedAt)} · ${fmtTime(r.finalizedAt)}`} />
-            <Item label="How it ended" value={expired ? "Submitted automatically at the deadline" : "Submitted by you"} />
+            <Item label="How it ended" value={expired ? "Submitted automatically at the deadline" : closedByExaminer ? "Ended early by your examiner" : "Submitted by you"} />
             <Item label="Answers accepted" value={`${r.acceptedCount} of ${r.questionCount}`} />
             <Item label="Results" value={r.resultsStatus === "published" ? "Published" : "Pending, your examiner publishes them"} />
           </dl>
