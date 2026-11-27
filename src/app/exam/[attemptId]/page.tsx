@@ -6,6 +6,7 @@ import {
   ArrowLeft, ArrowRight, CloudOff, Eraser, EyeOff, Flag, Hourglass, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send,
 } from "lucide-react";
 import { useExamEngine } from "@/lib/client/exam-engine";
+import { useCameraPresence } from "@/lib/client/use-camera-presence";
 import { useMe } from "@/lib/client/me";
 import { useTick } from "@/lib/client/use-server-clock";
 import { useMedia } from "@/lib/client/use-media";
@@ -104,6 +105,13 @@ export default function WorkspacePage() {
   // ---------- browser observations (hints only, PRD §8) ----------
   const policy = ex.attempt?.policy;
   const { logEvent, toggleFlag } = ex;
+  // optional camera presence check: hides questions and notes an observation; never ends the attempt
+  const cameraOn = policy?.cameraCheck === "presence" && ex.phase === "ready" && ex.status === "in_progress";
+  const camera = useCameraPresence(
+    cameraOn,
+    React.useCallback(() => logEvent("face_absent_10s", { seconds: 20 }), [logEvent]),
+    React.useCallback(() => logEvent("face_absent_10s", { camera: "denied" }), [logEvent]),
+  );
   React.useEffect(() => {
     if (ex.phase !== "ready") return;
     const vis = () => { logEvent(document.hidden ? "visibility_hidden" : "visibility_visible"); setAway(document.hidden || !document.hasFocus()); };
@@ -168,6 +176,7 @@ export default function WorkspacePage() {
   let main: React.ReactNode;
   if (!ex.activeSession) main = <SupersededPanel onTakeOver={ex.takeOver} />;
   else if (locked) main = <LockedPanel attemptId={attemptId} request={ex.pendingRequest} onSent={ex.refreshStatus} />;
+  else if (camera === "absent" && !closed && !timeUp) main = <CameraShield />;
   else if (away && !closed && !timeUp) main = <AwayShield onBack={() => { window.focus(); setAway(false); }} />;
   else if (timeUp && !closed) main = <TimeUpPanel connection={ex.connection} pendingCount={ex.pendingCount} submitting={ex.submitting} onRetry={() => void ex.submit()} />;
   else if (needFullscreen) main = <FullscreenGate onEnter={() => enterFullscreen()} />;
@@ -211,6 +220,7 @@ export default function WorkspacePage() {
             </div>
           )}
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {cameraOn && <span className="hidden items-center gap-1.5 text-[12px] text-muted-foreground lg:inline-flex"><span className={cn("size-2 rounded-full", camera === "ok" ? "bg-success" : camera === "absent" ? "bg-danger" : "bg-muted-foreground")} />Camera {camera === "ok" ? "on" : camera === "absent" ? "can't see you" : camera === "denied" ? "blocked" : "starting"}</span>}
             <SaveStatus connection={ex.connection} pendingCount={ex.pendingCount} rejectedCount={ex.rejectedCount} saving={false} lastAckAt={ex.lastAckAt} deviceSaveFailed={ex.deviceSaveFailed} compact />
             <Button variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={() => setToolsOpen((o) => !o)} aria-pressed={toolsOpen} aria-label={toolsOpen ? "Hide tools" : "Show scratchpad and display tools"}>
               {toolsOpen ? <PanelRightClose /> : <PanelRightOpen />}
@@ -289,6 +299,17 @@ export default function WorkspacePage() {
 
       <SubmitDialog open={confirmOpen} onOpenChange={setConfirmOpen} ex={ex} />
     </div>
+  );
+}
+
+/** Covers the question while the camera presence check can't see the candidate (never ends the exam). */
+function CameraShield() {
+  return (
+    <section role="status" aria-live="polite" className="mx-auto w-full max-w-xl rounded-lg border bg-surface px-6 py-10 text-center sm:px-10">
+      <EyeOff className="mx-auto size-8 text-muted-foreground" aria-hidden />
+      <h2 className="mt-4 text-[20px] font-semibold">The camera can&apos;t see you</h2>
+      <p className="mt-2 text-muted-foreground">Questions are hidden until your face is back in view. Your answers are safe and the timer keeps running. This is noted for your examiner to review; it never changes your marks on its own. No images leave your device.</p>
+    </section>
   );
 }
 

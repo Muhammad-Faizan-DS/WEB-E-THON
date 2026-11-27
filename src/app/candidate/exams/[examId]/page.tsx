@@ -133,6 +133,7 @@ export default function ExamEntryPage() {
               {s.pastePolicy === "log" && <Rule icon={ClipboardX}>You may paste. Pastes are noted by length only, never the text.</Rule>}
               {s.fullscreenRequired && <Rule icon={Maximize}>The exam runs in fullscreen. If you leave it, questions are hidden until you return; the timer keeps running.</Rule>}
               <Rule icon={EyeOff}>Questions are only shown while this exam is the window in front. Switch to another app, tab or window and they are hidden until you come back. Copying question text is turned off.</Rule>
+              {s.cameraCheck === "presence" && <Rule icon={EyeOff}>This exam uses a camera presence check. If your camera can&apos;t see you for 20 seconds, questions hide until it can and it&apos;s noted for your examiner. It runs on your device: no images are stored or sent, and it never ends your exam.</Rule>}
               <Rule icon={ShieldCheck}>Before you start, you confirm your identity once with your student ID and password. The attempt is then tied to you.</Rule>
               <Rule icon={WifiOff}>If your internet drops, keep working. Answers stay on this device and are sent when you reconnect. Only answers that reach the server before the deadline count.</Rule>
               <Rule icon={MonitorSmartphone}>You can open this exam in up to {s.maxOpens} tabs or devices. After that it locks until your examiner unlocks it.</Rule>

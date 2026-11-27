@@ -31,6 +31,7 @@ export default function NewExamPage() {
   const [instructions, setInstructions] = React.useState("");
   const [pastePolicy, setPaste] = React.useState<"block" | "log" | "allow">("block");
   const [fullscreenRequired, setFullscreen] = React.useState(true);
+  const [cameraCheck, setCameraCheck] = React.useState(false);
   const [questions, setQuestions] = React.useState<QuestionDraft[]>([blank("single")]);
   const [candidates, setCandidates] = React.useState<Candidate[] | null>(null);
   const [enrolled, setEnrolled] = React.useState<Set<string>>(new Set());
@@ -55,7 +56,7 @@ export default function NewExamPage() {
   const totalMarks = questions.reduce((s, q) => s + (Number(q.marks) || 0), 0);
 
   async function save(publish: boolean) {
-    const draft = { title, code, durationMin, opensInMin, openForMin, instructions, pastePolicy, fullscreenRequired, questions, enrolled: [...enrolled] };
+    const draft = { title, code, durationMin, opensInMin, openForMin, instructions, pastePolicy, fullscreenRequired, questions, enrolled: [...enrolled], cameraCheck: cameraCheck ? "presence" : "off" };
     const parsed = ExamDraft.safeParse(draft);
     // a draft keeps unfinished work: only the basics must be valid; publishing needs everything
     const issues = parsed.success ? [] : parsed.error.issues.filter((iss) => publish || ["title", "code", "durationMin"].includes(String(iss.path[0])));
@@ -83,7 +84,7 @@ export default function NewExamPage() {
     setProblems([]);
     setBusy(publish ? "publish" : "draft");
     try {
-      const res = await api.post("/api/exams", { ...parsed.data!, publish, draftId }, CreatedExam);
+      const res = await api.post("/api/exams", { ...parsed.data!, cameraCheck: draft.cameraCheck, publish, draftId }, CreatedExam);
       toast.success(publish ? "Exam published" : "Draft saved", { description: publish ? `${enrolled.size} candidate${enrolled.size === 1 ? "" : "s"} can see it on their exams page.` : "You can find it on your dashboard." });
       router.push(`/examiner/exams/${res.examId}`);
     } catch (e) {
@@ -200,6 +201,7 @@ export default function NewExamPage() {
           </div>
         </fieldset>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={fullscreenRequired} onChange={(e) => setFullscreen(e.target.checked)} className="size-4" />Require fullscreen (questions hide while outside it; the timer keeps running)</label>
+        <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={cameraCheck} onChange={(e) => setCameraCheck(e.target.checked)} className="mt-0.5 size-4" /><span>Camera presence check: if the camera can&apos;t see the candidate for 20 s, questions hide until it can and it&apos;s flagged for you. Runs on their device; no images are stored or sent. It never ends the exam.</span></label>
         <p className="text-[13px] text-muted-foreground">Integrity observations are hints for you to review. They never change marks or time on their own.</p>
       </Section>
 

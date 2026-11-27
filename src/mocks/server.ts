@@ -647,7 +647,7 @@ on("POST", "/api/exams", (_p, b, db) => {
     durationMin, totalMarks: questions.reduce((s, q) => s + q.marks, 0), instructions: String(b.instructions ?? "").trim() || "Answer every question. The timer is kept by the server.",
     settings: {
       shuffleQuestions: false, shuffleOptions: true, pastePolicy: b.pastePolicy === "allow" || b.pastePolicy === "log" ? b.pastePolicy : "block",
-      fullscreenRequired: !!b.fullscreenRequired, allowMobile: true, maxOpens: 3, maxReattempts: 1, showBreakdown: true, cameraCheck: "off",
+      fullscreenRequired: !!b.fullscreenRequired, allowMobile: true, maxOpens: 3, maxReattempts: 1, showBreakdown: true, cameraCheck: b.cameraCheck === "presence" ? "presence" : "off",
     },
     questions, enrolled: (Array.isArray(b.enrolled) ? b.enrolled : []).map(String).filter((id: string) => USERS.some((x) => x.id === id && x.role === "candidate")),
     resultsPublished: false,

@@ -146,7 +146,7 @@ Open http://localhost:3000 and use the logins above.
 - **Not built yet:**
   - a grading screen for written answers;
   - question-bank search across exams;
-  - the optional on-device camera presence check (PRD §8, which needs an extra library);
+  - face detection in every browser: the optional camera presence check (examiner toggle in **New exam**) uses the browser's built-in face detector where it exists, and elsewhere checks that the camera stays on and uncovered. After 20 s without that, questions hide and it's flagged for the examiner. It never ends the exam, and no images leave the device;
   - a generated PDF with a public verification page (results use the browser's print-to-PDF);
   - a sandbox preview for examiners.
 
