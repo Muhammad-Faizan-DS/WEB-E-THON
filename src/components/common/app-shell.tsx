@@ -17,7 +17,7 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
   return (
     <div className="min-h-dvh">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
-      <header className="sticky top-0 z-30 border-b bg-background print:static print:border-0">
+      <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-xl backdrop-saturate-150 print:static print:border-0">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <Link href={nav[0]?.href ?? "/"} aria-label="Fairmark home"><Logo /></Link>
           <nav aria-label="Main" className="hidden h-full items-stretch gap-5 sm:flex">
@@ -72,12 +72,16 @@ export function ShellSkeleton() {
 
 export function PageHeader({ title, description, actions }: { title: string; description?: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-      <div className="max-w-2xl">
-        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.01em]">{title}</h1>
-        {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
+    <div className="relative mb-8 overflow-hidden rounded-2xl border bg-surface px-6 py-7 sm:px-8 sm:py-9 print:border-0 print:p-0">
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(55%_120%_at_100%_0%,color-mix(in_oklab,var(--primary)_16%,transparent),transparent_70%),radial-gradient(40%_90%_at_0%_100%,color-mix(in_oklab,#14b8a6_10%,transparent),transparent_70%)] print:hidden" />
+      <div aria-hidden className="pointer-events-none absolute -top-px left-8 h-[3px] w-16 rounded-b-full bg-primary print:hidden" />
+      <div className="relative flex flex-wrap items-end justify-between gap-4">
+        <div className="max-w-2xl">
+          <h1 className="font-display text-[clamp(1.6rem,3vw,2.1rem)] font-semibold leading-tight tracking-[-0.025em]">{title}</h1>
+          {description && <p className="mt-2 text-[15px] text-muted-foreground">{description}</p>}
+        </div>
+        {actions}
       </div>
-      {actions}
     </div>
   );
 }

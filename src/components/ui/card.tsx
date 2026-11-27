@@ -34,7 +34,7 @@ export function StatStrip({ items, className }: { items: { label: string; value:
         const inner = (
           <>
             <Label className="block text-[12px] text-muted-foreground">{it.label}</Label>
-            <Value className={cn("mt-0.5 block font-display text-[22px] font-bold leading-tight tabular-nums", it.tone)}>{it.value}</Value>
+            <Value className={cn("mt-1 block font-display text-[26px] font-semibold leading-tight tracking-[-0.02em] tabular-nums", it.tone)}>{it.value}</Value>
             {it.hint && <Value className="mt-0.5 block text-[12px] text-muted-foreground">{it.hint}</Value>}
           </>
         );
