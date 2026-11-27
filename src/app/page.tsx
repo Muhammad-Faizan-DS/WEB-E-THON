@@ -36,46 +36,52 @@ export default function Home() {
               </Lede>
             </Reveal>
 
-            <div className="mt-16 grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-20">
-              <div>
+            <div className="mt-20">
+              <div className="text-center">
                 <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-semibold tracking-[-0.025em]">How long do I have?</h3>
                 <p className="mt-1 text-[16px] text-muted-foreground">The server keeps the clock, not the device.</p>
-                <Flow
-                  label="Time: the server sets the deadline once; the device clock cannot change it."
-                  nodes={[
-                    { icon: <ServerClock />, label: "Server clock" },
-                    { icon: <ClockLock />, label: "Deadline locked", tone: "brand" },
-                    { icon: <DeviceClock />, label: "Device clock", tone: "no" },
-                  ]}
-                />
-                <ul className="mt-4 divide-y divide-border">
+              </div>
+              <Flow
+                className="mx-auto mt-10 max-w-4xl"
+                label="Time: the server sets the deadline once; the device clock cannot change it."
+                nodes={[
+                  { icon: <ServerClock />, label: "Server clock" },
+                  { icon: <ClockLock />, label: "Deadline locked", tone: "brand" },
+                  { icon: <DeviceClock />, label: "Device clock", tone: "no" },
+                ]}
+              />
+              <div className="mt-14 grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-20">
+                <ul className="divide-y divide-border">
                   <Point title="Set once, when the attempt starts" />
                   <Point title="Nothing on the device can move it" />
                   <Point title="No accidental extra time" />
                 </ul>
+                <Reveal delay={0.1}><ClockDemo /></Reveal>
               </div>
-              <Reveal delay={0.1}><ClockDemo /></Reveal>
             </div>
 
-            <div className="mt-24 grid items-center gap-12 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:gap-20">
-              <div className="lg:order-2">
+            <div className="mt-28">
+              <div className="text-center">
                 <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-semibold tracking-[-0.025em]">Is my answer saved?</h3>
                 <p className="mt-1 text-[16px] text-muted-foreground">Every answer gets a receipt, even offline.</p>
-                <Flow
-                  label="Saving: an answer is saved with a receipt; offline it is kept on the device and sent later."
-                  nodes={[
-                    { icon: <PenWrite />, label: "You answer" },
-                    { icon: <DeviceSave />, label: "Kept on device" },
-                    { icon: <ServerTick />, label: "Server receipt", tone: "brand" },
-                  ]}
-                />
-                <ul className="mt-4 divide-y divide-border">
+              </div>
+              <Flow
+                className="mx-auto mt-10 max-w-4xl"
+                label="Saving: an answer is saved with a receipt; offline it is kept on the device and sent later."
+                nodes={[
+                  { icon: <PenWrite />, label: "You answer" },
+                  { icon: <DeviceSave />, label: "Kept on device" },
+                  { icon: <ServerTick />, label: "Server receipt", tone: "brand" },
+                ]}
+              />
+              <div className="mt-14 grid items-center gap-12 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:gap-20">
+                <ul className="divide-y divide-border lg:order-2">
                   <Point title="Numbered revisions" />
                   <Point title="Kept on the device when offline" />
                   <Point title="Honest about the limits" />
                 </ul>
+                <Reveal className="lg:order-1" delay={0.1}><ReceiptDemo /></Reveal>
               </div>
-              <Reveal className="lg:order-1" delay={0.1}><ReceiptDemo /></Reveal>
             </div>
           </div>
         </section>
@@ -91,7 +97,7 @@ export default function Home() {
               </Lede>
             </Reveal>
             <Flow
-              className="mt-12"
+              className="mx-auto mt-12 max-w-5xl"
               label="Integrity: observations are grouped into one explained incident, a person decides, nothing is automatic."
               nodes={[
                 { icon: <EyeObserve />, label: "3 observations" },

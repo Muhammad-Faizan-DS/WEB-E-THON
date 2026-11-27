@@ -43,7 +43,7 @@ export function Flow({ nodes, label, className }: { nodes: FlowNode[]; label: st
         <figcaption className="sr-only">{label}</figcaption>
         <ol ref={ref} className="relative grid" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
           {/* the route */}
-          <div aria-hidden className="pointer-events-none absolute top-6 h-[2px] -translate-y-1/2 rounded-full bg-border sm:top-7" style={{ left: edge, right: edge }}>
+          <div aria-hidden className="pointer-events-none absolute top-7 h-[2px] -translate-y-1/2 rounded-full bg-border sm:top-8 lg:top-9" style={{ left: edge, right: edge }}>
             <motion.div className="absolute inset-0 origin-left rounded-full bg-primary" style={{ scaleX: fill }} />
             <motion.span
               className="absolute top-1/2 -mt-[6px] -ml-[6px] size-3 rounded-full bg-primary ring-4 ring-background motion-reduce:hidden"
@@ -54,7 +54,7 @@ export function Flow({ nodes, label, className }: { nodes: FlowNode[]; label: st
           </div>
           {/* direction marks between stops */}
           {nodes.slice(0, -1).map((_, i) => (
-            <span key={i} aria-hidden className="pointer-events-none absolute top-6 z-[5] grid size-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-background text-muted-foreground sm:top-7" style={{ left: `${((i + 1) / n) * 100}%` }}>
+            <span key={i} aria-hidden className="pointer-events-none absolute top-7 z-[5] grid size-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-background text-muted-foreground sm:top-8 lg:top-9" style={{ left: `${((i + 1) / n) * 100}%` }}>
               <ChevronRight className="size-3.5" />
             </span>
           ))}
@@ -71,7 +71,7 @@ export function Flow({ nodes, label, className }: { nodes: FlowNode[]; label: st
               <span
                 aria-hidden
                 className={cn(
-                  "relative grid size-12 place-items-center rounded-full border-2 sm:size-14 [&_svg]:size-6 sm:[&_svg]:size-7",
+                  "relative grid size-14 place-items-center rounded-full border-2 sm:size-16 lg:size-[4.5rem] [&_svg]:size-7 sm:[&_svg]:size-8",
                   x.tone === "brand" && "border-primary bg-primary text-primary-foreground [--pg-accent:currentColor]",
                   x.tone === "no" && "border-dashed border-border-strong bg-background text-muted-foreground [--pg-accent:currentColor]",
                   (!x.tone || x.tone === "plain") && "border-border-strong bg-surface text-foreground [--pg-accent:var(--primary)]",
@@ -97,7 +97,7 @@ export function Flow({ nodes, label, className }: { nodes: FlowNode[]; label: st
                   />
                 )}
               </span>
-              <span className={cn("mt-3 text-[12px] leading-tight font-medium text-balance sm:text-[14px]", x.tone === "no" && "text-muted-foreground line-through decoration-danger decoration-2", x.tone === "brand" && "font-semibold")}>
+              <span className={cn("mt-3.5 text-[13px] leading-tight font-medium text-balance sm:text-[15px] lg:text-[16px]", x.tone === "no" && "text-muted-foreground line-through decoration-danger decoration-2", x.tone === "brand" && "font-semibold")}>
                 {x.label}
               </span>
               {x.tone === "no" && <span className="sr-only"> (never happens)</span>}
