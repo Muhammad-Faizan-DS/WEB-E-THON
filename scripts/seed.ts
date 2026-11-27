@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { hash } from "bcryptjs";
 import { and, eq, inArray } from "drizzle-orm";
-import { activationKeys, answers, attempts, attemptQuestions, enrollments, examQuestions, examSections, exams, incidents, questions, reattemptRequests, users } from "../db/schema";
-import { settings, type AnswerResponse, type ExamSettings, type ExamType, type QuestionInput } from "../src/lib/contracts/core";
+import { activationKeys, answers, attempts, attemptQuestions, enrollments, examQuestions, examSections, exams, incidents, orgSettings, questions, reattemptRequests, users } from "../db/schema";
+import { settings, type AnswerResponse, type BlueprintCell, type ExamSettings, type ExamType, type QuestionInput } from "../src/lib/contracts/core";
 import { database, type Tx } from "../src/server/database";
 import { drawPaper, hashKey, newActivationKey, type PaperQuestion } from "../src/server/paper";
 import { objectiveMarksCents } from "../src/server/grading";
@@ -11,6 +11,9 @@ const topics = ["Arithmetic", "Algebra", "Data literacy", "Logic"];
 const difficulties = [1, 2, 3] as const;
 const candidateEmails = Array.from({ length: 40 }, (_, i) => i === 0 ? "candidate@example.test" : `candidate${i + 1}@example.test`);
 const liveTitle = "SecureExam Live Exam";
+const course = "MATH-101";
+/** Invited from outside the institution's domain (PRD §24.2); the .example TLD is reserved, so nothing real is addressed. */
+const externalEmail = "visitor@partner.example";
 
 function makeQuestions(): QuestionInput[] {
   return topics.flatMap((topic, subject) => difficulties.flatMap((difficulty) => Array.from({ length: 5 }, (_, variant) => {
@@ -27,7 +30,7 @@ function makeQuestions(): QuestionInput[] {
   })));
 }
 
-type SeedSection = { title: string; instructions?: string; questions: PaperQuestion[] };
+type SeedSection = { title: string; instructions?: string; blueprint?: BlueprintCell[]; questions: PaperQuestion[] };
 
 async function seedExam(tx: Tx, examinerId: string, people: string[], fields: {
   title: string; instructions: string; startsAt: Date; endsAt: Date; durationMin: number; settings: ExamSettings;
@@ -39,7 +42,7 @@ async function seedExam(tx: Tx, examinerId: string, people: string[], fields: {
     : pool.reduce((sum, question) => sum + question.marks, 0);
   const [exam] = await tx.insert(exams).values({ ...fields, examinerId, totalMarks, status: "published" }).returning();
   const sections = await tx.insert(examSections).values(sectionPlan.map((section, index) => ({
-    examId: exam.id, title: section.title, instructions: section.instructions ?? "", position: index + 1,
+    examId: exam.id, title: section.title, instructions: section.instructions ?? "", position: index + 1, blueprint: section.blueprint ?? [],
   }))).returning();
   await tx.insert(examQuestions).values(sectionPlan.flatMap((section, index) => section.questions.map(({ id, ...question }, position) => ({
     examId: exam.id, questionId: id, sectionId: sections[index].id, position: position + 1,
@@ -55,11 +58,19 @@ async function archivedMidterm(tx: Tx, examiner: string, people: string[], pool:
   const config = settings.parse({ blueprint: selected.map(({ topic, difficulty }) => ({ topic, difficulty, count: 1 })), integrityMode: "standard" });
   const start = new Date(now - 86_400_000);
   const end = new Date(start.getTime() + 3_600_000);
-  const { exam, members } = await seedExam(tx, examiner, people.slice(0, 31), {
+  const cells = (items: PaperQuestion[]) => items.map(({ topic, difficulty }) => ({ topic, difficulty, count: 1 }));
+  const written = selected.filter(({ type }) => type === "written");
+  const { exam, members, sections } = await seedExam(tx, examiner, people.slice(0, 31), {
     title: "Midterm — completed", instructions: "Answer each question. Published results include your instructor feedback.",
-    startsAt: start, endsAt: end, durationMin: 45, settings: config,
-  }, selected);
-  const paper = drawPaper(selected, config);
+    startsAt: start, endsAt: end, durationMin: 45, settings: config, examType: "midterm", course,
+  }, selected, [
+    { title: "A — Multiple choice", instructions: "Choose one answer for each question.", blueprint: cells(matched), questions: matched },
+    { title: "B — Written", instructions: "Explain your reasoning in full sentences.", blueprint: cells(written), questions: written },
+  ]);
+  const inSection = selected.map((question) => ({ ...question, sectionId: sections[question.type === "written" ? 1 : 0].id }));
+  const paper = drawPaper(inSection, config, { sections: sections.map((section) => ({
+    id: section.id, title: section.title, blueprint: section.blueprint, shuffle: section.shuffle, marksPerQuestion: section.marksPerQuestion,
+  })) });
   const seat = new Map(people.map((id, index) => [id, index]));
   const added = await tx.insert(attempts).values(members.map((row) => ({
     examId: exam.id, candidateId: row.candidateId, enrollmentId: row.id, status: (seat.get(row.candidateId) === 30 ? "voided" : "graded") as "voided" | "graded",
@@ -117,12 +128,15 @@ async function seed() {
   try {
     const passwordHash = await hash(password, 12);
     const accounts = [
-      { email: "admin@example.test", name: "Demo Admin", role: "admin" },
-      { email: "examiner@example.test", name: "Demo Examiner", role: "examiner" },
-      { email: "examiner2@example.test", name: "Demo Examiner Two", role: "examiner" },
-      ...candidateEmails.map((email, index) => ({ email, name: `Candidate ${String(index + 1).padStart(2, "0")}`, role: "candidate" as const })),
+      { email: "admin@example.test", name: "Demo Admin", role: "admin", isExternal: false },
+      { email: "examiner@example.test", name: "Demo Examiner", role: "examiner", isExternal: false },
+      { email: "examiner2@example.test", name: "Demo Examiner Two", role: "examiner", isExternal: false },
+      ...candidateEmails.map((email, index) => ({ email, name: `Candidate ${String(index + 1).padStart(2, "0")}`, role: "candidate" as const, isExternal: false })),
+      { email: externalEmail, name: "External Visitor", role: "candidate", isExternal: true },
     ] as const;
     const demoKey = await db.transaction(async (tx) => {
+      await tx.insert(orgSettings).values({ id: true, name: "SecureExam Demo Institute", allowedDomains: ["example.test"], allowExternalInvites: true })
+        .onConflictDoUpdate({ target: orgSettings.id, set: { name: "SecureExam Demo Institute", allowedDomains: ["example.test"], updatedAt: new Date() } });
       await tx.insert(users).values(accounts.map((account) => ({ ...account, passwordHash }))).onConflictDoNothing();
       const rows = await tx.select({ id: users.id, email: users.email, role: users.role }).from(users)
         .where(inArray(users.email, accounts.map(({ email }) => email)));
@@ -132,7 +146,8 @@ async function seed() {
       const people = candidateEmails.map((email) => byEmail.get(email)!.id);
       const [existing] = await tx.select({ id: exams.id }).from(exams).where(and(eq(exams.examinerId, examiner), eq(exams.title, liveTitle)));
       if (existing) return null;
-      const pool = await tx.insert(questions).values(makeQuestions().map((item) => ({ ...item, ownerId: examiner }))).returning();
+      const pool = await tx.insert(questions).values(makeQuestions().map((item) => ({ ...item, course, ownerId: examiner }))).returning();
+      const visitor = byEmail.get(externalEmail)!.id;
       const now = Date.now();
       await archivedMidterm(tx, examiner, people, pool, now);
       const currentPool = pool.filter((item) => item.topic === "Arithmetic" && item.difficulty === 1);
@@ -140,12 +155,13 @@ async function seed() {
       const demoExams = [
         { title: liveTitle, start: now - 60_000, end: now + 7_200_000, mode: "strict" as const, candidates: people },
         { title: "Arithmetic — upcoming", start: now + 86_400_000, end: now + 93_600_000, mode: "review" as const, candidates: people.slice(0, 5) },
-        { title: "Arithmetic — practice", start: now - 60_000, end: now + 7_200_000, mode: "standard" as const, candidates: people.slice(0, 5) },
+        { title: "Arithmetic — practice", start: now - 60_000, end: now + 7_200_000, mode: "standard" as const, candidates: [...people.slice(0, 5), visitor] },
       ];
       let firstKey = "";
       for (const item of demoExams) {
         const { members } = await seedExam(tx, examiner, item.candidates, {
-          title: item.title, startsAt: new Date(item.start), endsAt: new Date(item.end), durationMin: 30,
+          title: item.title, startsAt: new Date(item.start), endsAt: new Date(item.end), durationMin: 30, course,
+          examType: item.mode === "standard" ? "practice" as const : item.mode === "strict" ? "midterm" as const : "quiz" as const,
           instructions: "Read the instructions and answer each released question before submitting.",
           settings: settings.parse({ blueprint, integrityMode: item.mode, openLimit: 1 }),
         }, currentPool);
