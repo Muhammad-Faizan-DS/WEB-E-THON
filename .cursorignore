@@ -1,48 +1,44 @@
-# Secrets: never let the AI read these
+# Secrets — never expose to AI
 .env
 .env.*
 !.env.example
 *.pem
 *.key
-.vercel/
 
-# Dependencies and build output
+# Dependencies & build output
 node_modules/
 .next/
 out/
-build/
 dist/
+build/
+.vercel/
 .turbo/
-*.tsbuildinfo
-next-env.d.ts
-
-# Test and coverage output
 coverage/
 playwright-report/
 test-results/
-blob-report/
-.playwright-mcp/
 
-# Generated migration snapshots (large; the SQL migrations stay visible)
-drizzle/meta/
-
-# Lockfiles and large or binary files
+# Lockfiles & generated
 pnpm-lock.yaml
 package-lock.json
 yarn.lock
+drizzle/meta/
+*.tsbuildinfo
+next-env.d.ts
+
+# Large / binary assets
+public/models/
+*.task
+*.tflite
+*.wasm
 *.pdf
 *.zip
-*.docx
+*.mp4
+*.webm
 *.png
 *.jpg
 *.jpeg
-*.gif
-*.webp
-*.mp4
-*.wasm
-public/mediapipe/
 
-# Logs and OS files
+# Logs & local data
 *.log
 .DS_Store
-Thumbs.db
+db-backups/
