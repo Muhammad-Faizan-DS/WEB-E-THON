@@ -41,18 +41,17 @@ export default function Home() {
                 <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-semibold tracking-[-0.025em]">How long do I have?</h3>
                 <p className="mt-1 text-[16px] text-muted-foreground">The server keeps the clock, not the device.</p>
                 <Flow
-                  vertical
                   label="Time: the server sets the deadline once; the device clock cannot change it."
                   nodes={[
-                    { icon: <Server />, label: "Server clock starts", sub: "the moment you press Start" },
-                    { icon: <Clock3 />, label: "Deadline fixed once", sub: "start + duration, never past closing", tone: "brand" },
-                    { icon: <MonitorSmartphone />, label: "Device clock", sub: "refresh, new tab or clock change: no effect", tone: "no" },
+                    { icon: <Server />, label: "Server clock" },
+                    { icon: <Clock3 />, label: "Deadline locked", tone: "brand" },
+                    { icon: <MonitorSmartphone />, label: "Device clock", tone: "no" },
                   ]}
                 />
                 <ul className="mt-4 divide-y divide-border">
-                  <Point title="Set once, when the attempt starts">The deadline is the earlier of the window closing and start time plus duration, stored on the server.</Point>
-                  <Point title="Nothing on the device can move it">Refreshing, reconnecting, switching devices or changing the computer&apos;s clock changes nothing.</Point>
-                  <Point title="No accidental extra time">Answers arriving more than two seconds after the deadline are not accepted.</Point>
+                  <Point title="Set once, when the attempt starts" />
+                  <Point title="Nothing on the device can move it" />
+                  <Point title="No accidental extra time" />
                 </ul>
               </div>
               <Reveal delay={0.1}><ClockDemo /></Reveal>
@@ -63,18 +62,17 @@ export default function Home() {
                 <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-semibold tracking-[-0.025em]">Is my answer saved?</h3>
                 <p className="mt-1 text-[16px] text-muted-foreground">Every answer gets a receipt, even offline.</p>
                 <Flow
-                  vertical
                   label="Saving: an answer is saved with a receipt; offline it is kept on the device and sent later."
                   nodes={[
-                    { icon: <PenLine />, label: "You answer", sub: "each edit gets a revision number" },
-                    { icon: <CloudOff />, label: "Connection drops?", sub: "kept on this device, sent on reconnect" },
-                    { icon: <HardDrive />, label: "Server receipt", sub: "“Saved” only when it matches your latest edit", tone: "brand" },
+                    { icon: <PenLine />, label: "You answer" },
+                    { icon: <CloudOff />, label: "Kept on device" },
+                    { icon: <HardDrive />, label: "Server receipt", tone: "brand" },
                   ]}
                 />
                 <ul className="mt-4 divide-y divide-border">
-                  <Point title="Numbered revisions">&ldquo;Saved&rdquo; appears only when the server&apos;s receipt matches your latest revision.</Point>
-                  <Point title="Kept on the device when offline">Work continues during an outage and is sent when the connection returns.</Point>
-                  <Point title="Honest about the limits">Changes that never reached the server before the deadline are listed as not accepted.</Point>
+                  <Point title="Numbered revisions" />
+                  <Point title="Kept on the device when offline" />
+                  <Point title="Honest about the limits" />
                 </ul>
               </div>
               <Reveal className="lg:order-1" delay={0.1}><ReceiptDemo /></Reveal>
@@ -96,10 +94,10 @@ export default function Home() {
               className="mt-12"
               label="Integrity: observations are grouped into one explained incident, a person decides, nothing is automatic."
               nodes={[
-                { icon: <Eye />, label: "3 observations", sub: "page hidden, back, a paste" },
-                { icon: <FileText />, label: "1 explained incident", sub: "in plain words" },
-                { icon: <UserCheck />, label: "A person decides", sub: "dismiss or follow up", tone: "brand" },
-                { icon: <Ban />, label: "Automatic penalty", sub: "never", tone: "no" },
+                { icon: <Eye />, label: "3 observations" },
+                { icon: <FileText />, label: "1 incident" },
+                { icon: <UserCheck />, label: "A person decides", tone: "brand" },
+                { icon: <Ban />, label: "Auto penalty", tone: "no" },
               ]}
             />
             <Reveal><Incidents /></Reveal>

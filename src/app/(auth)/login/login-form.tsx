@@ -29,6 +29,8 @@ export function LoginForm() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [formError, setFormError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
+  // a temporary password from an admin reset can only be exchanged for a new one
+  const [reset, setReset] = React.useState<{ email: string; temp: string } | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,14 +47,17 @@ export function LoginForm() {
       const dest = next && next.startsWith("/") && !next.startsWith("//") ? next : ROLE_HOME[me.role];
       router.replace(dest);
     } catch (err) {
+      if (err instanceof ApiError && (err.code as string) === "PASSWORD_CHANGE_REQUIRED") { setReset({ email: parsed.data.email, temp: parsed.data.password }); setPending(false); return; }
       setFormError(err instanceof ApiError ? (err.isNetwork ? "Can't reach the server. Check your connection and try again." : err.message) : "Something went wrong.");
       setPending(false);
     }
   }
 
+  if (reset) return <ChooseNewPassword email={reset.email} temp={reset.temp} onCancel={() => { setReset(null); setPassword(""); }} onDone={(m) => router.replace(ROLE_HOME[m.role])} />;
+
   return (
     <>
-      <form onSubmit={onSubmit} noValidate className="mt-8 space-y-5">
+      <form method="post" onSubmit={onSubmit} noValidate className="mt-8 space-y-5">
         {formError && <Alert tone="danger">{formError}</Alert>}
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
@@ -89,5 +94,40 @@ export function LoginForm() {
         </section>
       )}
     </>
+  );
+}
+
+function ChooseNewPassword({ email, temp, onCancel, onDone }: { email: string; temp: string; onCancel: () => void; onDone: (m: Me) => void }) {
+  const [pw, setPw] = React.useState("");
+  const [confirm, setConfirm] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [pending, setPending] = React.useState(false);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (pw.length < 8 || !/[A-Za-z]/.test(pw) || !/[0-9]/.test(pw)) { setError("Use at least 8 characters, including a letter and a number."); return; }
+    if (pw === temp) { setError("Choose something different from the temporary password."); return; }
+    if (pw !== confirm) { setError("The two passwords don't match."); return; }
+    setError(null); setPending(true);
+    try { onDone(await api.post("/api/auth/complete-reset", { email, temporaryPassword: temp, newPassword: pw }, Me)); }
+    catch (err) { setError(err instanceof ApiError ? err.message : "Something went wrong."); setPending(false); }
+  }
+  return (
+    <form method="post" onSubmit={submit} noValidate className="mt-8 space-y-5">
+      <Alert tone="info" title="Choose a new password">Your administrator reset the password for <b>{email}</b>. The temporary password works once: set your own now to finish signing in.</Alert>
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <div className="space-y-1.5">
+        <Label htmlFor="new-pw">New password</Label>
+        <Input id="new-pw" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} aria-describedby="new-pw-hint" />
+        <p id="new-pw-hint" className="text-xs text-muted-foreground">At least 8 characters, with a letter and a number.</p>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="confirm-pw">Repeat new password</Label>
+        <Input id="confirm-pw" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      </div>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>Back</Button>
+        <Button type="submit" className="flex-1" disabled={pending}>{pending && <Loader2 className="animate-spin" />} Set password and sign in</Button>
+      </div>
+    </form>
   );
 }

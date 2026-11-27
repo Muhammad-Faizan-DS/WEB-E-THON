@@ -67,15 +67,25 @@ interface MProctor {
   notes: Record<string, string>; // examId -> examiner-only instructions
   closedAt: Record<string, string>; // examId -> when the examiner closed it early
 }
-const px = (db: MDb): MProctor => (db.proctor ??= { messages: [], acks: {}, extensions: [], issues: [], notes: {}, closedAt: {} });
+const px = (db: MDb): MProctor => {
+  // data stored by an earlier build may lack newer fields: fill them in instead of crashing
+  const p = (db.proctor ??= { messages: [], acks: {}, extensions: [], issues: [], notes: {}, closedAt: {} });
+  p.messages ??= []; p.acks ??= {}; p.extensions ??= []; p.issues ??= []; p.notes ??= {}; p.closedAt ??= {};
+  return p;
+};
 
 /** Admin state: disabled accounts, one-time passwords issued by a reset, and the admin audit trail. */
 interface MAdmin {
   disabled: string[];
-  passwords: Record<string, string>; // userId -> temporary password (replaces the demo one)
+  passwords: Record<string, string>; // userId -> one-time temporary password from a reset (must be exchanged)
+  custom?: Record<string, string>; // userId -> password the user chose after a reset
   audit: { id: string; at: string; by: string; action: string; target: string; note: string }[];
 }
-const adm = (db: MDb): MAdmin => ((db as MDb & { admin?: MAdmin }).admin ??= { disabled: [], passwords: {}, audit: [] });
+const adm = (db: MDb): MAdmin => {
+  const a = ((db as MDb & { admin?: MAdmin }).admin ??= { disabled: [], passwords: {}, audit: [] });
+  a.disabled ??= []; a.passwords ??= {}; a.audit ??= []; a.custom ??= {};
+  return a;
+};
 
 const uid = () => crypto.randomUUID();
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -338,12 +348,34 @@ const meDto = (db: MDb, u: MockUser): Me => ({ id: u.id, name: u.name, email: u.
 
 on("POST", "/api/auth/login", (_p, b, db) => {
   const u = USERS.find((x) => x.email === String(b.email ?? "").toLowerCase().trim());
-  if (!u || b.password !== (adm(db).passwords[u.id] ?? DEMO_PASSWORD)) return fail(401, "UNAUTHENTICATED", "Email or password is incorrect.");
-  if (!u.isActive || adm(db).disabled.includes(u.id)) return fail(401, "UNAUTHENTICATED", "This account is disabled. Contact your administrator.");
+  if (!u) return fail(401, "UNAUTHENTICATED", "Email or password is incorrect.");
+  const A = adm(db);
+  const temp = A.passwords[u.id];
+  if (temp) {
+    // after a reset only the temporary password works, and only to choose a new one (it never opens a session)
+    if (b.password !== temp) return fail(401, "UNAUTHENTICATED", "Email or password is incorrect.");
+    if (!u.isActive || A.disabled.includes(u.id)) return fail(401, "UNAUTHENTICATED", "This account is disabled. Contact your administrator.");
+    return fail(409, "PASSWORD_CHANGE_REQUIRED", "This is a temporary password. Choose a new password to finish signing in.");
+  }
+  if (b.password !== (A.custom![u.id] ?? DEMO_PASSWORD)) return fail(401, "UNAUTHENTICATED", "Email or password is incorrect.");
+  if (!u.isActive || A.disabled.includes(u.id)) return fail(401, "UNAUTHENTICATED", "This account is disabled. Contact your administrator.");
   db.session = u.id;
   return ok(meDto(db, u));
 });
 on("POST", "/api/auth/logout", (_p, _b, db) => { db.session = null; return ok({ ok: true }); });
+on("POST", "/api/auth/complete-reset", (_p, b, db) => {
+  const u = USERS.find((x) => x.email === String(b.email ?? "").toLowerCase().trim());
+  const A = adm(db);
+  const temp = u ? A.passwords[u.id] : undefined;
+  if (!u || !temp || b.temporaryPassword !== temp) return fail(401, "UNAUTHENTICATED", "That temporary password is no longer valid. Ask your administrator for a new one.");
+  const next = String(b.newPassword ?? "");
+  if (next.length < 8 || !/[A-Za-z]/.test(next) || !/[0-9]/.test(next) || next === temp) return fail(422, "VALIDATION", "Use at least 8 characters with a letter and a number, different from the temporary password.");
+  A.custom![u.id] = next;
+  delete A.passwords[u.id]; // used once, gone
+  A.audit.push({ id: uid(), at: iso(Date.now()), by: u.email, action: "Completed password reset", target: u.email, note: "Temporary password used once and discarded" });
+  db.session = u.id;
+  return ok(meDto(db, u));
+});
 
 // ---------- admin (accounts and audit log) ----------
 const adminOnly = (db: MDb) => (me(db)?.role === "admin" ? null : fail(403, "FORBIDDEN", "Admins only."));
@@ -920,7 +952,7 @@ export async function mockFetch(method: string, path: string, body?: unknown): P
     if (m !== method) continue;
     const match = url.match(re);
     if (!match) continue;
-    if (!url.startsWith("/api/auth/login") && !me(db)) { save(db); return fail(401, "UNAUTHENTICATED", "Please sign in."); }
+    if (!url.startsWith("/api/auth/login") && !url.startsWith("/api/auth/complete-reset") && !me(db)) { save(db); return fail(401, "UNAUTHENTICATED", "Please sign in."); }
     const res = h(match.slice(1).map(decodeURIComponent), (body ?? {}) as Record<string, unknown>, db);
     save(db);
     return JSON.parse(JSON.stringify(res));

@@ -3,9 +3,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Me, type Preferences, type Role } from "@/contracts";
+import { toast } from "sonner";
 import { api } from "./api";
 
-interface MeCtx { me: Me; setPreferences: (p: Partial<Preferences>) => Promise<void>; logout: () => Promise<void> }
+interface MeCtx { me: Me; setPreferences: (p: Partial<Preferences>) => Promise<boolean>; logout: () => Promise<void> }
 const Ctx = React.createContext<MeCtx | null>(null);
 
 export const ROLE_HOME: Record<Role, string> = { admin: "/admin", examiner: "/examiner", candidate: "/candidate" };
@@ -44,12 +45,21 @@ export function MeProvider({ role, children, fallback }: { role: Role | Role[]; 
       setMe({ ...me, preferences: next });
       if (p.theme) setTheme(p.theme);
       if (p.reduceMotion !== undefined) document.documentElement.classList.toggle("reduce-motion", p.reduceMotion);
-      try { await api.put("/api/me/preferences", next); } catch { /* kept locally; retried on next change */ }
+      try {
+        await api.put("/api/me/preferences", next);
+        return true;
+      } catch {
+        // say so: the change applies on this device, but the account didn't store it
+        toast.warning("Kept on this device only", { description: "We couldn't save this to your account. It will apply here until you sign out." });
+        return false;
+      }
     },
     logout: async () => {
-      try { await api.post("/api/auth/logout"); } finally { router.replace("/login"); }
+      try { await api.post("/api/auth/logout"); } catch { /* still leave: the session is cleared or expires */ }
+      // a full page load, not a client transition: no cached screens survive, and it works in an old tab too
+      window.location.replace(new URL("/login", window.location.origin).href);
     },
-  }, [me, router, setTheme]);
+  }, [me, setTheme]);
 
   if (!value) return <>{fallback}</>;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -40,7 +40,7 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
               {me.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
             </span>
             <ThemeToggle className="size-9" onChange={(theme) => void setPreferences({ theme })} />
-            <Button variant="ghost" size="sm" onClick={logout} aria-label="Sign out"><LogOut /></Button>
+            <Button variant="ghost" size="sm" onClick={logout} aria-label="Sign out"><LogOut /> <span className="hidden md:inline">Sign out</span></Button>
           </div>
         </div>
         {nav.length > 1 && (

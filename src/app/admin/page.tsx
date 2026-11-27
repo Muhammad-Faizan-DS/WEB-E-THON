@@ -44,7 +44,7 @@ export default function AdminAccounts() {
     <>
       <PageHeader
         title="Accounts"
-        description="Everyone who can sign in. Disable an account to block sign-in without deleting its records; reset a password to issue a one-time temporary one."
+        description="Everyone who can sign in. Disable an account to block sign-in without deleting its records; reset a password to issue a temporary one that works once, to choose a new password."
       />
       {error && <Alert tone="danger" title="Couldn't load accounts" className="mb-6">{error}</Alert>}
 
@@ -90,7 +90,7 @@ export default function AdminAccounts() {
                 <p className="font-mono text-[12px] text-muted-foreground">{u.studentId ?? "—"}</p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
                   <Status tone={u.active ? "success" : "neutral"}>{u.active ? "Active" : "Disabled"}</Status>
-                  {u.tempPassword && <span className="text-muted-foreground">Temporary password issued</span>}
+                  {u.tempPassword && <span className="text-muted-foreground">Must choose a new password</span>}
                 </div>
                 <div className="flex flex-wrap gap-2 md:justify-end">
                   <Button variant="outline" size="sm" onClick={() => setResetFor(u)} disabled={u.id === me.id}><KeyRound /> Reset password</Button>
@@ -167,7 +167,7 @@ function ResetDialog({ user, onClose }: { user: AdminUser | null; onClose: () =>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Reset password for {user?.name}?</DialogTitle>
-          <DialogDescription>Their current password stops working straight away. You get a temporary password to pass on privately; it is shown only once.</DialogDescription>
+          <DialogDescription>Their current password stops working straight away. You get a temporary password to pass on privately: it is shown only once, and it works once, only to choose a new password.</DialogDescription>
         </DialogHeader>
         {temp ? (
           <div className="rounded-lg border bg-surface-2 p-4">

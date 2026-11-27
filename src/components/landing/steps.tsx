@@ -47,9 +47,9 @@ function ResultsArt() {
 }
 
 const STEPS = [
-  { n: "01", title: "The examiner builds the exam", body: "Questions from a bank, a time window, rules. One click to publish.", Art: BuildArt },
-  { n: "02", title: "Candidates take it, safely", body: "The server keeps the clock. Every answer is saved, even offline.", Art: TakeArt },
-  { n: "03", title: "Everyone gets clear results", body: "Marked, explained, and verifiable with a code on the PDF.", Art: ResultsArt },
+  { n: "01", title: "The examiner builds the exam", body: "Questions, timing, rules. Publish.", Art: BuildArt },
+  { n: "02", title: "Candidates take it, safely", body: "Server clock. Saved even offline.", Art: TakeArt },
+  { n: "03", title: "Everyone gets clear results", body: "Marked, explained, verifiable.", Art: ResultsArt },
 ];
 
 /**
