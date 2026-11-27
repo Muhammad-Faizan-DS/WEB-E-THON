@@ -1,72 +1,95 @@
 "use client";
 import * as React from "react";
-import { BarChart3, ClipboardCheck, FileUp, KeyRound, LayoutList, Megaphone, NotebookPen, ScrollText, ShieldCheck, Timer, UserCog, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import {
+  AuditLog, CertificateQr, ClipboardMarks, IdTick, ImportRows, IncidentNote, KeyReset, LaptopClock, LivePulse, PaperPencil, PenWrite, ReceiptTick,
+} from "./pictograms";
 
-const ROLES = {
+type Item = { icon: (p: React.SVGProps<SVGSVGElement>) => React.ReactElement; title: string; sub: string };
+const ROLES: Record<"candidate" | "examiner" | "admin", { label: string; icon: Item["icon"]; items: Item[]; mock: "candidate" | "examiner" | "admin" }> = {
   candidate: {
     label: "Candidate",
+    icon: LaptopClock,
     items: [
-      [Timer, "A timer you can trust", "Kept by the server, so refreshing or a new device never changes it."],
-      [NotebookPen, "Answer, flag, take notes", "Single, multiple and written answers, a question navigator and a scratchpad that is never graded."],
-      [ClipboardCheck, "Review, submit, keep a receipt", "See what's unanswered, submit once, and get a receipt of exactly what was accepted."],
-      [ShieldCheck, "Results you can prove", "Published results with feedback, a PDF and a code anyone can verify."],
+      { icon: LaptopClock, title: "A timer you can trust", sub: "Kept by the server" },
+      { icon: PenWrite, title: "Answer, flag, take notes", sub: "Scratchpad is never graded" },
+      { icon: ReceiptTick, title: "Submit, keep a receipt", sub: "Exactly what counted" },
+      { icon: CertificateQr, title: "Results you can prove", sub: "PDF with a verify code" },
     ],
     mock: "candidate",
   },
   examiner: {
     label: "Examiner",
+    icon: ClipboardMarks,
     items: [
-      [LayoutList, "Build from a question bank", "Topics, difficulty, three question types, and CSV or JSON import with a dry run."],
-      [Megaphone, "Monitor live", "Who is in progress, offline, locked or needs review, with announcements to everyone."],
-      [ScrollText, "Read explained incidents", "Observations grouped into plain-language incidents. You decide, and decisions are recorded."],
-      [BarChart3, "Grade and analyse", "Auto-grading, a written-answer queue, and analytics that flag a key that looks wrong."],
+      { icon: PaperPencil, title: "Build and publish", sub: "Three question types" },
+      { icon: LivePulse, title: "Monitor live", sub: "Who needs a decision" },
+      { icon: IncidentNote, title: "Explained incidents", sub: "You decide, it's recorded" },
+      { icon: ClipboardMarks, title: "Grade and analyse", sub: "Flags a key that looks wrong" },
     ],
     mock: "examiner",
   },
   admin: {
     label: "Admin",
+    icon: IdTick,
     items: [
-      [Users, "Manage accounts", "Create, disable and re-enable users and assign one of three roles."],
-      [KeyRound, "Reset access", "Reset passwords without ever seeing them."],
-      [FileUp, "Import candidates", "Bulk import with row-by-row errors before anything is saved."],
-      [UserCog, "Read the audit log", "Every sensitive action is written down with who did it and when."],
+      { icon: IdTick, title: "Manage accounts", sub: "Disable without deleting" },
+      { icon: KeyReset, title: "Reset access", sub: "One-time temporary password" },
+      { icon: ImportRows, title: "Import candidates", sub: "Row errors before saving" },
+      { icon: AuditLog, title: "Read the audit log", sub: "Who did what, and when" },
     ],
     mock: "admin",
   },
-} as const;
+};
 
 type RoleKey = keyof typeof ROLES;
 
-/** Underline tabs, one per role: what that role does, beside a small picture of their screen. */
+/**
+ * One tab per role. Each panel shows what that role does as four pictogram tiles (a few words each),
+ * beside a glass picture of their screen on a soft emerald light.
+ */
 export function Roles() {
   const [tab, setTab] = React.useState<RoleKey>("candidate");
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as RoleKey)} className="mt-12">
-      <TabsList aria-label="Roles" className="gap-8">
-        {(Object.keys(ROLES) as RoleKey[]).map((k) => (
-          <TabsTrigger key={k} value={k} className="h-12 font-display text-[16px] font-semibold">
-            {ROLES[k].label}
-          </TabsTrigger>
-        ))}
+      <TabsList aria-label="Roles" className="mx-auto w-fit gap-2 rounded-xl border-0 bg-surface-2 p-1.5">
+        {(Object.keys(ROLES) as RoleKey[]).map((k) => {
+          const Icon = ROLES[k].icon;
+          return (
+            <TabsTrigger
+              key={k}
+              value={k}
+              className="h-11 gap-2 rounded-lg border-0 px-3 font-display text-[14px] font-semibold sm:px-4 sm:text-[15px] text-muted-foreground [--pg-accent:var(--primary)] data-[state=active]:bg-surface data-[state=active]:text-foreground data-[state=active]:shadow-[0_1px_2px_rgb(0_0_0/0.08)] [&_svg]:size-5"
+            >
+              <span className="hidden sm:inline-flex"><Icon /></span> {ROLES[k].label}
+            </TabsTrigger>
+          );
+        })}
       </TabsList>
       {(Object.keys(ROLES) as RoleKey[]).map((k) => (
-        <TabsContent key={k} value={k} className="mt-10 grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-          <ul className="divide-y divide-border">
-            {ROLES[k].items.map(([Icon, title, body]) => (
-              <li key={title} className="grid grid-cols-[2.5rem_1fr] gap-4 py-5 first:pt-0">
-                <span className="grid size-10 place-items-center rounded-xl bg-primary-soft text-primary">
-                  <Icon className="size-5" aria-hidden />
+        <TabsContent key={k} value={k} className="mt-10 grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-14">
+          <ul className="grid grid-cols-2 gap-3">
+            {ROLES[k].items.map((it, i) => (
+              <li
+                key={it.title}
+                className="flex animate-[rise_0.5s_cubic-bezier(0.22,1,0.36,1)_both] flex-col gap-4 rounded-xl border border-border bg-surface p-5"
+                style={{ animationDelay: `${i * 70}ms` }}
+              >
+                <span aria-hidden className="grid size-14 place-items-center rounded-full border-2 border-border-strong text-foreground [--pg-accent:var(--primary)] [&_svg]:size-7">
+                  <it.icon />
                 </span>
                 <div>
-                  <p className="font-display text-[17px] font-semibold tracking-[-0.01em]">{title}</p>
-                  <p className="mt-1 text-[15px] leading-[1.6] text-muted-foreground">{body}</p>
+                  <p className="font-display text-[16px] leading-tight font-semibold tracking-[-0.01em]">{it.title}</p>
+                  <p className="mt-1 text-[13px] text-muted-foreground">{it.sub}</p>
                 </div>
               </li>
             ))}
           </ul>
-          <RoleMock kind={ROLES[k].mock} />
+          <div className="relative">
+            <div aria-hidden className="pointer-events-none absolute -inset-6 bg-[radial-gradient(45%_50%_at_35%_40%,color-mix(in_oklab,var(--primary)_22%,transparent),transparent_70%),radial-gradient(35%_40%_at_75%_70%,color-mix(in_oklab,#14b8a6_18%,transparent),transparent_70%)]" />
+            <div className="relative"><RoleMock kind={ROLES[k].mock} /></div>
+          </div>
         </TabsContent>
       ))}
     </Tabs>
@@ -75,8 +98,8 @@ export function Roles() {
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <figure className="overflow-hidden rounded-2xl border border-border bg-surface ">
-      <figcaption className="flex items-center justify-between border-b border-border px-5 py-3">
+    <figure className="overflow-hidden rounded-2xl border border-white/70 bg-white/55 backdrop-blur-2xl backdrop-saturate-150 dark:border-white/10 dark:bg-surface/50">
+      <figcaption className="flex items-center justify-between border-b border-foreground/[0.07] px-5 py-3">
         <span className="font-display text-[13px] font-semibold">{title}</span>
         <span className="text-[12px] text-muted-foreground">Sample data</span>
       </figcaption>

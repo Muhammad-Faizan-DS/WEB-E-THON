@@ -85,3 +85,20 @@ export const PersonDecide = (p: P) => (
 export const Gavel = (p: P) => (
   <Svg {...p}><path d="m14 3.5 6.5 6.5M11.5 6l6.5 6.5" /><path d="m12.75 4.75-6 6 6.5 6.5 6-6" /><path d="m9.75 13.75-6 6" /><path d="M13 21h8" /></Svg>
 );
+
+/** a key turning in a ring: reset access */
+export const KeyReset = (p: P) => (
+  <Svg {...p}><circle cx="8" cy="15" r="4.2" /><path d="m11 12 8.5-8.5M16.5 6.5l2 2M14.5 8.5l1.5 1.5" /><path {...A} d="M3.5 6.5A8 8 0 0 1 9 3.2M3.5 6.5V3.5M3.5 6.5h3" /></Svg>
+);
+/** rows arriving into a table, one rejected: bulk import with row checks */
+export const ImportRows = (p: P) => (
+  <Svg {...p}><rect x="3" y="9" width="18" height="12" rx="1.6" /><path d="M3 13h18M3 17h18" /><path {...A} d="M12 2.5v5M9.5 5 12 7.5 14.5 5" /></Svg>
+);
+/** a page with time stamps down the side: the audit log */
+export const AuditLog = (p: P) => (
+  <Svg {...p}><rect x="4" y="3" width="16" height="18" rx="2" /><path {...A} d="M7.5 7.5h.01M7.5 12h.01M7.5 16.5h.01" strokeWidth={2.4} /><path d="M10.5 7.5h6M10.5 12h6M10.5 16.5h4" /></Svg>
+);
+/** a megaphone-free live pulse on a screen: monitoring live */
+export const LivePulse = (p: P) => (
+  <Svg {...p}><rect x="2.5" y="4" width="19" height="13" rx="1.6" /><path d="M8 21h8M12 17v4" /><path {...A} d="M5.5 11h3l1.5-3 2.5 6 1.5-3h4.5" /></Svg>
+);
