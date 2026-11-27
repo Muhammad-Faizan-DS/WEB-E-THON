@@ -21,7 +21,7 @@ const tools: Array<[string, string]> = [
 export function Examiner({ section, examId, attemptId, tab, userId, name }: {
   section?: string; examId?: string; attemptId?: string; tab?: string; userId: string; name: string;
 }) {
-  if (examId && attemptId) return <AttemptWorkspace key={attemptId} attemptId={attemptId} userId={userId} name={name} back={"/examiner/exams/" + examId} sandbox />;
+  if (examId && attemptId) return <AttemptWorkspace key={attemptId} attemptId={attemptId} userId={userId} name={name} back={"/portal/examiner/exams/" + examId} sandbox />;
   if (section === "requests") return <><Breadcrumb current="Re-attempt requests" /><RequestsPanel admin={false} /></>;
   if (section === "disputes") return <DisputesPanel role="examiner" />;
   if (examId === "new") return <ExamBuilder />;
@@ -30,11 +30,11 @@ export function Examiner({ section, examId, attemptId, tab, userId, name }: {
 }
 
 function Breadcrumb({ current }: { current: string }) {
-  return <nav className="exam-crumbs" aria-label="Breadcrumb"><Link href="/examiner">Exams</Link><span aria-hidden="true">/</span><span aria-current="page">{current}</span></nav>;
+  return <nav className="exam-crumbs" aria-label="Breadcrumb"><Link href="/portal/examiner">Exams</Link><span aria-hidden="true">/</span><span aria-current="page">{current}</span></nav>;
 }
 
 function ManageExam({ examId, tab, userId }: { examId: string; tab?: string; userId: string }) {
-  const path = "/examiner/exams/" + examId;
+  const path = "/portal/examiner/exams/" + examId;
   const api = "/api/exams/" + examId;
   const detail = useResource<ExamDetail>("/api/exams?id=" + examId);
   const checklist = useResource<{ canPublish: boolean; issues: string[] }>(api + "/checklist");

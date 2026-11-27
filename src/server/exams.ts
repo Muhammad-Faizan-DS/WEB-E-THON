@@ -236,7 +236,7 @@ export async function enrollCandidates(examinerId: string, examId: string, picks
     const issued = new Map((await createKeys(tx, needKey)).map(({ enrollmentId, key }) => [enrollmentId, key]));
     await audit(tx, actorId, "candidates_enrolled", "exam", examId, { after: { enrollments: rows.length, keysIssued: issued.size } });
     await notify(tx, rows.map(({ candidateId }) => candidateId), { kind: "enrolment", title: `You are enrolled in ${exam.title}`,
-      body: `Opens ${exam.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC.`, link: "/candidate" });
+      body: `Opens ${exam.startsAt.toISOString().slice(0, 16).replace("T", " ")} UTC.`, link: "/portal/candidate" });
     return rows.map((row) => {
       const person = candidates.find(({ id }) => id === row.candidateId)!;
       return { ...row, email: person.email, isExternal: person.isExternal, temporaryPassword: created.get(row.candidateId) ?? null,
@@ -318,9 +318,9 @@ export function removeEnrollment(actor: { id: string; role: string }, examId: st
     await tx.delete(activationKeys).where(eq(activationKeys.enrollmentId, enrollmentId));
     await tx.delete(enrollments).where(eq(enrollments.id, enrollmentId));
     await audit(tx, actor.id, "candidate_removed", "exam", examId, { reason, before: { enrollmentId, candidateId: row.candidateId, name: row.name } });
-    await notify(tx, [row.candidateId], { kind: "enrolment", title: `You were removed from ${exam.title}`, body: reason, link: "/candidate" });
+    await notify(tx, [row.candidateId], { kind: "enrolment", title: `You were removed from ${exam.title}`, body: reason, link: "/portal/candidate" });
     if (actor.role === "examiner") await notify(tx, await activeAdminIds(tx), { kind: "enrolment",
-      title: `Examiner removed ${row.name} from ${exam.title}`, body: reason, link: "/admin/audit" });
+      title: `Examiner removed ${row.name} from ${exam.title}`, body: reason, link: "/portal/admin/audit" });
     return { removed: enrollmentId };
   });
 }

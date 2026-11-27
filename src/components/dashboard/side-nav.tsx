@@ -19,12 +19,12 @@ const icons = {
 type Icon = keyof typeof icons;
 
 const menus: Record<Role, Array<[string, string, Icon]>> = {
-  admin: [["Dashboard", "/admin", "home"], ["Users", "/admin/users", "users"], ["Exam oversight", "/admin/exams", "monitor"],
-    ["Re-attempt requests", "/admin/requests", "inbox"], ["Disputes", "/admin/disputes", "flag"], ["Audit log", "/admin/audit", "log"]],
-  examiner: [["Exams", "/examiner", "home"], ["Create exam", "/examiner/exams/new", "plus"], ["Re-attempt requests", "/examiner/requests", "inbox"],
-    ["Disputes", "/examiner/disputes", "flag"]],
-  candidate: [["My exams", "/candidate", "home"], ["Results", "/candidate/results", "award"], ["Disputes", "/candidate/disputes", "flag"],
-    ["Workspace settings", "/candidate/settings", "settings"]],
+  admin: [["Dashboard", "/portal/admin", "home"], ["Users", "/portal/admin/users", "users"], ["Exam oversight", "/portal/admin/exams", "monitor"],
+    ["Re-attempt requests", "/portal/admin/requests", "inbox"], ["Disputes", "/portal/admin/disputes", "flag"], ["Audit log", "/portal/admin/audit", "log"]],
+  examiner: [["Exams", "/portal/examiner", "home"], ["Create exam", "/portal/examiner/exams/new", "plus"], ["Re-attempt requests", "/portal/examiner/requests", "inbox"],
+    ["Disputes", "/portal/examiner/disputes", "flag"]],
+  candidate: [["My exams", "/portal/candidate", "home"], ["Results", "/portal/candidate/results", "award"], ["Disputes", "/portal/candidate/disputes", "flag"],
+    ["Workspace settings", "/portal/candidate/settings", "settings"]],
 };
 
 export function SvgIcon({ name }: { name: Icon }) {

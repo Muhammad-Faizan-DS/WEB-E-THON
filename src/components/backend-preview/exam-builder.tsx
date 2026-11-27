@@ -75,12 +75,12 @@ export function ExamBuilder({ exam, reload }: { exam?: ExamDetail; reload?: () =
       });
       if (!parsed.success) throw new Error(parsed.error.issues[0].message);
       const result = await request<Exam>("/api/exams", exam ? "PATCH" : "POST", exam ? { id: exam.id, ...parsed.data } : parsed.data);
-      if (!exam) router.push(`/examiner/exams/${result.data.id}?tab=questions`);
+      if (!exam) router.push(`/portal/examiner/exams/${result.data.id}?tab=questions`);
     }, frozen ? "Exam window extended." : "Exam details saved.");
   }
 
   return <div className="exam-form-wrap">
-    {!exam && <div className="exam-crumbs"><Link href="/examiner">Exams</Link><span aria-hidden="true">/</span><span>New exam</span></div>}
+    {!exam && <div className="exam-crumbs"><Link href="/portal/examiner">Exams</Link><span aria-hidden="true">/</span><span>New exam</span></div>}
     {!exam && <div className="heading exam-heading"><div><h1>Create an exam</h1><p>Set up the exam, then write or import its questions.</p></div></div>}
     <form className="panel exam-form" onSubmit={submit}>
       <Feedback error={action.error} note={action.note} />
@@ -127,7 +127,7 @@ export function ExamBuilder({ exam, reload }: { exam?: ExamDetail; reload?: () =
       </>}
       {frozen && <label>Closes at<input type="datetime-local" name="endsAt" required defaultValue={localTime(exam!.endsAt)} /></label>}
       <div className="exam-form-footer"><button className="primary" disabled={action.busy}>{action.busy ? "Saving…" : frozen ? "Extend exam window" : exam ? "Save settings" : "Save draft and add questions"}</button>
-        {!exam && <Link className="button" href="/examiner">Cancel</Link>}</div>
+        {!exam && <Link className="button" href="/portal/examiner">Cancel</Link>}</div>
     </form>
   </div>;
 }

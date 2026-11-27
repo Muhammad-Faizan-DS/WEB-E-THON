@@ -278,7 +278,7 @@ export function raiseHand(actor: Actor, attemptId: string, sessionId: string, ra
     if (raised && !attempt.handRaisedAt) {
       const [exam] = await tx.select({ examinerId: exams.examinerId, title: exams.title }).from(exams).where(eq(exams.id, attempt.examId));
       await notify(tx, [exam.examinerId], { kind: "hand", title: `A candidate asked for help · ${exam.title}`, body: message ?? "",
-        link: `/examiner/exams/${attempt.examId}?tab=monitor` });
+        link: `/portal/examiner/exams/${attempt.examId}?tab=monitor` });
     }
     return { raised, handRaisedAt: raised ? now.toISOString() : null };
   });

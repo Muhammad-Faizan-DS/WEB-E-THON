@@ -26,9 +26,9 @@ export function Candidate({ section, examId, attemptId, userId, name }: { sectio
   const exams = useResource<ExamBuckets>(relevant ? "/api/candidate/exams" : null, relevant ? 15_000 : undefined);
   const data = exams.data;
   const exam = data && [...data.available, ...data.upcoming, ...data.completed].find((item) => item.id === examId);
-  const path = examId ? "/candidate/exams/" + examId : "/candidate";
+  const path = examId ? "/portal/candidate/exams/" + examId : "/portal/candidate";
   if (attemptId && examId && exam) return <AttemptWorkspace key={attemptId} attemptId={attemptId} userId={userId} name={name}
-    back="/candidate" allowPaste={exam.allowPaste} cameraRequired={exam.cameraCheck} title={exam.title} />;
+    back="/portal/candidate" allowPaste={exam.allowPaste} cameraRequired={exam.cameraCheck} title={exam.title} />;
 
   return <>
     {section === "disputes" ? <DisputesPanel role="candidate" /> : section === "results" ? <Results /> : section === "settings" ? <Preferences /> :
@@ -45,7 +45,7 @@ function ExamDashboard({ exams }: { exams: ExamBuckets }) {
       <DataTable headers={["Exam", "Schedule", "Access", "Action"]} rows={exams[bucket].map((item) => [
         <strong key="title">{item.title}</strong>, <div key="time">{formatDate(item.startsAt)}<small>Closes {formatDate(item.endsAt)}</small></div>,
         <Status key="access" value={item.attemptStatus === "in_progress" ? "in_progress" : item.accessStatus} />,
-        <Link key="open" href={"/candidate/exams/" + item.id}>{item.attemptStatus === "in_progress" ? "Resume exam" : "View exam"}</Link>,
+        <Link key="open" href={"/portal/candidate/exams/" + item.id}>{item.attemptStatus === "in_progress" ? "Resume exam" : "View exam"}</Link>,
       ])} />
     </section>)}</div></>;
 }
@@ -56,6 +56,8 @@ function ExamEntry({ exam, path, userId, available }: { exam: CandidateExam; pat
   const [desktop, setDesktop] = useState<boolean>();
   const [cameraReady, setCameraReady] = useState(false);
   const handedOff = useRef(false);
+  // Browser-only check after hydration (server render cannot know the device).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setDesktop(isDesktop()); }, []);
   useEffect(() => () => { if (!handedOff.current) stopCamera(); }, []);
   const reenter = exam.attemptStatus === "in_progress" && exam.attemptId;
@@ -72,7 +74,7 @@ function ExamEntry({ exam, path, userId, available }: { exam: CandidateExam; pat
       router.push(path + "/attempt?attempt=" + result.data.id);
     }, "Exam started.");
   }
-  return <><Heading title={exam.title} note={exam.instructions} action={<Link href="/candidate" className="button">All exams</Link>} />
+  return <><Heading title={exam.title} note={exam.instructions} action={<Link href="/portal/candidate" className="button">All exams</Link>} />
     <Feedback error={action.error} note={action.note} />
     <div className="layout"><section className="panel"><h2>Exam access</h2>
       <dl className="facts"><div><dt>Opens</dt><dd>{formatDate(exam.startsAt)}</dd></div><div><dt>Closes</dt><dd>{formatDate(exam.endsAt)}</dd></div>

@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Fairmark tokens. See DESIGN.md. Cool neutral surfaces, one emerald accent, near-black dark mode.
+ * Status colours appear on dots/icons; text stays ink except for priority/destructive states.
+ */
+:root {
+  --radius: 0.5rem;
+
+  --background: #f6f7f6;
+  --foreground: #0b0f0d;
+  --surface: #ffffff;
+  --surface-2: #eef1ef;
+  --muted-foreground: #4b5551;
+  --subtle-foreground: #636d68;
+  --border: #e4e7e5;
+  --border-strong: #cbd1cd;
+  --input: #cbd1cd;
+  --ring: #047857;
+
+  --primary: #047857;
+  --primary-hover: #065f46;
+  --primary-foreground: #ffffff;
+  --primary-soft: #e6f5ee;
+
+  --secondary: #eef1ef;
+  --secondary-foreground: #0b0f0d;
+
+  --success: #15803d;
+  --success-soft: #e8f5ec;
+  --warning: #a35f00;
+  --warning-dot: #d98e04;
+  --warning-soft: #fbf2df;
+  --danger: #b42318;
+  --danger-soft: #fbebe9;
+  --flag: #6b3fc0;
+  --flag-soft: #f1ecfa;
+  --info: #2a5db0;
+  --info-soft: #eaf0fa;
+
+  --q-size: 1.125rem;
+
+  /* marketing surface: the dark bands of the homepage (fixed, not themed) */
+  --night: #07090a;
+  --night-2: #0e1211;
+  --night-3: #161c1a;
+  --night-line: rgb(255 255 255 / 0.09);
+  --on-night: #edf2ef;
+  --on-night-muted: #9aa6a0;
+  --emerald: #10b981;
+  --emerald-bright: #34d399;
+}
+
+.dark {
+  --background: #07090a;
+  --foreground: #edf2ef;
+  --surface: #0e1211;
+  --surface-2: #161c1a;
+  --muted-foreground: #a3aea8;
+  --subtle-foreground: #86918b;
+  --border: #1f2623;
+  --border-strong: #2e3733;
+  --input: #2e3733;
+  --ring: #34d399;
+
+  --primary: #34d399;
+  --primary-hover: #6ee7b7;
+  --primary-foreground: #04130d;
+  --primary-soft: #0f2a21;
+
+  --secondary: #161c1a;
+  --secondary-foreground: #edf2ef;
+
+  --success: #4ade80;
+  --success-soft: #11251a;
+  --warning: #f0b44c;
+  --warning-dot: #f0b44c;
+  --warning-soft: #2d2412;
+  --danger: #ff8a80;
+  --danger-soft: #2f1716;
+  --flag: #b99cff;
+  --flag-soft: #241c38;
+  --info: #8fb4f0;
+  --info-soft: #17223a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-dot: var(--warning-dot);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-flag: var(--flag);
+  --color-flag-soft: var(--flag-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --color-night: var(--night);
+  --color-night-2: var(--night-2);
+  --color-night-3: var(--night-3);
+  --color-night-line: var(--night-line);
+  --color-on-night: var(--on-night);
+  --color-on-night-muted: var(--on-night-muted);
+  --color-emerald: var(--emerald);
+  --color-emerald-bright: var(--emerald-bright);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+
+  --font-sans: var(--font-poppins);
+  --font-display: var(--font-montserrat);
+  --font-serif: var(--font-source-serif);
+  --font-mono: var(--font-plex-mono);
+
+  --shadow-sm: 0 1px 2px rgb(11 15 13 / 0.06);
+  --shadow-md: 0 2px 6px -1px rgb(11 15 13 / 0.08), 0 1px 2px rgb(11 15 13 / 0.05);
+  --shadow-lg: 0 12px 32px -8px rgb(11 15 13 / 0.18), 0 2px 6px rgb(11 15 13 / 0.06);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    scroll-padding-top: 4.5rem;
+    accent-color: var(--primary);
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-poppins), system-ui, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    caret-color: var(--primary);
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 24%, transparent);
+    color: inherit;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-montserrat), system-ui, sans-serif;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* Reduced motion: keyframe animations and movement collapse; short colour/opacity feedback stays. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-property: color, background-color, border-color, opacity, box-shadow !important;
+      transition-duration: 120ms !important;
+    }
+  }
+  .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-property: color, background-color, border-color, opacity, box-shadow !important;
+    transition-duration: 120ms !important;
+  }
+}
+
+@layer components {
+  /* reading voice: questions, instructions, explanations */
+  .prose-read {
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+  .q-text {
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: var(--q-size);
+    line-height: 1.6;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- homepage ---- */
+  .display {
+    font-family: var(--font-montserrat), system-ui, sans-serif;
+    letter-spacing: -0.035em;
+    line-height: 1;
+  }
+  .on-night ::selection {
+    background: color-mix(in oklab, var(--emerald) 45%, transparent);
+    color: #fff;
+  }
+  .on-night :focus-visible {
+    outline-color: var(--emerald-bright);
+  }
+  .ink-strike {
+    text-decoration-line: line-through;
+    text-decoration-thickness: 2px;
+    text-decoration-color: var(--danger);
+  }
+}
+
+/* homepage entrance: CSS-only so server and client render the same; reduced motion collapses it via the base rule */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes rise-far {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: none; }
+}

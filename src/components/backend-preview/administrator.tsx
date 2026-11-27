@@ -26,7 +26,7 @@ function Oversight({ examId }: { examId?: string }) {
     {examId ? <MonitorPanel examId={examId} readOnly /> : <section className="panel"><Feedback error={exams.error} pending={exams.pending} />
       <DataTable headers={["Exam", "Status", "Actions"]} rows={(exams.data ?? []).map((exam) => [
         exam.title, <Status key="status" value={exam.resultsPublished ? "results_published" : exam.status} />,
-        <Link key="monitor" href={"/admin/exams/" + exam.id}>View monitor</Link>,
+        <Link key="monitor" href={"/portal/admin/exams/" + exam.id}>View monitor</Link>,
       ])} /></section>}</>;
 }
 

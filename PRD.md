@@ -54,6 +54,25 @@ Rulebook also scores: requirement analysis (ambiguities resolved), validations F
 
 **Supported browsers:** Chrome / Edge desktop (latest). Others: banner "Best on Chrome or Edge".
 
+
+### 2.5 Additions from the exam-portal guide (proctor screen)
+
+Source: the owner's reference case study, "Designing a complete Online Examination Portal from scratch" (D. Saxena). Its proctor screen asks for many actions with **no navigation and minimal popups**. Only free ideas that fit §1's philosophy are taken. The frontend for all of them is built on the mock API (`src/lib/client/proctor.ts`, `src/mocks/server.ts`). **Dev A** builds the endpoints in §12 rows 50–59 and moves the shapes into `src/contracts` via a `contract` PR.
+
+| Guide idea | Our version | Owner |
+|---|---|---|
+| Act on one student without leaving the live screen | Monitor **command panel**: a side sheet with status, time left, contact, incidents, private messages, reminders and **extend time** (minutes + required reason, audited, the candidate is told) | B (done on mocks) + A |
+| Filtered views (disconnected, paused, warned, submitted, on break, ended) | Monitor filters: Asking for help, Offline, Locked, Submitted, Time ended (plus the existing ones) | B (done) |
+| Raise hand, chat, break request | Workspace **Ask for help** (question / technical / break + message). The examiner replies privately. A break never pauses the clock; only an audited extension adds time | B (done on mocks) + A |
+| Message all students with acknowledgment status | Announcement **read receipts**: the candidate taps "Got it", and the monitor shows "n of m acknowledged" and who hasn't | B (done on mocks) + A |
+| Extend exam end time, end exam | **Add time for everyone** (audited, announced) and **Close exam now** (existing §12 #19, with a reason) | B (done on mocks) + A |
+| Proctor dashboard: connectivity test, instructions for proctor and student, report issue | Exam page **Before you start**: connectivity test (5 round trips to `/api/ping`), examiner-only notes beside the candidate instructions, **Report an issue** (also on the dashboard) | B (done on mocks) + A |
+| Live webcam streams, AI alerts, photo ID verification | **Not built**: §21 forbids it, images would leave the device, and streaming needs paid infrastructure | — |
+| Pause / resume the whole exam | **Not built**: conflicts with the fixed server deadline (BR-05). "Add time for everyone" covers the need | — |
+| Role switching | **Not built**: one role per account (§2.1) | — |
+
+Rules: messages, reminders and extensions are written to the audit log. Wording stays neutral (rule 8). An extension moves `attempts.deadline` only through an examiner action with a reason; nothing automatic ever adds time.
+
 ---
 
 ## 3. System architecture
@@ -381,6 +400,70 @@ flowchart LR
 - Phones in "desktop mode" detection: `matchMedia('(pointer: coarse)')`, `screen.width < 1024`, iPadOS (`maxTouchPoints > 1` + Macintosh UA), `navigator.userAgentData?.mobile`.
 
 **Honest limits (say in demo):** a web app cannot see other apps, second devices or OS overlays (e.g. Cluely); client blocks can be bypassed with DevTools. Server rules + human-reviewed evidence are the real enforcement; full OS lockdown would need Safe Exam Browser (future work).
+
+**Frontend API table (from the frontend branch; the implemented backend routes are in §12 and the README):**
+
+| # | Method and path | Auth | Purpose | BR |
+|---|---|---|---|---|
+| 1 | `POST /api/auth/login` | P | email + password → session cookie | 21 |
+| 2 | `POST /api/auth/logout` | any | delete session | |
+| 3 | `GET /api/auth/me` | any | current user + role + preferences | 02 |
+| 4 | `GET /api/admin/users` | A | list/filter users | 01 |
+| 5 | `POST /api/admin/users` | A | create user with temp password | 20 |
+| 6 | `PATCH /api/admin/users/{id}` | A | name, role, is_active, reset password | 02 |
+| 7 | `GET /api/admin/audit` | A | audit log, paginated | 21 |
+| 8 | `GET /api/questions` | E | own bank, filter topic/difficulty/type/search | 01 |
+| 9 | `POST /api/questions` | E | create question | 06 |
+| 10 | `PATCH /api/questions/{id}` | E | edit, or archive with `{archived:true}` | 06 |
+| 11 | `POST /api/questions/import?dryRun=` | E | CSV/JSON import | 20 |
+| 12 | `GET /api/exams` | E A | own exams (admin: all) with phase + counts | 03 |
+| 13 | `POST /api/exams` | E | create draft | 03 |
+| 14 | `GET /api/exams/{id}` | E A | detail + checklist | 03 |
+| 15 | `PATCH /api/exams/{id}` | E | edit draft settings | 03 |
+| 16 | `PUT /api/exams/{id}/questions` | E | set assigned questions, order, marks | 03 |
+| 17 | `POST /api/exams/{id}/publish` | E | validate checklist and publish | 03 |
+| 18 | `POST /api/exams/{id}/unpublish` | E | back to draft if no attempts | 03 |
+| 19 | `POST /api/exams/{id}/close` | E | close early with a reason, finalize all live attempts (`examiner_close`), announce | 10 |
+| 20 | `GET /api/exams/{id}/enrollments` | E | list with attempt status | 01 |
+| 21 | `POST /api/exams/{id}/enrollments?dryRun=` | E | enroll by ids/emails, or CSV import | 20 |
+| 22 | `DELETE /api/enrollments/{id}` | E | remove if no attempt | |
+| 23 | `GET /api/me/exams` | C | available / upcoming / completed (sweeps) | 04 11 |
+| 24 | `GET /api/me/exams/{examId}` | C | entry info: instructions, policy, access status | 04 |
+| 25 | `GET /api/me/preferences` · `PUT` | C | workspace preferences | |
+| 26 | `POST /api/exams/{id}/attempts` | C E(sandbox) | start or resume → `AttemptState` | 04–07 12 17 |
+| 27 | `GET /api/attempts/{id}` | C E(sandbox) | full state for resume (sweeps) | 08 11 |
+| 28 | `PUT /api/attempts/{id}/answers/{aqId}` | C | save with revision → `SaveAnswerAck` | 09 |
+| 29 | `PUT /api/attempts/{id}/flags/{aqId}` | C | flag/unflag | 09 |
+| 30 | `POST /api/attempts/{id}/heartbeat` | C | serverNow, status, announcements | 05 11 |
+| 31 | `POST /api/attempts/{id}/events` | C | batch integrity observations | 18 |
+| 32 | `POST /api/attempts/{id}/submit` | C | finalize → `SubmissionReceipt` (idempotent) | 10 |
+| 33 | `DELETE /api/attempts/{id}` | E | discard sandbox attempt only | 17 |
+| 34 | `POST /api/attempts/{id}/requests` | C | request unlock / re-attempt | 13 |
+| 35 | `GET /api/exams/{id}/requests` | E | pending + decided requests | 13 |
+| 36 | `POST /api/requests/{id}/decision` | E | approve/deny with note | 13 |
+| 37 | `GET /api/exams/{id}/monitor` | E | live rows + totals (sweeps) | 11 18 |
+| 38 | `POST /api/exams/{id}/announcements` | E | broadcast | |
+| 39 | `GET /api/attempts/{id}/incidents` | E | grouped incident timeline | 18 |
+| 40 | `PUT /api/attempts/{id}/incidents/{key}/review` | E | dismiss / follow-up + note | 18 |
+| 41 | `GET /api/exams/{id}/grading` | E | written-answer queue (sweeps) | 15 |
+| 42 | `PUT /api/attempts/{id}/grades/{aqId}` | E | manual score + feedback | 15 |
+| 43 | `GET /api/exams/{id}/results` | E | preview table + blockers | 16 |
+| 44 | `POST /api/exams/{id}/results/publish` | E | publish + issue reports | 16 19 |
+| 45 | `GET /api/me/results/{attemptId}` | C | own published result | 16 |
+| 46 | `GET /api/attempts/{id}/report.pdf` | C E A | candidate result PDF | 19 |
+| 47 | `GET /api/exams/{id}/report.pdf` | E A | exam summary PDF | 19 |
+| 48 | `GET /api/verify/{code}` | P | masked verification result | 19 |
+| 49 | `GET /api/exams/{id}/analytics` | E A | exam + question analytics | 17 |
+| 50 | `GET /api/exams/{id}/proctor` | E | messages, extensions, announcement acks, examiner notes, candidate instructions (§2.5) | |
+| 51 | `POST /api/attempts/{id}/messages` | E | private message or neutral reminder to one candidate; resolves open help requests | |
+| 52 | `POST /api/attempts/{id}/extend` | E | add 1–60 min with a reason; audited; candidate notified | 05 |
+| 53 | `POST /api/exams/{id}/extend` | E | add 1–60 min for all live attempts with a reason; audited; announced | 05 |
+| 54 | `PUT /api/exams/{id}/notes` | E | examiner-only instructions | |
+| 55 | `GET /api/attempts/{id}/inbox` | C | own messages + acknowledged announcement ids | |
+| 56 | `POST /api/attempts/{id}/help` | C | help request: category (question/technical/break) + message; max 3 open | |
+| 57 | `POST /api/attempts/{id}/announcements/{annId}/ack` | C | acknowledge an announcement | |
+| 58 | `POST /api/issues` · `GET /api/issues` | E A | report an issue (category + description); admin lists all, examiner own | 21 |
+| 59 | `GET /api/ping` | any | `{ serverNow }` for the connectivity test | |
 
 ---
 

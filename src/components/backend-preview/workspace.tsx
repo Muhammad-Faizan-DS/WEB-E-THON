@@ -319,7 +319,7 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
       <div><dt>Questions answered</dt><dd>{attempt.palette.filter((item) => item.answered).length} of {attempt.totalQuestions}</dd></div>
       <div><dt>Signals for review</dt><dd>{plural(attempt.incidentCount, "incident")}</dd></div></dl>}
     <div className="actions"><Link href={back} className="button primary">Back to my exams</Link>
-      {attempt.result && !sandbox && <Link href="/candidate/results" className="button">View result details</Link>}</div>
+      {attempt.result && !sandbox && <Link href="/portal/candidate/results" className="button">View result details</Link>}</div>
   </section>;
   const sectionOf = (sectionId: string | null | undefined) => attempt?.sections?.find((item) => item.id === sectionId);
   const currentSection = sectionOf(question?.sectionId);
@@ -450,6 +450,8 @@ function Scratchpad({ scope }: { scope: string }) {
   const [erase, setErase] = useState(false);
   const [usable, setUsable] = useState(true);
   useEffect(() => {
+    // localStorage exists only in the browser, so it is read after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     try { setNotes(localStorage.getItem(scope + ":notes") ?? ""); }
     catch { setUsable(false); }
   }, [scope]);

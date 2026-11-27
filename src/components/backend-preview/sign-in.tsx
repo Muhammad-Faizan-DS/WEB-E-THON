@@ -34,7 +34,7 @@ export function SignInPanel({ showDemoAccounts = false, institution = "SecureExa
         return;
       }
       // "/" resolves the signed-in role on the server and redirects to /admin, /examiner or /candidate.
-      router.replace("/");
+      router.replace("/portal");
       router.refresh();
     } catch {
       setState({ busy: false, message: "SecureExam could not be reached. Check your connection and try again." });
@@ -74,5 +74,5 @@ export function SignInPanel({ showDemoAccounts = false, institution = "SecureExa
   </main>;
 }
 export function SignOutButton() {
-  return <button onClick={() => void signOut({ redirectTo: "/login" })}>Sign out</button>;
+  return <button onClick={() => void signOut({ redirectTo: "/portal/login" })}>Sign out</button>;
 }

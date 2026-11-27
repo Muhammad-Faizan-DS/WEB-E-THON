@@ -30,7 +30,7 @@ export function fileDispute(actor: Actor, input: z.infer<typeof disputeInput>) {
     const [dispute] = await tx.insert(disputes).values({ ...input, candidateId: actor.id }).returning();
     const recipients = [...(input.aboutExaminer ? [] : [examinerId]), ...await activeAdminIds(tx)];
     await notify(tx, recipients, { kind: "dispute", title: `New dispute: ${input.subject}`,
-      body: `${examTitle ? examTitle + " · " : ""}${input.category}${input.aboutExaminer ? " · concerns the examiner (admins only)" : ""}`, link: "/disputes" });
+      body: `${examTitle ? examTitle + " · " : ""}${input.category}${input.aboutExaminer ? " · concerns the examiner (admins only)" : ""}`, link: "/portal/disputes" });
     await audit(tx, actor.id, "dispute_filed", "dispute", dispute.id, { after: { category: input.category, aboutExaminer: input.aboutExaminer, examId: input.examId ?? null } });
     return dispute;
   });
@@ -58,10 +58,10 @@ export function answerDispute(actor: Actor, id: string, input: z.infer<typeof di
     const [updated] = await tx.update(disputes).set({ status: input.status, response: input.response, handledBy: actor.id, updatedAt: new Date() })
       .where(eq(disputes.id, id)).returning();
     await notify(tx, [row.dispute.candidateId], { kind: "dispute", title: `Your dispute is ${input.status.replace("_", " ")}`,
-      body: input.response, link: "/candidate/disputes" });
+      body: input.response, link: "/portal/candidate/disputes" });
     // Administrators always learn how an examiner handled a dispute.
     if (actor.role === "examiner") await notify(tx, await activeAdminIds(tx), { kind: "dispute", title: `Examiner ${input.status.replace("_", " ")} a dispute`,
-      body: `${row.dispute.subject}: ${input.response}`, link: "/disputes" });
+      body: `${row.dispute.subject}: ${input.response}`, link: "/portal/disputes" });
     await audit(tx, actor.id, "dispute_" + input.status, "dispute", id, { reason: input.response, before: { status: row.dispute.status }, after: { status: input.status } });
     return updated;
   });

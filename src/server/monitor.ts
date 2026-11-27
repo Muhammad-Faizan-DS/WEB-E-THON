@@ -130,7 +130,7 @@ export function postAnnouncement(actor: Actor, examId: string, input: z.infer<ty
       { after: { announcementId: row.id, candidateId: input.candidateId ?? null, message: input.message } });
     const [exam] = await tx.select({ title: exams.title }).from(exams).where(eq(exams.id, examId));
     await notify(tx, input.candidateId ? [input.candidateId] : await enrolledCandidateIds(tx, examId), {
-      kind: "message", title: input.candidateId ? `Message from your examiner · ${exam.title}` : `Announcement · ${exam.title}`, body: input.message, link: "/candidate" });
+      kind: "message", title: input.candidateId ? `Message from your examiner · ${exam.title}` : `Announcement · ${exam.title}`, body: input.message, link: "/portal/candidate" });
     return row;
   });
 }

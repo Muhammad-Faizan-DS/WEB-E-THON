@@ -30,6 +30,14 @@ Use the [core contracts](src/lib/contracts/core.ts) for questions, exams, and ac
 - CSV question imports take `type,topic,difficulty,text,marks,options`. Use JSON choices in the options cell. JSON imports take an array of core question objects. Moodle XML and GIFT support equivalent single-choice, multiple-choice and essay items. Preview validates each row before committing valid rows. CSV also accepts `question,option_a,option_b,answer,topic,difficulty,marks`. For pasted text, number each question and put choices on separate lines (`A.`, `B.`), followed by `Answer: B` for choice questions. A ZIP can contain CSV, JSON, Moodle XML, GIFT, or TXT question files. Review identifies ZIP entries and row numbers.
 - The reference portal is under `src/app/(portal)` and `src/components/backend-preview`. Replace that layout and catch-all page when merging the team’s frontend. Retain the public `/verify/[code]` page or an equivalent route at the same URL for PDF QR codes. The current frontend branch’s mock adapter must be connected to the real DTOs before using it with this backend.
 
+## Route ownership after the frontend merge
+
+- **Frontend (Dev B) owns the top-level pages:** `/`, `/login`, `/candidate/**`, `/examiner/**`, `/exam/**` (`src/app/(auth)`, `src/app/candidate`, `src/app/examiner`, `src/app/exam`, `src/components/{landing,ui,exam,examiner,common,bits}`, `src/lib/client`, `src/contracts`). The mock server is removed; these pages call the real API.
+- **Real sign-in for the frontend:** `POST /api/auth/login` (JSON email + password), `POST /api/auth/logout`, `GET /api/auth/me` return the shapes in `src/contracts/auth.ts` and use the same Auth.js session as everything else.
+- **Working reference portal (backend):** `/portal/login`, `/portal/admin`, `/portal/examiner`, `/portal/candidate` (`src/app/portal`, `src/components/backend-preview`, `src/components/dashboard`). It exercises every API end to end and stays available while the frontend screens are wired to real data.
+- **Public:** `/verify/[code]` (QR target in report PDFs).
+- Frontend screens that still call frontend-only endpoints (for example `/api/me/exams`, `/api/attempts/:id/answers/:aq`) need to be pointed at the implemented routes listed in PRD §12; until then, use the portal for those flows.
+
 ## Deploy to Vercel and test it
 
 1. **Database.** Create a free Neon project and copy its pooled connection string. From your machine, run `DATABASE_URL=<neon url> pnpm db:migrate`, then `DATABASE_URL=<neon url> SEED_PASSWORD=<demo password> AUTH_SECRET=<same secret as Vercel> pnpm db:seed` (the seed refuses `NODE_ENV=production`, so run it locally). Keep `AUTH_SECRET` identical everywhere: it signs sessions and derives the activation keys.

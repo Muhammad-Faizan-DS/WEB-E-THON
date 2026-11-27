@@ -24,7 +24,7 @@ export function ExamDirectory({ exams }: { exams: ExamListRow[] }) {
         {filters.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     </div>
     {visible.length ? <DataTable headers={["Exam", "Status", "Availability", "Duration"]} rows={visible.map((exam) => [
-      <div key="exam"><Link href={"/examiner/exams/" + exam.id + "?tab=questions"}>{exam.title}</Link>
+      <div key="exam"><Link href={"/portal/examiner/exams/" + exam.id + "?tab=questions"}>{exam.title}</Link>
         <small>{exam.course ? exam.course + " · " : ""}<span style={{ textTransform: "capitalize" }}>{exam.examType}</span></small></div>,
       <Status key="status" value={exam.status} />,
       <div key="window"><span>{formatDate(exam.startsAt)}</span><small>Closes {formatDate(exam.endsAt)}</small></div>,
