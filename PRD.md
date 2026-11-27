@@ -98,6 +98,25 @@ pie showData
 - **Primary, 5.1 Integrity in the AI Era:** a browser-only, privacy-light **explainable integrity engine** (§8). Observations are grouped into incidents with plain-language explanations, a severity, and a human Dismiss or Follow-up decision. No automatic penalties, no recordings, no keystroke logging.
 - **Secondary, 5.3 Failure-resilient exams:** an offline answer queue with server acknowledgment by revision, a server-fixed deadline, a session open limit with lock and unlock, and a strict re-attempt approval flow (§9). Disruptions never give the candidate extra time unless an examiner makes an audited decision.
 
+
+### 2.5 Additions from the exam-portal guide (proctor screen)
+
+Source: the owner's reference case study, "Designing a complete Online Examination Portal from scratch" (D. Saxena). Its proctor screen asks for many actions with **no navigation and minimal popups**. Only free ideas that fit §1's philosophy are taken. The frontend for all of them is built on the mock API (`src/lib/client/proctor.ts`, `src/mocks/server.ts`). **Dev A** builds the endpoints in §12 rows 50–59 and moves the shapes into `src/contracts` via a `contract` PR.
+
+| Guide idea | Our version | Owner |
+|---|---|---|
+| Act on one student without leaving the live screen | Monitor **command panel**: a side sheet with status, time left, contact, incidents, private messages, reminders and **extend time** (minutes + required reason, audited, the candidate is told) | B (done on mocks) + A |
+| Filtered views (disconnected, paused, warned, submitted, on break, ended) | Monitor filters: Asking for help, Offline, Locked, Submitted, Time ended (plus the existing ones) | B (done) |
+| Raise hand, chat, break request | Workspace **Ask for help** (question / technical / break + message). The examiner replies privately. A break never pauses the clock; only an audited extension adds time | B (done on mocks) + A |
+| Message all students with acknowledgment status | Announcement **read receipts**: the candidate taps "Got it", and the monitor shows "n of m acknowledged" and who hasn't | B (done on mocks) + A |
+| Extend exam end time, end exam | **Add time for everyone** (audited, announced) and **Close exam now** (existing §12 #19, with a reason) | B (done on mocks) + A |
+| Proctor dashboard: connectivity test, instructions for proctor and student, report issue | Exam page **Before you start**: connectivity test (5 round trips to `/api/ping`), examiner-only notes beside the candidate instructions, **Report an issue** (also on the dashboard) | B (done on mocks) + A |
+| Live webcam streams, AI alerts, photo ID verification | **Not built**: §21 forbids it, images would leave the device, and streaming needs paid infrastructure | — |
+| Pause / resume the whole exam | **Not built**: conflicts with the fixed server deadline (BR-05). "Add time for everyone" covers the need | — |
+| Role switching | **Not built**: one role per account (§2.1) | — |
+
+Rules: messages, reminders and extensions are written to the audit log. Wording stays neutral (rule 8). An extension moves `attempts.deadline` only through an examiner action with a reason; nothing automatic ever adds time.
+
 ---
 
 ## 3. Architecture and tech choices
@@ -776,7 +795,7 @@ All JSON responses, except PDFs. Auth column: `A` admin, `E` examiner (owner), `
 | 16 | `PUT /api/exams/{id}/questions` | E | set assigned questions, order, marks | 03 |
 | 17 | `POST /api/exams/{id}/publish` | E | validate checklist and publish | 03 |
 | 18 | `POST /api/exams/{id}/unpublish` | E | back to draft if no attempts | 03 |
-| 19 | `POST /api/exams/{id}/close` | E | close early, finalize all live attempts | 10 |
+| 19 | `POST /api/exams/{id}/close` | E | close early with a reason, finalize all live attempts (`examiner_close`), announce | 10 |
 | 20 | `GET /api/exams/{id}/enrollments` | E | list with attempt status | 01 |
 | 21 | `POST /api/exams/{id}/enrollments?dryRun=` | E | enroll by ids/emails, or CSV import | 20 |
 | 22 | `DELETE /api/enrollments/{id}` | E | remove if no attempt | |
@@ -807,6 +826,16 @@ All JSON responses, except PDFs. Auth column: `A` admin, `E` examiner (owner), `
 | 47 | `GET /api/exams/{id}/report.pdf` | E A | exam summary PDF | 19 |
 | 48 | `GET /api/verify/{code}` | P | masked verification result | 19 |
 | 49 | `GET /api/exams/{id}/analytics` | E A | exam + question analytics | 17 |
+| 50 | `GET /api/exams/{id}/proctor` | E | messages, extensions, announcement acks, examiner notes, candidate instructions (§2.5) | |
+| 51 | `POST /api/attempts/{id}/messages` | E | private message or neutral reminder to one candidate; resolves open help requests | |
+| 52 | `POST /api/attempts/{id}/extend` | E | add 1–60 min with a reason; audited; candidate notified | 05 |
+| 53 | `POST /api/exams/{id}/extend` | E | add 1–60 min for all live attempts with a reason; audited; announced | 05 |
+| 54 | `PUT /api/exams/{id}/notes` | E | examiner-only instructions | |
+| 55 | `GET /api/attempts/{id}/inbox` | C | own messages + acknowledged announcement ids | |
+| 56 | `POST /api/attempts/{id}/help` | C | help request: category (question/technical/break) + message; max 3 open | |
+| 57 | `POST /api/attempts/{id}/announcements/{annId}/ack` | C | acknowledge an announcement | |
+| 58 | `POST /api/issues` · `GET /api/issues` | E A | report an issue (category + description); admin lists all, examiner own | 21 |
+| 59 | `GET /api/ping` | any | `{ serverNow }` for the connectivity test | |
 
 ---
 
