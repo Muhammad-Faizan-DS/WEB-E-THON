@@ -79,7 +79,7 @@ export function ReceiptDemo() {
   const icon: Record<Status, React.ReactNode> = {
     idle: null,
     saving: <Loader2 className="size-4 animate-spin" aria-hidden />,
-    saved: <Check className="size-4 text-[#1e7a4c]" aria-hidden />,
+    saved: <Check className="size-4 text-success" aria-hidden />,
     device: <HardDrive className="size-4 text-warning" aria-hidden />,
     syncing: <Loader2 className="size-4 animate-spin" aria-hidden />,
   };
@@ -88,7 +88,7 @@ export function ReceiptDemo() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="inline-flex items-center gap-2 text-[14px] font-medium">
-          <span aria-hidden className={cn("size-2.5 rounded-full", online ? "bg-[#1e7a4c]" : "bg-danger")} />
+          <span aria-hidden className={cn("size-2.5 rounded-full", online ? "bg-success" : "bg-danger")} />
           {online ? "Online" : "Offline"}
           {!online && <CloudOff className="size-4 text-muted-foreground" aria-hidden />}
         </p>
@@ -101,7 +101,7 @@ export function ReceiptDemo() {
         >
           Simulate a dropped connection
           <span className={cn("relative h-6 w-11 rounded-full border border-border-strong transition-colors duration-200", online ? "bg-surface" : "bg-foreground")}>
-            <span className={cn("absolute top-[3px] size-4 rounded-full transition-[left,background-color] duration-200 ease-out", online ? "left-[3px] bg-foreground" : "left-[23px] bg-amber-200")} />
+            <span className={cn("absolute top-[3px] size-4 rounded-full transition-[left,background-color] duration-200 ease-out", online ? "left-[3px] bg-foreground" : "left-[23px] bg-brand")} />
           </span>
         </button>
       </div>
@@ -112,19 +112,19 @@ export function ReceiptDemo() {
           {pending > 0 && (
             <motion.div
               aria-hidden
-              className="absolute inset-0 rounded-2xl bg-amber-200 shadow-[0_8px_20px_-8px_rgb(0_0_0/0.35)]"
+              className="absolute inset-0 rounded-2xl border border-border-strong bg-[repeating-linear-gradient(135deg,var(--surface-2)_0_6px,var(--surface)_6px_12px)] "
               initial={reduce ? { opacity: 0 } : { opacity: 0, x: 0, y: 0, rotate: 0 }}
               animate={reduce ? { opacity: 1, y: 30 } : { opacity: 1, x: 8, y: 30, rotate: 0.8 }}
               exit={reduce ? { opacity: 0 } : { opacity: 0, x: 0, y: 0, rotate: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             >
-              <span className="absolute bottom-[7px] left-5 font-display text-[11px] font-bold tracking-[0.06em] text-amber-900 uppercase">Copy kept on this device</span>
+              <span className="absolute bottom-[7px] left-5 font-display text-[11px] font-semibold text-muted-foreground">Copy kept on this device</span>
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="relative rounded-2xl border border-border bg-surface p-5 shadow-[0_1px_2px_rgb(11_15_13/0.04),0_24px_48px_-24px_rgb(11_15_13/0.18)] sm:p-6">
+        <div className="relative rounded-2xl border border-border bg-surface p-5  sm:p-6">
           <div className="flex items-baseline justify-between gap-3">
-            <label htmlFor="demo-answer" className="font-display text-[15px] font-bold">
+            <label htmlFor="demo-answer" className="font-display text-[15px] font-semibold">
               Question 3 <span className="font-sans text-[13px] font-normal text-muted-foreground">· written · 5 marks</span>
             </label>
             <span className="font-mono text-[12px] text-muted-foreground tabular-nums">rev {rev}</span>
@@ -135,7 +135,7 @@ export function ReceiptDemo() {
             value={text}
             onChange={(e) => onChange(e.target.value)}
             rows={3}
-            className="mt-3 block w-full resize-none rounded-lg border border-border-strong bg-surface px-3 py-2.5 text-[15px] leading-[1.55] text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-primary focus:shadow-[0_0_0_3px_rgb(4_120_87/0.18)]"
+            className="mt-3 block w-full resize-none rounded-lg border border-border-strong bg-surface px-3 py-2.5 text-[15px] leading-[1.55] text-foreground outline-none transition-[border-color,box-shadow] duration-150 focus:border-primary focus:shadow-[0_0_0_3px_color-mix(in_oklab,var(--brand)_25%,transparent)]"
           />
           <p aria-live="polite" className="mt-3 flex min-h-[1.6em] items-center gap-2 text-[14px] font-medium">
             {icon[status]}

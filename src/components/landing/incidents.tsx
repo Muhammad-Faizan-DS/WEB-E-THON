@@ -74,8 +74,8 @@ export function Incidents() {
                           aria-pressed={current?.d === d}
                           onClick={() => decide(inc.id, d)}
                           className={cn(
-                            "inline-flex min-h-11 flex-1 items-center justify-center rounded-full border px-3 text-[14px] font-medium transition-[background-color,border-color,color] duration-150 active:translate-y-px",
-                            current?.d === d ? "border-primary bg-primary text-white" : "border-border-strong bg-surface hover:border-foreground/40 hover:bg-surface-2",
+                            "inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border px-3 text-[14px] font-medium transition-[background-color,border-color,color] duration-150 active:translate-y-px",
+                            current?.d === d ? "border-primary bg-primary text-primary-foreground" : "border-border-strong bg-surface hover:border-foreground/40 hover:bg-surface-2",
                           )}
                         >
                           {d === "Dismissed" ? "Dismiss" : "Follow up"}
@@ -99,10 +99,10 @@ export function Incidents() {
       <p className="mt-4 text-[14px] text-muted-foreground">Sample incidents with fictional data. A decision never changes marks, status or time.</p>
 
       <div className="mt-16">
-        <h3 className="font-display text-[20px] font-extrabold tracking-[-0.02em]">What this record never contains</h3>
+        <h3 className="font-display text-[20px] font-semibold tracking-[-0.02em]">What this record never contains</h3>
         <ul className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
           {NEVER.map((n) => (
-            <li key={n} className="font-display text-[clamp(1.35rem,2.6vw,2rem)] font-bold tracking-[-0.02em] text-muted-foreground">
+            <li key={n} className="font-display text-[clamp(1.35rem,2.6vw,2rem)] font-semibold tracking-[-0.02em] text-muted-foreground">
               <s className="ink-strike">{n}</s>
               <span className="sr-only"> (never collected)</span>
             </li>
