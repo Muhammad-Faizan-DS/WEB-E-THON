@@ -7,13 +7,19 @@ export const difficulty = z.union([z.literal(1), z.literal(2), z.literal(3)]);
 export const topic = z.string().trim().min(1).max(100);
 export const marks = z.number().int().min(1).max(1_000);
 export const option = z.object({ id: z.string().min(1).max(64), text: z.string().trim().min(1).max(2_000) });
+export const questionType = z.enum(["single", "multi", "written"]);
+export const course = z.string().trim().max(100);
+export const tag = z.string().trim().min(1).max(40);
+export const tags = z.array(tag).max(20).refine((items) => new Set(items.map((item) => item.toLowerCase())).size === items.length, "Use each tag once.");
 export const questionInput = z.object({
-  type: z.enum(["single", "multi", "written"]),
+  type: questionType,
   text: z.string().trim().min(1).max(16_000),
   topic,
   difficulty,
   marks,
   options: z.array(option.extend({ isCorrect: z.boolean() })).max(20).default([]),
+  course: course.optional(),
+  tags: tags.optional(),
 }).strict().superRefine(({ type, options }, ctx) => {
   const correct = options.filter((item) => item.isCorrect).length;
   const unique = new Set(options.map((item) => item.id)).size === options.length;
@@ -40,8 +46,11 @@ export const settings = z.object({
   }
 });
 
+export const examType = z.enum(["practice", "quiz", "assignment", "midterm", "final"]);
 export const examInput = z.object({
   title: z.string().trim().min(1).max(200),
+  examType: examType.default("quiz"),
+  course: course.default(""),
   instructions: z.string().trim().max(16_000).default(""),
   startsAt: z.string().datetime({ offset: true }),
   endsAt: z.string().datetime({ offset: true }),
@@ -82,6 +91,8 @@ export const saveInput = session.extend({
 export const questionPosition = z.coerce.number().int().min(1).max(200);
 
 export type Role = z.infer<typeof role>;
+export type ExamType = z.infer<typeof examType>;
+export type BlueprintCell = z.infer<typeof blueprintCell>;
 export type QuestionInput = z.infer<typeof questionInput>;
 export type ExamSettings = z.infer<typeof settings>;
 export type ExamInput = z.infer<typeof examInput>;
@@ -94,6 +105,7 @@ export type ApiResponse<T> =
 export interface CandidateQuestion {
   id: string;
   position: number;
+  sectionId: string | null;
   type: QuestionInput["type"];
   text: string;
   marks: number;
@@ -121,5 +133,7 @@ export interface AttemptState {
   currentIndex: number;
   openCount: number;
   totalQuestions: number;
-  palette: Array<{ position: number; seen: boolean; locked: boolean; flagged: boolean; answered: boolean }>;
+  palette: Array<{ position: number; sectionId: string | null; seen: boolean; locked: boolean; flagged: boolean; answered: boolean }>;
+  /** Sections in paper order; group the palette by `sectionId` and show `instructions` when entering a section. */
+  sections: Array<{ id: string; title: string; instructions: string; firstPosition: number; count: number }>;
 }

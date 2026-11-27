@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, foreignKey, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { WorkspacePreferences } from "../src/lib/contracts/operations";
-import type { AnswerResponse, ExamSettings, QuestionInput } from "../src/lib/contracts/core";
+import type { AnswerResponse, BlueprintCell, ExamSettings, QuestionInput } from "../src/lib/contracts/core";
 
 const time = (name: string) => timestamp(name, { withTimezone: true });
 export const userRole = pgEnum("user_role", ["admin", "examiner", "candidate"]);
@@ -9,6 +9,7 @@ export const questionType = pgEnum("question_type", ["single", "multi", "written
 export const examStatus = pgEnum("exam_status", ["draft", "published"]);
 export const enrollmentStatus = pgEnum("enrollment_status", ["active", "pending_review", "cooldown", "rejected", "blocked"]);
 export const keyStatus = pgEnum("key_status", ["active", "used", "revoked", "locked"]);
+export const examType = pgEnum("exam_type", ["practice", "quiz", "assignment", "midterm", "final"]);
 export const attemptStatus = pgEnum("attempt_status", ["in_progress", "submitted", "auto_submitted", "voided", "graded"]);
 
 export const users = pgTable("users", {
@@ -18,6 +19,7 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: userRole("role").notNull(),
   active: boolean("active").notNull().default(true),
+  isExternal: boolean("is_external").notNull().default(false),
   createdAt: time("created_at").notNull().defaultNow(),
 }, (t) => [uniqueIndex("users_email_lower_idx").on(sql`lower(${t.email})`)]);
 
@@ -30,15 +32,19 @@ export const questions = pgTable("questions", {
   text: text("text").notNull(),
   options: jsonb("options").$type<QuestionInput["options"]>().notNull(),
   marks: integer("marks").notNull(),
+  course: text("course").notNull().default(""),
+  tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
   archived: boolean("archived").notNull().default(false),
   createdAt: time("created_at").notNull().defaultNow(),
-}, (t) => [index("questions_owner_idx").on(t.ownerId), check("question_marks_positive", sql`${t.marks} > 0`),
+}, (t) => [index("questions_owner_idx").on(t.ownerId), index("questions_owner_course_idx").on(t.ownerId, t.course), check("question_marks_positive", sql`${t.marks} > 0`),
   check("question_difficulty_range", sql`${t.difficulty} between 1 and 3`)]);
 
 export const exams = pgTable("exams", {
   id: uuid("id").primaryKey().defaultRandom(),
   examinerId: uuid("examiner_id").notNull().references(() => users.id),
   title: text("title").notNull(),
+  examType: examType("exam_type").notNull().default("quiz"),
+  course: text("course").notNull().default(""),
   instructions: text("instructions").notNull(),
   startsAt: time("starts_at").notNull(),
   endsAt: time("ends_at").notNull(),
@@ -51,11 +57,27 @@ export const exams = pgTable("exams", {
   liveOpenLimit: integer("live_open_limit"),
 }, (t) => [index("exams_examiner_idx").on(t.examinerId)]);
 
+export const examSections = pgTable("exam_sections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  examId: uuid("exam_id").notNull().references(() => exams.id),
+  title: text("title").notNull(),
+  instructions: text("instructions").notNull().default(""),
+  position: integer("position").notNull(),
+  allowedTypes: text("allowed_types").array().$type<QuestionInput["type"][]>().notNull().default(sql`'{}'::text[]`),
+  shuffle: boolean("shuffle").notNull().default(true),
+  blueprint: jsonb("blueprint").$type<BlueprintCell[]>().notNull().default([]),
+  marksPerQuestion: integer("marks_per_question"),
+}, (t) => [index("exam_sections_exam_idx").on(t.examId, t.position),
+  check("section_marks_positive", sql`${t.marksPerQuestion} is null or ${t.marksPerQuestion} > 0`)]);
+
 export const examQuestions = pgTable("exam_questions", {
   examId: uuid("exam_id").notNull().references(() => exams.id),
   questionId: uuid("question_id").notNull().references(() => questions.id),
+  sectionId: uuid("section_id").notNull().references(() => examSections.id),
+  position: integer("position").notNull().default(0),
   snapshot: jsonb("snapshot").$type<QuestionInput>(),
-}, (t) => [primaryKey({ columns: [t.examId, t.questionId] }), index("exam_questions_question_idx").on(t.questionId)]);
+}, (t) => [primaryKey({ columns: [t.examId, t.questionId] }), index("exam_questions_question_idx").on(t.questionId),
+  index("exam_questions_section_idx").on(t.sectionId, t.position)]);
 
 export const enrollments = pgTable("enrollments", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -112,6 +134,7 @@ export const attempts = pgTable("attempts", {
 export const attemptQuestions = pgTable("attempt_questions", {
   attemptId: uuid("attempt_id").notNull().references(() => attempts.id),
   questionId: uuid("question_id").notNull().references(() => questions.id),
+  sectionId: uuid("section_id").references(() => examSections.id),
   position: integer("position").notNull(),
   type: questionType("type").notNull(),
   text: text("text").notNull(),
@@ -121,7 +144,8 @@ export const attemptQuestions = pgTable("attempt_questions", {
   seenAt: time("seen_at"),
   lockedAt: time("locked_at"),
 }, (t) => [primaryKey({ columns: [t.attemptId, t.questionId] }),
-  unique().on(t.attemptId, t.position), index("attempt_questions_question_idx").on(t.questionId)]);
+  unique().on(t.attemptId, t.position), index("attempt_questions_question_idx").on(t.questionId),
+  index("attempt_questions_section_idx").on(t.sectionId)]);
 
 export const answers = pgTable("answers", {
   attemptId: uuid("attempt_id").notNull(),
@@ -226,3 +250,12 @@ export const gradeNotices = pgTable("grade_notices", {
   createdAt: time("created_at").notNull().defaultNow(),
 }, (t) => [index("grade_notices_attempt_idx").on(t.attemptId, t.createdAt), index("grade_notices_question_idx").on(t.questionId)]);
 
+
+/** Single-institution settings (PRD §24.2). One row, enforced by the boolean key. */
+export const orgSettings = pgTable("org_settings", {
+  id: boolean("id").primaryKey().default(true),
+  name: text("name").notNull().default("SecureExam"),
+  allowedDomains: text("allowed_domains").array().notNull().default(sql`'{}'::text[]`),
+  allowExternalInvites: boolean("allow_external_invites").notNull().default(true),
+  updatedAt: time("updated_at").notNull().defaultNow(),
+}, (t) => [check("org_settings_singleton", sql`${t.id}`)]);

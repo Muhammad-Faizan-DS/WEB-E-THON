@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { hash } from "bcryptjs";
 import { and, eq, inArray } from "drizzle-orm";
-import { activationKeys, answers, attempts, attemptQuestions, enrollments, examQuestions, exams, incidents, questions, reattemptRequests, users } from "../db/schema";
-import { settings, type AnswerResponse, type ExamSettings, type QuestionInput } from "../src/lib/contracts/core";
+import { activationKeys, answers, attempts, attemptQuestions, enrollments, examQuestions, examSections, exams, incidents, questions, reattemptRequests, users } from "../db/schema";
+import { settings, type AnswerResponse, type ExamSettings, type ExamType, type QuestionInput } from "../src/lib/contracts/core";
 import { database, type Tx } from "../src/server/database";
 import { drawPaper, hashKey, newActivationKey, type PaperQuestion } from "../src/server/paper";
 import { objectiveMarksCents } from "../src/server/grading";
@@ -27,15 +27,26 @@ function makeQuestions(): QuestionInput[] {
   })));
 }
 
+type SeedSection = { title: string; instructions?: string; questions: PaperQuestion[] };
+
 async function seedExam(tx: Tx, examinerId: string, people: string[], fields: {
   title: string; instructions: string; startsAt: Date; endsAt: Date; durationMin: number; settings: ExamSettings;
-}, pool: PaperQuestion[]) {
-  const totalMarks = fields.settings.blueprint.reduce((sum, cell) => sum + cell.count *
-    (pool.find((question) => question.topic === cell.topic && question.difficulty === cell.difficulty)?.marks ?? 0), 0);
+  examType?: ExamType; course?: string;
+}, pool: PaperQuestion[], sectionPlan: SeedSection[] = [{ title: "Section A", questions: pool }]) {
+  const totalMarks = fields.settings.blueprint.length
+    ? fields.settings.blueprint.reduce((sum, cell) => sum + cell.count *
+      (pool.find((question) => question.topic === cell.topic && question.difficulty === cell.difficulty)?.marks ?? 0), 0)
+    : pool.reduce((sum, question) => sum + question.marks, 0);
   const [exam] = await tx.insert(exams).values({ ...fields, examinerId, totalMarks, status: "published" }).returning();
-  await tx.insert(examQuestions).values(pool.map(({ id, ...snapshot }) => ({ examId: exam.id, questionId: id, snapshot })));
+  const sections = await tx.insert(examSections).values(sectionPlan.map((section, index) => ({
+    examId: exam.id, title: section.title, instructions: section.instructions ?? "", position: index + 1,
+  }))).returning();
+  await tx.insert(examQuestions).values(sectionPlan.flatMap((section, index) => section.questions.map(({ id, ...question }, position) => ({
+    examId: exam.id, questionId: id, sectionId: sections[index].id, position: position + 1,
+    snapshot: { type: question.type, text: question.text, topic: question.topic, difficulty: question.difficulty, marks: question.marks, options: question.options },
+  }))));
   const members = await tx.insert(enrollments).values(people.map((candidateId) => ({ examId: exam.id, candidateId }))).returning();
-  return { exam, members };
+  return { exam, members, sections };
 }
 
 async function archivedMidterm(tx: Tx, examiner: string, people: string[], pool: PaperQuestion[], now: number) {

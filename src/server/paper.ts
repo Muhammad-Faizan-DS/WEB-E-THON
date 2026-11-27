@@ -1,7 +1,16 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { type ExamSettings, type QuestionInput } from "@/lib/contracts/core";
+import { type BlueprintCell, type ExamSettings, type QuestionInput } from "@/lib/contracts/core";
 
-export type PaperQuestion = QuestionInput & { id: string };
+export type PaperQuestion = QuestionInput & { id: string; sectionId?: string | null; position?: number };
+/**
+ * A section as the paper engine sees it (PRD §24.3). `blueprint: null` means "use every question in the section".
+ * `id: null` matches the whole pool (legacy single-section call sites such as the seed).
+ */
+export type PaperSection = { id: string | null; title: string; blueprint: BlueprintCell[] | null; shuffle: boolean; marksPerQuestion: number | null };
+
+export function wholePoolSection(settings: ExamSettings): PaperSection {
+  return { id: null, title: "", blueprint: settings.blueprint.length ? settings.blueprint : null, shuffle: true, marksPerQuestion: null };
+}
 
 function cellKey(topic: string, difficulty: number) {
   return JSON.stringify([topic, difficulty]);
@@ -17,40 +26,73 @@ function group(pool: PaperQuestion[]) {
   return cells;
 }
 
-export function checkPaper(pool: PaperQuestion[], blueprint: ExamSettings["blueprint"], totalMarks: number) {
+const members = (pool: PaperQuestion[], section: PaperSection) =>
+  section.id === null ? pool : pool.filter((question) => question.sectionId === section.id);
+
+/** Publish checklist for the paper: every section has questions, every cell is satisfiable, every draw totals the exam marks. */
+export function checkPaper(pool: PaperQuestion[], sections: PaperSection[], totalMarks: number) {
   const issues: string[] = [];
   if (pool.length === 0) issues.push("Select at least one question.");
-  if (blueprint.length === 0) issues.push("Add at least one blueprint cell.");
-  const cells = group(pool);
+  if (sections.length === 0) issues.push("Add at least one section.");
+  const label = (section: PaperSection) => sections.length > 1 ? `${section.title}: ` : "";
   let min = 0;
   let max = 0;
-  for (const cell of blueprint) {
-    const available = cells.get(cellKey(cell.topic, cell.difficulty)) ?? [];
-    if (available.length < cell.count) {
-      issues.push(`${cell.topic} (difficulty ${cell.difficulty}) needs ${cell.count}; ${available.length} available.`);
+  for (const section of sections) {
+    const items = members(pool, section);
+    const marksOf = (question: PaperQuestion) => section.marksPerQuestion ?? question.marks;
+    if (pool.length > 0 && items.length === 0) {
+      issues.push(`${section.title || "This section"} has no questions.`);
       continue;
     }
-    const values = available.map(({ marks }) => marks).sort((a, b) => a - b);
-    min += values.slice(0, cell.count).reduce((sum, value) => sum + value, 0);
-    max += values.slice(-cell.count).reduce((sum, value) => sum + value, 0);
+    if (!section.blueprint) {
+      const total = items.reduce((sum, question) => sum + marksOf(question), 0);
+      min += total;
+      max += total;
+      continue;
+    }
+    const cells = group(items);
+    for (const cell of section.blueprint) {
+      const available = cells.get(cellKey(cell.topic, cell.difficulty)) ?? [];
+      if (available.length < cell.count) {
+        issues.push(`${label(section)}${cell.topic} (difficulty ${cell.difficulty}) needs ${cell.count}; ${available.length} available.`);
+        continue;
+      }
+      const values = available.map(marksOf).sort((a, b) => a - b);
+      min += values.slice(0, cell.count).reduce((sum, value) => sum + value, 0);
+      max += values.slice(-cell.count).reduce((sum, value) => sum + value, 0);
+    }
   }
   if (issues.length === 0 && (min !== totalMarks || max !== totalMarks)) {
-    issues.push(`Every possible paper must total ${totalMarks} marks. The current range is ${min}–${max}.`);
+    issues.push(sections.length > 1
+      ? `Section marks must add up to ${totalMarks} on every paper. The current range is ${min}–${max}.`
+      : `Every possible paper must total ${totalMarks} marks. The current range is ${min}–${max}.`);
   }
   return issues;
 }
 
-export function reattemptIssues(pool: PaperQuestion[], blueprint: ExamSettings["blueprint"]) {
-  const cells = group(pool);
-  const size = blueprint.reduce((sum, cell) => sum + cell.count, 0);
-  const replacements = blueprint.reduce((sum, cell) => {
-    const available = cells.get(cellKey(cell.topic, cell.difficulty))?.length ?? 0;
-    return sum + Math.max(0, Math.min(cell.count, available - cell.count));
-  }, 0);
+export function reattemptIssues(pool: PaperQuestion[], sections: PaperSection[]) {
+  let size = 0;
+  let replacements = 0;
+  for (const section of sections) {
+    const items = members(pool, section);
+    if (!section.blueprint) { size += items.length; continue; }
+    const cells = group(items);
+    for (const cell of section.blueprint) {
+      size += cell.count;
+      const available = cells.get(cellKey(cell.topic, cell.difficulty))?.length ?? 0;
+      replacements += Math.max(0, Math.min(cell.count, available - cell.count));
+    }
+  }
   return replacements < Math.ceil(size / 2) ? ["Add enough alternatives in the same blueprint cells to replace half of a re-attempt paper."] : [];
 }
 
-export function drawPaper(pool: PaperQuestion[], settings: ExamSettings, previous?: Set<string>) {
+/**
+ * Draws one candidate paper: sections in order, blueprint cells drawn within each section,
+ * questions shuffled within a section when it allows shuffling. A re-attempt keeps about half of the prior questions (BR-11).
+ */
+export function drawPaper(pool: PaperQuestion[], settings: ExamSettings, options: { sections?: PaperSection[]; previous?: Set<string> } = {}) {
+  const { previous } = options;
+  const sections = options.sections ?? [wholePoolSection(settings)];
   const seed = randomBytes(32);
   let counter = 0;
   function shuffle<T>(items: T[]) {
@@ -67,27 +109,38 @@ export function drawPaper(pool: PaperQuestion[], settings: ExamSettings, previou
     }
     return copy;
   }
-  const cells = group(pool);
-  const picks = settings.blueprint.map((cell) => {
-    const members = shuffle(cells.get(cellKey(cell.topic, cell.difficulty)) ?? []);
-    return { count: cell.count, fresh: members.filter((q) => !previous?.has(q.id)), prior: members.filter((q) => previous?.has(q.id)) };
+  const picks = sections.flatMap((section, index) => {
+    const items = members(pool, section);
+    const groups = section.blueprint
+      ? section.blueprint.map((cell) => ({ count: cell.count, items: group(items).get(cellKey(cell.topic, cell.difficulty)) ?? [] }))
+      : [{ count: items.length, items }];
+    return groups.map(({ count, items: cell }) => {
+      const shuffled = shuffle(cell);
+      return { index, count, fresh: shuffled.filter((q) => !previous?.has(q.id)), prior: shuffled.filter((q) => previous?.has(q.id)) };
+    });
   });
   let extraRetained = Math.floor(picks.reduce((sum, p) => sum + p.count, 0) / 2) -
     picks.reduce((sum, p) => sum + Math.max(0, p.count - p.fresh.length), 0);
-  const drawn = shuffle(picks).flatMap(({ count, fresh, prior }) => {
-    if (!previous) return fresh.slice(0, count);
+  const drawn = shuffle(picks).flatMap(({ index, count, fresh, prior }) => {
+    if (!previous) return fresh.slice(0, count).map((question) => ({ index, question }));
     const required = Math.max(0, count - fresh.length);
     const additional = Math.min(Math.max(0, extraRetained), Math.max(0, Math.min(count, prior.length) - required));
     extraRetained -= additional;
     const retained = required + additional;
-    return [...prior.slice(0, retained), ...fresh.slice(0, count - retained)];
+    return [...prior.slice(0, retained), ...fresh.slice(0, count - retained)].map((question) => ({ index, question }));
   });
-  return shuffle(drawn).map((question, index) => ({
+  const ordered = sections.flatMap((section, index) => {
+    const chosen = drawn.filter((item) => item.index === index).map(({ question }) => question);
+    const placed = section.shuffle ? shuffle(chosen) : chosen.sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id));
+    return placed.map((question) => ({ question, section }));
+  });
+  return ordered.map(({ question, section }, index) => ({
     questionId: question.id,
+    sectionId: section.id,
     position: index + 1,
     type: question.type,
     text: question.text,
-    marks: question.marks,
+    marks: section.marksPerQuestion ?? question.marks,
     options: (settings.shuffleOptions ? shuffle(question.options) : question.options).map(({ id, text }) => ({ id, text })),
     answerKey: question.options.filter(({ isCorrect }) => isCorrect).map(({ id }) => id),
   }));

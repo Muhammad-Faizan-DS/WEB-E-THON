@@ -5,7 +5,7 @@ import { type z } from "zod";
 import { type Actor } from "./auth";
 import { database } from "./database";
 import { fail } from "./errors";
-import { examPool } from "./exams";
+import { examPool, paperSections } from "./exams";
 import { checkPaper, drawPaper, hashKey, keyMatches, newSessionId, reattemptIssues } from "./paper";
 import { reattemptKey, recentAttemptCondition } from "./requests";
 
@@ -99,8 +99,9 @@ export async function startAttempt(actor: Actor, examId: string, input: z.infer<
     }
 
     const pool = await examPool(tx, exam);
-    const issues = checkPaper(pool, settings.blueprint, exam.totalMarks);
-    if (previous) issues.push(...reattemptIssues(pool, settings.blueprint));
+    const sections = await paperSections(tx, exam);
+    const issues = checkPaper(pool, sections, exam.totalMarks);
+    if (previous) issues.push(...reattemptIssues(pool, sections));
     if (issues.length > 0) fail(409, "PUBLISH_CHECKLIST_FAILED", issues.join(" "));
     const startedAt = new Date();
     if (!sandbox && startedAt >= exam.endsAt) fail(409, "EXAM_WINDOW_CLOSED", "This exam cannot be started right now.");
@@ -112,7 +113,7 @@ export async function startAttempt(actor: Actor, examId: string, input: z.infer<
     }).returning();
     const oldQuestions = previous ? await tx.select({ id: attemptQuestions.questionId }).from(attemptQuestions)
       .where(eq(attemptQuestions.attemptId, previous.id)) : null;
-    const paper = drawPaper(pool, settings, oldQuestions ? new Set(oldQuestions.map(({ id }) => id)) : undefined);
+    const paper = drawPaper(pool, settings, { sections, previous: oldQuestions ? new Set(oldQuestions.map(({ id }) => id)) : undefined });
     await tx.insert(attemptQuestions).values(paper.map((question) => ({
       ...question, attemptId: attempt.id, seenAt: question.position === 1 || !settings.sequentialReveal ? startedAt : null,
     })));

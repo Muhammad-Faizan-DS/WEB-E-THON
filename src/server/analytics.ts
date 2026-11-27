@@ -3,7 +3,7 @@ import Papa from "papaparse";
 import { attempts, exams, users } from "../../db/schema";
 import { database } from "./database";
 import { fail } from "./errors";
-import { examPool, ownedExam } from "./exams";
+import { examPool, ownedExam, paperSections } from "./exams";
 import { answered, groupPapers, mark, paperRows, type GradeRow } from "./grading";
 import type { PaperQuestion } from "./paper";
 
@@ -104,19 +104,23 @@ function sample<T>(source: T[], count: number) {
 
 export async function fairness(owner: string, examId: string) {
   const data = await analyticalData(owner, examId);
-  const pool = await database().transaction(async (tx) => examPool(tx, await ownedExam(tx, owner, examId)));
+  const { pool, sections } = await database().transaction(async (tx) => {
+    const exam = await ownedExam(tx, owner, examId);
+    return { pool: await examPool(tx, exam), sections: await paperSections(tx, exam) };
+  });
   const measured = new Map(items(data).map(({ qid, facility }) => [qid, facility]));
-  const count = data.exam.settings.blueprint.reduce((sum, cell) => sum + cell.count, 0);
-  const partition = new Map<string, PaperQuestion[]>();
-  for (const q of pool) {
-    const key = JSON.stringify([q.topic, q.difficulty]);
-    const group = partition.get(key) ?? [];
-    group.push(q);
-    partition.set(key, group);
-  }
-  const groups = data.exam.settings.blueprint.map((cell) => ({
-    items: partition.get(JSON.stringify([cell.topic, cell.difficulty])) ?? [], count: cell.count,
-  }));
+  // One sampling group per blueprint cell inside each section; a section without cells always contributes all its questions.
+  const groups = sections.flatMap((section) => {
+    const members = section.id === null ? pool : pool.filter((q) => q.sectionId === section.id);
+    if (!section.blueprint) return [{ items: members, count: members.length }];
+    const partition = new Map<string, PaperQuestion[]>();
+    for (const q of members) {
+      const key = JSON.stringify([q.topic, q.difficulty]);
+      partition.set(key, [...(partition.get(key) ?? []), q]);
+    }
+    return section.blueprint.map((cell) => ({ items: partition.get(JSON.stringify([cell.topic, cell.difficulty])) ?? [], count: cell.count }));
+  });
+  const count = groups.reduce((sum, group) => sum + group.count, 0);
   const ease = (paper: PaperQuestion[]) => average(paper.map((q) => measured.get(q.id) ?? (1 - q.difficulty / 4))) ?? 0;
   if (!count || groups.some((group) => group.items.length < group.count)) return { simulations: 0, blueprint: [], naive: [] };
   const naive = [], blueprint = [];

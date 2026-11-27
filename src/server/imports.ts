@@ -99,7 +99,8 @@ function gift(source: string): Row[] {
   return rows;
 }
 
-export async function importQuestions(ownerId: string, { format, content, commit }: z.infer<typeof questionImport>) {
+/** Parses and validates an upload without writing anything. Row numbers are 1-based. */
+export function previewQuestions({ format, content }: Pick<z.infer<typeof questionImport>, "format" | "content">) {
   let rows: unknown[];
   let errors: RowError[] = [];
   if (format === "csv") {
@@ -127,6 +128,11 @@ export async function importQuestions(ownerId: string, { format, content, commit
     errors.push({ row, message: parsed.error.issues.map((issue) => issue.path.join(".") + ": " + issue.message).join("; ") });
     return [];
   });
-  if (commit && valid.length) await database().insert(questions).values(valid.map(({ question }) => ({ ...question, ownerId })));
-  return { valid, errors, imported: commit ? valid.length : 0 };
+  return { valid, errors };
+}
+
+export async function importQuestions(ownerId: string, input: z.infer<typeof questionImport>) {
+  const { valid, errors } = previewQuestions(input);
+  if (input.commit && valid.length) await database().insert(questions).values(valid.map(({ question }) => ({ ...question, ownerId })));
+  return { valid, errors, imported: input.commit ? valid.length : 0 };
 }

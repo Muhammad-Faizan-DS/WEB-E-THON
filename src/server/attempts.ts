@@ -1,5 +1,5 @@
-import { and, asc, eq, isNull, lte, or, sql } from "drizzle-orm";
-import { announcements, answers, attempts, attemptQuestions, enrollments, exams, integrityEvents } from "../../db/schema";
+import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { announcements, answers, attempts, attemptQuestions, enrollments, examSections, exams, integrityEvents } from "../../db/schema";
 import { type AnswerResponse, type AttemptState, type CandidateQuestion, type saveInput } from "@/lib/contracts/core";
 import { type z } from "zod";
 import { type Actor } from "./auth";
@@ -63,21 +63,29 @@ function questionAnswerJoin() {
 
 async function state(tx: Tx, attempt: Attempt, includeSession = false): Promise<AttemptState> {
   const rows = await tx.select({
-    position: attemptQuestions.position, seenAt: attemptQuestions.seenAt, lockedAt: attemptQuestions.lockedAt,
+    position: attemptQuestions.position, sectionId: attemptQuestions.sectionId, seenAt: attemptQuestions.seenAt, lockedAt: attemptQuestions.lockedAt,
     response: answers.response, flagged: answers.flagged,
   }).from(attemptQuestions).leftJoin(answers, questionAnswerJoin())
     .where(eq(attemptQuestions.attemptId, attempt.id)).orderBy(asc(attemptQuestions.position));
-  const palette = rows.map(({ position, seenAt, lockedAt, response, flagged }) => ({
-    position, seen: Boolean(seenAt), locked: Boolean(lockedAt), flagged: flagged ?? false,
+  const palette = rows.map(({ position, sectionId, seenAt, lockedAt, response, flagged }) => ({
+    position, sectionId, seen: Boolean(seenAt), locked: Boolean(lockedAt), flagged: flagged ?? false,
     answered: response !== null && response.length > 0,
   }));
+  const sectionIds = [...new Set(rows.flatMap(({ sectionId }) => sectionId ? [sectionId] : []))];
+  const details = sectionIds.length ? await tx.select({ id: examSections.id, title: examSections.title, instructions: examSections.instructions })
+    .from(examSections).where(inArray(examSections.id, sectionIds)) : [];
+  const sections = sectionIds.flatMap((id) => {
+    const detail = details.find((item) => item.id === id);
+    const members = palette.filter((item) => item.sectionId === id);
+    return detail ? [{ ...detail, firstPosition: members[0].position, count: members.length }] : [];
+  });
   return {
     id: attempt.id, examId: attempt.examId, status: attempt.status, startedAt: attempt.startedAt.toISOString(),
     deadlineAt: attempt.deadlineAt.toISOString(), submittedAt: attempt.submittedAt?.toISOString() ?? null, isSandbox: attempt.isSandbox,
     ...(includeSession ? { sessionId: attempt.activeSessionId } : {}),
     openLimit: await openLimit(tx, attempt), reviewUntil: attempt.reviewUntil?.toISOString() ?? null,
     integrityMode: attempt.settings.integrityMode, incidentCount: await reviewCounts(tx, attempt.id), currentIndex: attempt.currentIndex, totalQuestions: rows.length,
-    openCount: palette.filter(({ seen, locked }) => seen && !locked).length, palette,
+    openCount: palette.filter(({ seen, locked }) => seen && !locked).length, palette, sections,
   };
 }
 
@@ -106,7 +114,7 @@ export function getQuestion(actor: Actor, attemptId: string, sessionId: string, 
     assertSession(attempt, sessionId);
     assertActive(attempt, now);
     const [row] = await tx.select({
-      id: attemptQuestions.questionId, position: attemptQuestions.position, type: attemptQuestions.type,
+      id: attemptQuestions.questionId, position: attemptQuestions.position, sectionId: attemptQuestions.sectionId, type: attemptQuestions.type,
       text: attemptQuestions.text, marks: attemptQuestions.marks, options: attemptQuestions.options,
       seenAt: attemptQuestions.seenAt, lockedAt: attemptQuestions.lockedAt,
       response: answers.response, seq: answers.seq, flagged: answers.flagged,
@@ -115,7 +123,7 @@ export function getQuestion(actor: Actor, attemptId: string, sessionId: string, 
     ));
     if (!row?.seenAt) fail(403, "QUESTION_UNAVAILABLE", "This question has not been released.");
     const { id, type, text, marks, options } = row;
-    return { id, position: row.position, type, text, marks, options, response: row.response, seq: row.seq ?? 0,
+    return { id, position: row.position, sectionId: row.sectionId, type, text, marks, options, response: row.response, seq: row.seq ?? 0,
       locked: Boolean(row.lockedAt), flagged: row.flagged ?? false };
   });
 }

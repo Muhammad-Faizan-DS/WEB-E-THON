@@ -338,4 +338,74 @@ describe("SecureExam HTTP API", () => {
     const blocked = await request("/api/admin/enrollments", { cookie: admin });
     expect(blocked.data).toEqual(expect.arrayContaining([expect.objectContaining({ id: fixture.enrollmentId, strikes: 2 })]));
   }, 90_000);
+
+  it("builds sectioned exams from presets, bank picks and uploads, and draws sections in order (PRD §24.3)", async ({ onTestFailed }) => {
+    onTestFailed(() => { console.error(logs); });
+    const examiner = await login("examiner");
+    const otherExaminer = await login("examiner2");
+    const candidate = await login("candidate2");
+    const presets = await request("/api/exam-presets", { cookie: examiner });
+    expect(presets.data.map(({ type }: { type: string }) => type)).toEqual(["practice", "quiz", "assignment", "midterm", "final"]);
+    expectCode(await request("/api/exam-presets", { cookie: candidate }), 403, "FORBIDDEN");
+
+    const mcq = {
+      type: "single", topic: "Algebra", difficulty: 2, marks: 1, course: "MATH-101",
+      options: [{ id: "a", text: "4", isCorrect: true }, { id: "b", text: "5", isCorrect: false }],
+    };
+    const mcqIds: string[] = [];
+    for (const text of ["2 + 2 = ?", "8 / 2 = ?"]) mcqIds.push((await request("/api/questions", { cookie: examiner, method: "POST", data: { ...mcq, text } })).data.id);
+    const essay = await request("/api/questions", { cookie: examiner, method: "POST", data: {
+      type: "written", topic: "Algebra", difficulty: 2, marks: 5, text: "Explain why x + 0 = x.", options: [] } });
+    const now = Date.now();
+    const made = await request("/api/exams", { cookie: examiner, method: "POST", data: {
+      title: "Sectioned midterm", examType: "midterm", course: "MATH-101", startsAt: new Date(now - 30_000).toISOString(),
+      endsAt: new Date(now + 600_000).toISOString(), durationMin: 10, totalMarks: 9, settings: { integrityMode: "standard" } } });
+    expect(made, JSON.stringify(made)).toMatchObject({ status: 201, data: { examType: "midterm", course: "MATH-101" } });
+    const s = `/api/exams/${made.data.id}/sections`;
+    const listed = await request(s, { cookie: examiner });
+    expect(listed.data).toHaveLength(1);
+    const sectionA = listed.data[0].id;
+    expectCode(await request(s, { cookie: otherExaminer }), 403, "FORBIDDEN");
+    expect((await request(s, { cookie: examiner, method: "PATCH", data: { id: sectionA, title: "A — MCQs", allowedTypes: ["single"], marksPerQuestion: 2 } })).status).toBe(200);
+    const sectionB = (await request(s, { cookie: examiner, method: "POST", data: { title: "B — Written", allowedTypes: ["written"], instructions: "Show your reasoning." } })).data.id;
+
+    expectCode(await request(`${s}/${sectionA}/questions`, { cookie: examiner, method: "POST", data: { questionIds: [essay.data.id] } }), 400, "SECTION_TYPE_CONFLICT");
+    expect((await request(`${s}/${sectionA}/questions`, { cookie: examiner, method: "POST", data: { questionIds: mcqIds } })).data.questionIds).toEqual(mcqIds);
+    const choices = JSON.stringify([{ id: "a", text: "1", isCorrect: true }, { id: "b", text: "2", isCorrect: false }]).replaceAll('"', '""');
+    const csv = ["type,topic,difficulty,text,marks,options", "written,Algebra,2,Prove that 0 + x = x.,5,",
+      "written,Algebra,7,Broken row,5,", `single,Algebra,1,Wrong section,1,"${choices}"`].join("\n");
+    const preview = await request(`${s}/${sectionB}/import`, { cookie: examiner, method: "POST", data: { format: "csv", content: csv } });
+    expect(preview, JSON.stringify(preview)).toMatchObject({ status: 200, data: { imported: 0, valid: [{ row: 1 }], errors: [{ row: 2 }, { row: 3 }] } });
+    const committed = await request(`${s}/${sectionB}/import`, { cookie: examiner, method: "POST", data: { format: "csv", content: csv, commit: true, tags: ["proofs"] } });
+    expect(committed.data.imported).toBe(1);
+    const bank = await request("/api/questions?course=MATH-101&tag=proofs", { cookie: examiner });
+    expect(bank.data).toEqual([expect.objectContaining({ id: committed.data.questionIds[0], course: "MATH-101", tags: ["proofs"],
+      usedIn: [{ examId: made.data.id, title: "Sectioned midterm" }] })]);
+
+    const checklist = await request(`/api/exams/${made.data.id}/checklist`, { cookie: examiner });
+    expect(checklist, JSON.stringify(checklist)).toMatchObject({ data: { canPublish: true } });
+    expectCode(await request(`${s}/reorder`, { cookie: examiner, method: "PATCH", data: { sectionIds: [sectionB] } }), 400, "INVALID_SECTION_ORDER");
+    const reordered = await request(`${s}/reorder`, { cookie: examiner, method: "PATCH", data: { sectionIds: [sectionB, sectionA] } });
+    expect(reordered.data.map(({ id }: { id: string }) => id)).toEqual([sectionB, sectionA]);
+    const emptySection = (await request(s, { cookie: examiner, method: "POST", data: { title: "C — Empty" } })).data.id;
+    expect((await request(`/api/exams/${made.data.id}/checklist`, { cookie: examiner })).data.issues).toContain("C — Empty has no questions.");
+    expect((await request(`${s}?sectionId=${emptySection}`, { cookie: examiner, method: "DELETE" })).status).toBe(200);
+
+    const e = `/api/exams/${made.data.id}`;
+    expect((await request(e + "/publish", { cookie: examiner, method: "POST" })).status).toBe(200);
+    const enrolled = await request(e + "/enrollments", { cookie: examiner, method: "POST", data: { candidates: [{ candidateId: identities.candidate2 }] } });
+    const keys = await request(e + "/keys", { cookie: examiner, method: "POST", data: { enrollmentIds: [enrolled.data[0].id] } });
+    const started = await request(e + "/attempts", { cookie: candidate, method: "POST", data: { deviceCheck: true, key: keys.data[0].key } });
+    expect(started, JSON.stringify(started)).toMatchObject({ status: 201, data: { totalQuestions: 3 } });
+    const state = await request(`/api/attempts/${started.data.id}`, { cookie: candidate });
+    expect(state.data.sections).toEqual([
+      { id: sectionB, title: "B — Written", instructions: "Show your reasoning.", firstPosition: 1, count: 1 },
+      { id: sectionA, title: "A — MCQs", instructions: "", firstPosition: 2, count: 2 },
+    ]);
+    expect(state.data.palette.map(({ sectionId }: { sectionId: string }) => sectionId)).toEqual([sectionB, sectionA, sectionA]);
+    const first = await request(`/api/attempts/${started.data.id}/questions/1`, { cookie: candidate, headers: { "x-exam-session-id": started.data.sessionId } });
+    expect(first.data).toMatchObject({ sectionId: sectionB, type: "written", marks: 5 });
+    expect(JSON.stringify(first)).not.toContain("isCorrect");
+    expectCode(await request(s, { cookie: examiner, method: "PATCH", data: { id: sectionA, title: "Renamed" } }), 409, "EXAM_FROZEN");
+  });
 });
