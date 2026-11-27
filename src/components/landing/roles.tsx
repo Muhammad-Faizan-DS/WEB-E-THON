@@ -119,7 +119,7 @@ function RoleMock({ kind }: { kind: "candidate" | "examiner" | "admin" }) {
           {[["Mean", "21.4"], ["Median", "22"], ["Graded", "24 / 24"]].map(([k, v]) => (
             <div key={k} className="px-4 py-3">
               <p className="text-muted-foreground">{k}</p>
-              <p className="font-display text-[20px] font-bold tabular-nums">{v}</p>
+              <p className="font-display text-[20px] font-semibold tabular-nums">{v}</p>
             </div>
           ))}
         </div>

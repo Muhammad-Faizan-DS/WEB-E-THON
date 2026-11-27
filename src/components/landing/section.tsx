@@ -4,7 +4,7 @@ export const WRAP = "mx-auto max-w-[76rem] px-5 sm:px-8";
 
 export function SectionTitle({ id, children, className }: { id: string; children: React.ReactNode; className?: string }) {
   return (
-    <h2 id={id} className={cn("display max-w-[20ch] text-[clamp(2.1rem,4.4vw,3.6rem)] font-extrabold text-balance", className)}>
+    <h2 id={id} className={cn("display max-w-[20ch] text-[clamp(2rem,4vw,3.25rem)] font-semibold text-balance", className)}>
       {children}
     </h2>
   );

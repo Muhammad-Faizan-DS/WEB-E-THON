@@ -16,8 +16,8 @@ const LINKS = [
 
 function Wordmark() {
   return (
-    <span className="inline-flex items-center gap-2.5 text-[18px] font-bold tracking-[-0.03em]">
-      <svg viewBox="0 0 24 24" className="size-[26px]" aria-hidden>
+    <span className="inline-flex items-center gap-2.5 text-[17px] font-semibold tracking-[-0.025em]">
+      <svg viewBox="0 0 24 24" className="size-[22px]" aria-hidden>
         <rect x="1" y="1" width="22" height="22" rx="6" className="fill-brand" />
         <path d="m6.6 12.4 3.5 3.5 7.3-8.1" fill="none" className="stroke-brand-foreground" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -41,7 +41,7 @@ export function SiteNav() {
 
   return (
     <header className={cn("fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color] duration-200 ease-out", scrolled ? "border-border bg-background" : "border-transparent bg-transparent")}>
-      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:rounded-md focus:bg-brand focus:px-3 focus:py-2 focus:text-brand-foreground">
+      <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:rounded-md focus:bg-foreground focus:px-3 focus:py-2 focus:text-background">
         Skip to content
       </a>
       <div className="mx-auto flex h-16 max-w-[76rem] items-center gap-6 px-5 sm:px-8">
@@ -50,14 +50,14 @@ export function SiteNav() {
         </Link>
         <nav aria-label="Sections" className="ml-4 hidden items-center gap-1 md:flex">
           {LINKS.map((l) => (
-            <a key={l.href} href={l.href} className="inline-flex min-h-11 items-center rounded-md px-3 text-[14px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground">
+            <a key={l.href} href={l.href} className="inline-flex min-h-11 items-center rounded-md px-3 text-[13px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground">
               {l.label}
             </a>
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-2">
           <ThemeToggle />
-          <Link href={home ?? "/login"} className="inline-flex h-10 items-center rounded-lg bg-foreground px-4 text-[14px] font-semibold text-background transition-opacity duration-150 hover:opacity-85">
+          <Link href={home ?? "/login"} className="inline-flex h-9 items-center rounded-md bg-foreground px-3.5 text-[13px] font-medium text-background transition-opacity duration-150 hover:opacity-85">
             {home ? "Open your dashboard" : "Sign in"}
           </Link>
         </div>

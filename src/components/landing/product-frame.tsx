@@ -18,7 +18,7 @@ const ROWS: Row[] = [
 ];
 
 const TONE: Record<Tone, { label: string; dot: string }> = {
-  live: { label: "In progress", dot: "bg-brand" },
+  live: { label: "In progress", dot: "bg-success" },
   done: { label: "Submitted", dot: "bg-info" },
   locked: { label: "Locked", dot: "bg-warning-dot" },
   offline: { label: "Offline", dot: "bg-muted-foreground" },
@@ -33,13 +33,13 @@ const STATS = [
   ["Not started", "1"],
 ] as const;
 
-/** Glass inner surfaces, themed: translucent surface + hairline, no shadows. */
-const CELL = "bg-surface/55 ring-1 ring-inset ring-foreground/[0.08]";
+/** Inner wells: page tone + hairline, no shadows, no colour fills. */
+const CELL = "bg-background ring-1 ring-inset ring-border";
 const BTN = "rounded-md px-3 py-1 text-[11px] font-semibold";
 
 /**
- * A coded, non-interactive picture of the live monitor with sample data, set on frosted glass over the
- * hero's gradient plate. Screen readers get the one-line summary; the frame itself is decorative.
+ * A coded, non-interactive picture of the live monitor with sample data, set in a plain frame with a
+ * hairline border. Screen readers get the one-line summary; the frame itself is decorative.
  */
 export function ProductFrame({ className }: { className?: string }) {
   const [t, setT] = React.useState(0);
@@ -56,11 +56,10 @@ export function ProductFrame({ className }: { className?: string }) {
       </figcaption>
       <div
         aria-hidden
-        className="relative animate-[rise-far_1s_0.35s_cubic-bezier(0.22,1,0.36,1)_both] overflow-hidden rounded-[18px] border border-white/50 bg-surface/60 text-foreground backdrop-blur-2xl backdrop-saturate-150 select-none dark:border-white/10 dark:bg-surface/55"
+        className="relative animate-[rise-far_1s_0.35s_cubic-bezier(0.22,1,0.36,1)_both] overflow-hidden rounded-xl border border-border bg-surface text-foreground select-none"
       >
-        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white/70 to-transparent dark:via-white/25" />
         {/* top bar */}
-        <div className="flex items-center gap-3 border-b border-foreground/[0.08] px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
           <span className="flex gap-1.5">
             <span className="size-2.5 rounded-full bg-foreground/20" />
             <span className="size-2.5 rounded-full bg-foreground/20" />
@@ -68,7 +67,7 @@ export function ProductFrame({ className }: { className?: string }) {
           </span>
           <p className="ml-2 truncate text-[13px] font-semibold">Data Science Fundamentals · DSF-101</p>
           <span className={cn("ml-auto hidden items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] text-muted-foreground sm:inline-flex", CELL)}>
-            <Radio className="size-3.5 text-primary" /> Live · updated {(t % 15) + 1} s ago
+            <Radio className="size-3.5 text-success" /> Live · updated {(t % 15) + 1} s ago
           </span>
         </div>
 
@@ -76,16 +75,16 @@ export function ProductFrame({ className }: { className?: string }) {
           <div className="min-w-0 p-4 sm:p-5">
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               {STATS.map(([k, v], i) => (
-                <div key={k} className={cn("rounded-lg px-3 py-2.5", CELL, i > 2 && "hidden sm:block", i === 1 && "bg-danger-soft/70 ring-danger/25")}>
-                  <p className="text-[11px] text-muted-foreground">{k}</p>
-                  <p className={cn("text-[20px] font-bold tabular-nums", i === 1 && "text-danger")}>{v}</p>
+                <div key={k} className={cn("rounded-lg px-3 py-2.5", CELL, i > 2 && "hidden sm:block")}>
+                  <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">{i === 1 && <span className="size-1.5 rounded-full bg-danger" />}{k}</p>
+                  <p className="text-[20px] font-semibold tabular-nums">{v}</p>
                 </div>
               ))}
             </div>
             <div className={cn("mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] text-muted-foreground", CELL)}>
               <Search className="size-3.5" /> Search by name or student ID
             </div>
-            <ul className="mt-2 divide-y divide-foreground/[0.07]">
+            <ul className="mt-2 divide-y divide-border">
               {ROWS.map((r) => {
                 const tone = TONE[r.tone];
                 const answered = r.tone === "live" ? Math.min(TOTAL - 1, r.answered + climb) : r.answered;
@@ -122,23 +121,23 @@ export function ProductFrame({ className }: { className?: string }) {
             </ul>
           </div>
 
-          <div className="hidden border-l border-foreground/[0.08] p-5 lg:block">
+          <div className="hidden border-l border-border p-5 lg:block">
             <p className="text-[12px] font-semibold text-muted-foreground">Needs your attention</p>
-            <div className="mt-3 rounded-xl bg-danger-soft/70 p-3.5 ring-1 ring-inset ring-danger/25">
+            <div className={cn("mt-3 rounded-lg p-3.5", CELL)}>
               <p className="flex items-center gap-1.5 text-[12px] font-semibold"><span className="size-2 rounded-full bg-danger" /> Priority review · Bilal Ahmed</p>
               <p className="mt-2 text-[12px] leading-[1.55]">
                 The exam page was hidden for 45 s. Two seconds after returning to Question 3, a 348-character paste was blocked. What happened while the page was hidden is unknown.
               </p>
               <div className="mt-3 flex gap-2">
-                <span className={cn(BTN, "bg-surface/70 ring-1 ring-inset ring-foreground/15")}>Dismiss</span>
-                <span className={cn(BTN, "bg-brand text-brand-foreground")}>Follow up</span>
+                <span className={cn(BTN, "bg-surface ring-1 ring-inset ring-border-strong")}>Dismiss</span>
+                <span className={cn(BTN, "bg-foreground text-background")}>Follow up</span>
               </div>
             </div>
-            <div className={cn("mt-3 rounded-xl p-3.5", CELL)}>
+            <div className={cn("mt-3 rounded-lg p-3.5", CELL)}>
               <p className="flex items-center gap-1.5 text-[12px] font-semibold"><span className="size-2 rounded-full bg-warning-dot" /> Unlock request · Omar Farooq</p>
               <p className="mt-2 text-[12px] leading-[1.55] text-muted-foreground">Opened on a 4th device after his laptop shut down. Clock kept running.</p>
               <div className="mt-3 flex gap-2">
-                <span className={cn(BTN, "bg-surface/70 ring-1 ring-inset ring-foreground/15")}>Review</span>
+                <span className={cn(BTN, "bg-surface ring-1 ring-inset ring-border-strong")}>Review</span>
               </div>
             </div>
             <p className="mt-5 text-[11px] text-muted-foreground">Sample data</p>

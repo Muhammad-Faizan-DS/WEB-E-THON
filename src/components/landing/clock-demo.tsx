@@ -37,12 +37,12 @@ export function ClockDemo() {
   return (
     <div className="relative rounded-2xl border border-border bg-surface p-5  sm:p-7">
       <div className="flex items-baseline justify-between gap-4">
-        <p className="font-display text-[13px] font-bold">Sample attempt · 20 minutes</p>
+        <p className="font-display text-[13px] font-semibold">Sample attempt · 20 minutes</p>
         <p className="text-[12px] text-muted-foreground">Times in PKT</p>
       </div>
 
       <p className="mt-6 text-[13px] text-muted-foreground" id="left-label">Time left</p>
-      <p aria-labelledby="left-label" className="font-display text-[clamp(3.5rem,9vw,5.5rem)] leading-none font-bold tracking-[-0.04em] tabular-nums">
+      <p aria-labelledby="left-label" className="font-display text-[clamp(3.5rem,9vw,5.5rem)] leading-none font-semibold tracking-[-0.04em] tabular-nums">
         {fmtClock(left)}
       </p>
 
@@ -56,7 +56,7 @@ export function ClockDemo() {
           <dd className="mt-0.5 font-mono text-[17px] tabular-nums">
             {device}
             {minutes !== 0 && (
-              <span className="ml-2 align-middle font-display text-[12px] font-bold text-danger">
+              <span className="ml-2 align-middle font-display text-[12px] font-semibold text-danger">
                 {minutes > 0 ? "+" : "−"}
                 {Math.abs(minutes)} min
               </span>

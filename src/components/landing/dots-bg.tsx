@@ -28,7 +28,7 @@ export function DotsBackground({ className }: { className?: string }) {
       (window as unknown as { THREE: unknown }).THREE = THREE;
       const { default: DOTS } = await import("vanta/dist/vanta.dots.min");
       if (cancelled || !ref.current) return;
-      const color = resolvedTheme === "dark" ? 0xffb07a : 0x3e2407;
+      const color = resolvedTheme === "dark" ? 0x5b6068 : 0xa3a8ae;
       effect = DOTS({
         el: ref.current,
         THREE,
@@ -62,7 +62,7 @@ export function DotsBackground({ className }: { className?: string }) {
     <div
       ref={ref}
       aria-hidden
-      className={cn("absolute inset-0 transition-opacity duration-[1200ms] ease-out", live ? "opacity-60" : "opacity-0", className)}
+      className={cn("absolute inset-0 transition-opacity duration-[1200ms] ease-out", live ? "opacity-70" : "opacity-0", className)}
     />
   );
 }

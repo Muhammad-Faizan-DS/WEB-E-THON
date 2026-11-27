@@ -118,13 +118,13 @@ export function ReceiptDemo() {
               exit={reduce ? { opacity: 0 } : { opacity: 0, x: 0, y: 0, rotate: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             >
-              <span className="absolute bottom-[7px] left-5 font-display text-[11px] font-bold text-muted-foreground">Copy kept on this device</span>
+              <span className="absolute bottom-[7px] left-5 font-display text-[11px] font-semibold text-muted-foreground">Copy kept on this device</span>
             </motion.div>
           )}
         </AnimatePresence>
         <div className="relative rounded-2xl border border-border bg-surface p-5  sm:p-6">
           <div className="flex items-baseline justify-between gap-3">
-            <label htmlFor="demo-answer" className="font-display text-[15px] font-bold">
+            <label htmlFor="demo-answer" className="font-display text-[15px] font-semibold">
               Question 3 <span className="font-sans text-[13px] font-normal text-muted-foreground">· written · 5 marks</span>
             </label>
             <span className="font-mono text-[12px] text-muted-foreground tabular-nums">rev {rev}</span>

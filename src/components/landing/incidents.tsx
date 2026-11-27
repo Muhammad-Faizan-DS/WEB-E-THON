@@ -99,10 +99,10 @@ export function Incidents() {
       <p className="mt-4 text-[14px] text-muted-foreground">Sample incidents with fictional data. A decision never changes marks, status or time.</p>
 
       <div className="mt-16">
-        <h3 className="font-display text-[20px] font-bold tracking-[-0.02em]">What this record never contains</h3>
+        <h3 className="font-display text-[20px] font-semibold tracking-[-0.02em]">What this record never contains</h3>
         <ul className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
           {NEVER.map((n) => (
-            <li key={n} className="font-display text-[clamp(1.35rem,2.6vw,2rem)] font-bold tracking-[-0.02em] text-muted-foreground">
+            <li key={n} className="font-display text-[clamp(1.35rem,2.6vw,2rem)] font-semibold tracking-[-0.02em] text-muted-foreground">
               <s className="ink-strike">{n}</s>
               <span className="sr-only"> (never collected)</span>
             </li>

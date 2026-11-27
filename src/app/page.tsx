@@ -25,7 +25,7 @@ export default function Home() {
       <main id="main">
         <Hero />
 
-        <section id="how" aria-labelledby="how-title" className="scroll-mt-16 py-24 md:py-32">
+        <section id="how" aria-labelledby="how-title" className="mt-20 scroll-mt-16 border-t border-border py-24 md:mt-24 md:py-32">
           <div className={WRAP}>
             <SectionTitle id="how-title">Two questions a candidate never has to ask.</SectionTitle>
             <Lede>
@@ -35,7 +35,7 @@ export default function Home() {
 
             <div className="mt-16 grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,30rem)] lg:gap-20">
               <div>
-                <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-bold tracking-[-0.025em]">How long do I have?</h3>
+                <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-semibold tracking-[-0.025em]">How long do I have?</h3>
                 <p className="mt-1 text-[16px] text-muted-foreground">The server keeps the clock, not the device.</p>
                 <Flow
                   label="Time: the server sets the deadline once; the device clock cannot change it."
@@ -56,7 +56,7 @@ export default function Home() {
 
             <div className="mt-24 grid items-center gap-12 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:gap-20">
               <div className="lg:order-2">
-                <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-bold tracking-[-0.025em]">Is my answer saved?</h3>
+                <h3 className="text-[clamp(1.5rem,2.4vw,2rem)] font-semibold tracking-[-0.025em]">Is my answer saved?</h3>
                 <p className="mt-1 text-[16px] text-muted-foreground">Every answer gets a receipt, even offline.</p>
                 <Flow
                   label="Saving: an answer is saved with a receipt; offline it is kept on the device and sent later."
@@ -77,7 +77,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="integrity" aria-labelledby="integrity-title" className="scroll-mt-16 border-y border-border bg-surface py-24 md:py-32">
+        <section id="integrity" aria-labelledby="integrity-title" className="scroll-mt-16 border-t border-border py-24 md:py-32">
           <div className={WRAP}>
             <SectionTitle id="integrity-title">Who decides what an observation means? A person.</SectionTitle>
             <Lede>
@@ -99,7 +99,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="roles" aria-labelledby="roles-title" className="scroll-mt-16 py-24 md:py-32">
+        <section id="roles" aria-labelledby="roles-title" className="scroll-mt-16 border-t border-border py-24 md:py-32">
           <div className={WRAP}>
             <SectionTitle id="roles-title">One platform, three roles.</SectionTitle>
             <Lede>Each role sees only what it needs. Every permission is checked on the server, not just hidden in the interface.</Lede>
@@ -107,7 +107,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="features" aria-labelledby="features-title" className="scroll-mt-16 border-y border-border bg-surface py-24 md:py-32">
+        <section id="features" aria-labelledby="features-title" className="scroll-mt-16 border-t border-border py-24 md:py-32">
           <div className={WRAP}>
             <div className="grid items-end gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
               <div>

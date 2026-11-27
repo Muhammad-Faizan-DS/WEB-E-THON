@@ -33,13 +33,13 @@ export function AnswerStrip({
   const keptCells = Math.round(kept / per);
   const currentCell = current !== undefined ? Math.floor(current / per) : -1;
 
-  void tone; // both themes now share the brand look; kept for API compatibility
+  void tone; // one neutral look in both themes; kept for API compatibility
   const look = {
-    answered: "bg-brand shadow-[inset_0_1px_0_rgb(255_255_255/0.35)]",
-    locked: "bg-muted-foreground/45",
-    kept: "bg-[repeating-linear-gradient(135deg,#796758_0_2px,rgb(121_103_88/0.3)_2px_4px)]",
+    answered: "bg-foreground/80",
+    locked: "bg-muted-foreground/40",
+    kept: "bg-[repeating-linear-gradient(135deg,var(--muted-foreground)_0_1.5px,transparent_1.5px_4px)] ring-1 ring-inset ring-muted-foreground/40",
     current: "bg-surface ring-[1.5px] ring-inset ring-foreground/60",
-    empty: "bg-foreground/[0.07] ring-1 ring-inset ring-foreground/[0.06]",
+    empty: "bg-foreground/[0.06]",
   };
 
   return (

@@ -3,103 +3,85 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Fairmark tokens. See DESIGN.md. Palette: Vivid Orange #FF5C00 · French Roast #3E2407 ·
- * Soft Brown #796758 · Orangey Greige #F7F0E8. Light and dark themes, AA contrast.
- * Status colours appear on dots/icons; text stays ink except for priority/destructive states.
+ * Fairmark tokens. See DESIGN.md. Calm neutrals (Linear-clean) with one quiet emerald accent.
+ * Light and dark themes, AA contrast. Status colours appear on dots/icons; text stays ink
+ * except for priority/destructive states.
  */
 :root {
   --radius: 0.5rem;
 
-  --background: #f7f0e8;
-  --foreground: #3e2407;
-  --surface: #fffcf8;
-  --surface-2: #f3ebe1;
-  --muted-foreground: #796758;
-  --subtle-foreground: #796758;
-  --border: #e6d9ca;
-  --border-strong: #d3c2af;
-  --input: #d3c2af;
-  --ring: #b8430a;
+  --background: #f7f8f8;
+  --foreground: #0b0d0e;
+  --surface: #ffffff;
+  --surface-2: #f1f2f3;
+  --muted-foreground: #5c6168;
+  --subtle-foreground: #6b7078;
+  --border: #e7e8ea;
+  --border-strong: #d0d3d6;
+  --input: #d0d3d6;
+  --ring: #047857;
 
-  /* text-safe orange: links, focus, small accents, default buttons (white text) */
-  --primary: #b8430a;
-  --primary-hover: #9c3807;
+  /* the one accent: emerald. Links, focus, the main action, live states. */
+  --primary: #047857;
+  --primary-hover: #065f46;
   --primary-foreground: #ffffff;
-  --primary-soft: #fbe7d8;
-  /* vivid brand orange: big fills only, always with roast text */
-  --brand: #ff5c00;
-  --brand-hover: #ff7424;
-  --brand-foreground: #2a1704;
+  --primary-soft: #e6f5ee;
+  --brand: #047857;
+  --brand-hover: #065f46;
+  --brand-foreground: #ffffff;
 
-  --secondary: #f3ebe1;
-  --secondary-foreground: #3e2407;
+  --secondary: #f1f2f3;
+  --secondary-foreground: #0b0d0e;
 
-  --success: #2f7d4f;
-  --success-soft: #e6f2ea;
-  --warning: #9a5800;
-  --warning-dot: #e09a1a;
-  --warning-soft: #fbf0dc;
+  --success: #15803d;
+  --success-soft: #e8f5ec;
+  --warning: #a35f00;
+  --warning-dot: #d98e04;
+  --warning-soft: #fbf2df;
   --danger: #b42318;
-  --danger-soft: #fbe9e6;
+  --danger-soft: #fbebe9;
   --flag: #1f6f78;
   --flag-soft: #e1f1f2;
-  --info: #2c5f9e;
-  --info-soft: #e7eef8;
+  --info: #2a5db0;
+  --info-soft: #eaf0fa;
 
   --q-size: 1.125rem;
-
-  /* gradient plate (homepage hero, closing band, login panel) */
-  --plate-base: #f4e3d1;
-  --plate-a: #ff5c00;
-  --plate-b: #ffc79c;
-  --plate-c: #3e2407;
-  --plate-d: #ffa868;
-  --grain-opacity: 0.22;
-  --grain-blend: multiply;
 }
 
 .dark {
-  --background: #170e06;
-  --foreground: #f7f0e8;
-  --surface: #22150a;
-  --surface-2: #2e1d0d;
-  --muted-foreground: #b5a291;
-  --subtle-foreground: #a8957f;
-  --border: #3e2407;
-  --border-strong: #5a3a18;
-  --input: #5a3a18;
-  --ring: #ff7a2e;
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --surface: #0f1011;
+  --surface-2: #16171a;
+  --muted-foreground: #8a8f98;
+  --subtle-foreground: #7c818a;
+  --border: #1c1d20;
+  --border-strong: #2a2c30;
+  --input: #2a2c30;
+  --ring: #34d399;
 
-  --primary: #ff7a2e;
-  --primary-hover: #ff9452;
-  --primary-foreground: #170e06;
-  --primary-soft: #3a1e08;
-  --brand: #ff5c00;
-  --brand-hover: #ff7424;
-  --brand-foreground: #170e06;
+  --primary: #34d399;
+  --primary-hover: #6ee7b7;
+  --primary-foreground: #04130d;
+  --primary-soft: #0f2a21;
+  --brand: #34d399;
+  --brand-hover: #6ee7b7;
+  --brand-foreground: #04130d;
 
-  --secondary: #2e1d0d;
-  --secondary-foreground: #f7f0e8;
+  --secondary: #16171a;
+  --secondary-foreground: #f7f8f8;
 
-  --success: #5fd08f;
-  --success-soft: #13261a;
-  --warning: #f2b451;
-  --warning-dot: #f2b451;
-  --warning-soft: #2d2010;
+  --success: #4ade80;
+  --success-soft: #11251a;
+  --warning: #f0b44c;
+  --warning-dot: #f0b44c;
+  --warning-soft: #2d2412;
   --danger: #ff8a80;
-  --danger-soft: #301614;
+  --danger-soft: #2f1716;
   --flag: #62c6cf;
   --flag-soft: #0f2729;
-  --info: #8db6f0;
-  --info-soft: #14213a;
-
-  --plate-base: #241407;
-  --plate-a: #ff5c00;
-  --plate-b: #7a3410;
-  --plate-c: #0d0703;
-  --plate-d: #c2470a;
-  --grain-opacity: 0.18;
-  --grain-blend: overlay;
+  --info: #8fb4f0;
+  --info-soft: #17223a;
 }
 
 @theme inline {
@@ -133,9 +115,6 @@
   --color-flag-soft: var(--flag-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
-  --color-roast: #3e2407;
-  --color-greige: #f7f0e8;
-  --color-soft-brown: #796758;
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -150,7 +129,7 @@
   /* no soft "card" shadows: depth comes from borders and tone; only overlays get a shadow */
   --shadow-sm: 0 0 0 0 transparent;
   --shadow-md: 0 0 0 0 transparent;
-  --shadow-lg: 0 18px 40px -16px rgb(23 14 6 / 0.35);
+  --shadow-lg: 0 18px 40px -16px rgb(0 0 0 / 0.35);
 }
 
 @layer base {
@@ -172,11 +151,12 @@
     caret-color: var(--primary);
   }
   ::selection {
-    background: color-mix(in oklab, var(--brand) 32%, transparent);
+    background: color-mix(in oklab, var(--primary) 24%, transparent);
     color: inherit;
   }
   h1, h2, h3 {
     font-family: var(--font-poppins), system-ui, sans-serif;
+    font-weight: 600;
     letter-spacing: -0.02em;
     text-wrap: balance;
   }
@@ -233,34 +213,9 @@
   /* ---- homepage ---- */
   .display {
     font-family: var(--font-poppins), system-ui, sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.035em;
-    line-height: 1.04;
-  }
-  /*
-   * Mesh gradient plate: layered radial fields blended in oklch (no muddy midpoints), over a warm base,
-   * with film grain on top to kill banding. Themed through the --plate-* tokens.
-   */
-  .mesh-plate {
-    position: relative;
-    isolation: isolate;
-    background:
-      radial-gradient(62% 78% at 14% 8% in oklch, var(--plate-a) 0%, transparent 62%),
-      radial-gradient(48% 60% at 86% 4% in oklch, var(--plate-b) 0%, transparent 66%),
-      radial-gradient(58% 70% at 82% 96% in oklch, var(--plate-c) 0%, transparent 72%),
-      radial-gradient(46% 56% at 6% 96% in oklch, var(--plate-d) 0%, transparent 70%),
-      var(--plate-base);
-  }
-  .mesh-plate::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    border-radius: inherit;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-    mix-blend-mode: var(--grain-blend);
-    opacity: var(--grain-opacity);
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1.08;
   }
   .ink-strike {
     text-decoration-line: line-through;

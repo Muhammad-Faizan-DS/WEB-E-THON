@@ -12,7 +12,7 @@ const SEVERITY: Record<Severity, { label: string; dot: string }> = {
 export function SeverityMark({ level, className }: { level: Severity; className?: string }) {
   const s = SEVERITY[level];
   return (
-    <span className={cn("inline-flex items-center gap-2 font-display text-[13px] font-bold tracking-[-0.005em]", className)}>
+    <span className={cn("inline-flex items-center gap-2 font-display text-[13px] font-semibold tracking-[-0.005em]", className)}>
       <span aria-hidden className={cn("size-2.5 rounded-full ring-2 ring-black/5", s.dot)} />
       {s.label}
     </span>

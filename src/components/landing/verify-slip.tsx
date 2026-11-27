@@ -7,7 +7,7 @@ export function VerifySlip() {
     <div className="relative w-full max-w-[30rem] rounded-2xl border border-border bg-surface ">
       <div className="px-6 pt-5 pb-6 sm:px-8">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="font-display text-[15px] font-bold tracking-[-0.01em]">Statistics Quiz 1 · Result</p>
+          <p className="font-display text-[15px] font-semibold tracking-[-0.01em]">Statistics Quiz 1 · Result</p>
           <p className="text-[12px] text-muted-foreground">Sample</p>
         </div>
         <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 text-[14px]">
@@ -17,7 +17,7 @@ export function VerifySlip() {
           </div>
           <div>
             <dt className="text-muted-foreground">Score</dt>
-            <dd className="mt-0.5 font-display text-[20px] font-bold tabular-nums">24 / 30</dd>
+            <dd className="mt-0.5 font-display text-[20px] font-semibold tabular-nums">24 / 30</dd>
           </div>
         </dl>
         <div className="mt-6 border-t border-dashed border-border-strong pt-4">
