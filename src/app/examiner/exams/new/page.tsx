@@ -38,8 +38,17 @@ export default function NewExamPage() {
   const [busy, setBusy] = React.useState<"draft" | "publish" | null>(null);
   const summaryRef = React.useRef<HTMLDivElement>(null);
 
+  // ?draft=<id> reopens a saved draft so unfinished work can be finished and published
+  const [draftId, setDraftId] = React.useState<string | null>(null);
   React.useEffect(() => {
     api.get("/api/candidates", CandidateList).then((d) => setCandidates(d.candidates), () => setCandidates([]));
+    const id = new URLSearchParams(window.location.search).get("draft");
+    if (!id) return;
+    api.get<{ title: string; code: string; durationMin: number; openForMin: number; instructions: string; pastePolicy: "block" | "log" | "allow"; fullscreenRequired: boolean; enrolled: string[]; questions: QuestionDraft[] }>(`/api/exams/${id}/draft`).then((d) => {
+      setDraftId(id); setTitle(d.title); setCode(d.code); setDuration(d.durationMin); setInstructions(d.instructions);
+      setOpenFor(WINDOW.some((w) => w.v === d.openForMin) ? d.openForMin : 1440); setPaste(d.pastePolicy); setFullscreen(d.fullscreenRequired);
+      setQuestions(d.questions.length ? d.questions : [blank("single")]); setEnrolled(new Set(d.enrolled));
+    }, () => toast.error("Couldn't open that draft"));
   }, []);
 
   const setQ = (i: number, p: Partial<QuestionDraft>) => setQuestions((qs) => qs.map((q, j) => (j === i ? { ...q, ...p } : q)));
@@ -48,11 +57,24 @@ export default function NewExamPage() {
   async function save(publish: boolean) {
     const draft = { title, code, durationMin, opensInMin, openForMin, instructions, pastePolicy, fullscreenRequired, questions, enrolled: [...enrolled] };
     const parsed = ExamDraft.safeParse(draft);
-    const list = parsed.success ? [] : parsed.error.issues.map((iss) => {
+    // a draft keeps unfinished work: only the basics must be valid; publishing needs everything
+    const issues = parsed.success ? [] : parsed.error.issues.filter((iss) => publish || ["title", "code", "durationMin"].includes(String(iss.path[0])));
+    const list = issues.map((iss) => {
       if (iss.path[0] === "questions" && typeof iss.path[1] === "number") return `Question ${iss.path[1] + 1}: ${iss.message}`;
       return iss.message;
     });
     if (parsed.success && publish) list.push(...publishProblems(parsed.data));
+    if (!publish && list.length === 0 && !parsed.success) {
+      // save the unfinished draft exactly as typed (the server re-checks everything at publish time)
+      setProblems([]); setBusy("draft");
+      try {
+        const res = await api.post("/api/exams", { ...draft, title: title.trim(), code: code.trim(), publish: false, draftId }, CreatedExam);
+        toast.success("Draft saved", { description: "Unfinished questions were kept. Publish it from the exam page when it's ready." });
+        router.push(`/examiner/exams/${res.examId}`);
+      } catch (e) { setProblems([(e as ApiError).message]); requestAnimationFrame(() => summaryRef.current?.focus()); }
+      finally { setBusy(null); }
+      return;
+    }
     if (list.length) {
       setProblems([...new Set(list)]);
       requestAnimationFrame(() => summaryRef.current?.focus());
@@ -61,7 +83,7 @@ export default function NewExamPage() {
     setProblems([]);
     setBusy(publish ? "publish" : "draft");
     try {
-      const res = await api.post("/api/exams", { ...parsed.data!, publish }, CreatedExam);
+      const res = await api.post("/api/exams", { ...parsed.data!, publish, draftId }, CreatedExam);
       toast.success(publish ? "Exam published" : "Draft saved", { description: publish ? `${enrolled.size} candidate${enrolled.size === 1 ? "" : "s"} can see it on their exams page.` : "You can find it on your dashboard." });
       router.push(`/examiner/exams/${res.examId}`);
     } catch (e) {
@@ -75,7 +97,7 @@ export default function NewExamPage() {
   return (
     <div className="mx-auto max-w-4xl pb-28">
       <Link href="/examiner" className="mb-4 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden /> Dashboard</Link>
-      <h1 className="text-[26px] font-semibold tracking-[-0.01em]">New exam</h1>
+      <h1 className="text-[26px] font-semibold tracking-[-0.01em]">{draftId ? "Edit draft" : "New exam"}</h1>
       <p className="mt-1.5 text-sm text-muted-foreground">Build the paper, set the window and rules, enrol candidates, then publish. Candidates see it on their exams page straight away.</p>
 
       {problems.length > 0 && (

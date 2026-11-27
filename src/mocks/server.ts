@@ -629,7 +629,8 @@ on("POST", "/api/exams", (_p, b, db) => {
   const qs = (Array.isArray(b.questions) ? b.questions : []) as QIn[];
   const durationMin = Number(b.durationMin); const opensInMin = Number(b.opensInMin ?? 0); const openForMin = Number(b.openForMin ?? 1440);
   if (title.length < 3 || code.length < 2 || !(durationMin >= 1) || !(openForMin >= durationMin)) return fail(422, "VALIDATION", "Check the title, code, duration and window.");
-  if (EXAMS.some((e) => e.code === code)) return fail(409, "CONFLICT", `The code ${code} is already used by another exam.`, { fields: { code: "Already used" } });
+  const draftId = typeof b.draftId === "string" ? b.draftId : null;
+  if (EXAMS.some((e) => e.code === code && e.id !== draftId)) return fail(409, "CONFLICT", `The code ${code} is already used by another exam.`, { fields: { code: "Already used" } });
   if (b.publish && qs.length === 0) return fail(422, "VALIDATION", "Add at least one question before publishing.");
   const questions: MockQuestion[] = qs.map((q) => {
     const options = q.type === "written" ? undefined : (q.options ?? []).map((label) => ({ id: uid(), label: String(label) }));
@@ -652,10 +653,46 @@ on("POST", "/api/exams", (_p, b, db) => {
     resultsPublished: false,
   };
   const store = db as MDb & { customExams?: MockExam[] };
-  (store.customExams ??= []).push(e);
+  store.customExams ??= [];
+  const prev = draftId ? store.customExams.findIndex((x) => x.id === draftId && x.status === "draft" && (u.role === "admin" || x.ownerId === u.id)) : -1;
+  if (prev >= 0) { e.id = draftId!; store.customExams[prev] = e; } else store.customExams.push(e);
   mergeCustomExams(db);
   adm(db).audit.push({ id: uid(), at: iso(Date.now()), by: u.email, action: b.publish ? "Published exam" : "Saved exam draft", target: `${title} (${code})`, note: `${questions.length} questions · ${e.enrolled.length} enrolled` });
   return ok({ examId: e.id, status: e.status }, 201);
+});
+
+on("GET", "/api/exams/:id/draft", ([id], _b, db) => {
+  const u = me(db)!;
+  const e = ((db as MDb & { customExams?: MockExam[] }).customExams ?? []).find((x) => x.id === id && x.status === "draft" && (u.role === "admin" || x.ownerId === u.id));
+  if (!e) return fail(404, "NOT_FOUND", "Draft not found.");
+  return ok({
+    title: e.title, code: e.code, durationMin: e.durationMin, openForMin: Math.round(e.closesOffsetMin - e.opensOffsetMin), instructions: e.instructions,
+    pastePolicy: e.settings.pastePolicy, fullscreenRequired: e.settings.fullscreenRequired, enrolled: e.enrolled,
+    questions: e.questions.map((q) => ({ type: q.type, topic: q.topic, prompt: q.prompt, marks: q.marks, options: (q.options ?? []).map((o) => o.label), correct: (q.options ?? []).flatMap((o, i) => ((q.key ?? []).includes(o.id) ? [i] : [])), multiRule: q.multiRule ?? "exact" })),
+  });
+});
+
+on("POST", "/api/exams/:id/publish", ([id], _b, db) => {
+  const u = me(db)!;
+  const store = (db as MDb & { customExams?: MockExam[] }).customExams ?? [];
+  const e = store.find((x) => x.id === id && (u.role === "admin" || x.ownerId === u.id));
+  if (!e) return fail(404, "NOT_FOUND", "Draft not found.");
+  if (e.status === "published") return ok({ examId: e.id, status: e.status });
+  const problems: string[] = [];
+  if (!e.questions.length) problems.push("Add at least one question.");
+  e.questions.forEach((q, i) => {
+    if (q.prompt.trim().length < 5) problems.push(`Question ${i + 1}: write the question.`);
+    if (q.type !== "written" && ((q.options ?? []).filter((o) => o.label.trim()).length < 2 || !(q.key ?? []).length)) problems.push(`Question ${i + 1}: needs two options and a correct answer.`);
+  });
+  if (!e.enrolled.length) problems.push("Enrol at least one candidate.");
+  if (problems.length) return fail(422, "VALIDATION", problems.join(" "), { details: problems });
+  e.status = "published";
+  // the window starts from publication if it would otherwise already be over
+  const sinceEpoch = (Date.now() - db.epoch) / 60000;
+  if (e.closesOffsetMin < sinceEpoch + e.durationMin) { const len = Math.max(e.durationMin, e.closesOffsetMin - e.opensOffsetMin); e.opensOffsetMin = sinceEpoch - 0.05; e.closesOffsetMin = sinceEpoch + len; }
+  mergeCustomExams(db);
+  adm(db).audit.push({ id: uid(), at: iso(Date.now()), by: u.email, action: "Published exam", target: `${e.title} (${e.code})`, note: `${e.questions.length} questions · ${e.enrolled.length} enrolled` });
+  return ok({ examId: e.id, status: e.status });
 });
 
 on("GET", "/api/exams", (_p, _b, db) => {
