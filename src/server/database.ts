@@ -18,3 +18,13 @@ export function database() {
 }
 
 export type Tx = Parameters<Parameters<ReturnType<typeof database>["transaction"]>[0]>[0];
+
+/**
+ * Awaits lazy query builders one after another. Use instead of Promise.all for reads that share a request:
+ * a single-connection server (PGlite in local dev, or a saturated pool) resets connections under parallel queries.
+ */
+export async function inOrder<T extends readonly unknown[]>(queries: T): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
+  const results: unknown[] = [];
+  for (const query of queries) results.push(await query);
+  return results as { -readonly [K in keyof T]: Awaited<T[K]> };
+}

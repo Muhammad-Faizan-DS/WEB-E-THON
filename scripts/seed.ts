@@ -1,10 +1,10 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { hash } from "bcryptjs";
 import { and, eq, inArray } from "drizzle-orm";
 import { activationKeys, answers, attempts, attemptQuestions, enrollments, examQuestions, examSections, exams, incidents, orgSettings, questions, reattemptRequests, users } from "../db/schema";
 import { settings, type AnswerResponse, type BlueprintCell, type ExamSettings, type ExamType, type QuestionInput } from "../src/lib/contracts/core";
 import { database, type Tx } from "../src/server/database";
-import { drawPaper, hashKey, newActivationKey, type PaperQuestion } from "../src/server/paper";
+import { activationKeyFor, displayKey, drawPaper, hashKey, type PaperQuestion } from "../src/server/paper";
 import { objectiveMarksCents } from "../src/server/grading";
 
 const topics = ["Arithmetic", "Algebra", "Data literacy", "Logic"];
@@ -60,11 +60,13 @@ async function archivedMidterm(tx: Tx, examiner: string, people: string[], pool:
   const end = new Date(start.getTime() + 3_600_000);
   const cells = (items: PaperQuestion[]) => items.map(({ topic, difficulty }) => ({ topic, difficulty, count: 1 }));
   const written = selected.filter(({ type }) => type === "written");
+  // Same-cell alternatives make the pool larger than one paper, so the fairness simulation has real choices to compare.
+  const alternatives = pool.filter((item) => item.type === "single" && item.difficulty < 3 && !matched.includes(item));
   const { exam, members, sections } = await seedExam(tx, examiner, people.slice(0, 31), {
     title: "Midterm — completed", instructions: "Answer each question. Published results include your instructor feedback.",
     startsAt: start, endsAt: end, durationMin: 45, settings: config, examType: "midterm", course,
-  }, selected, [
-    { title: "A — Multiple choice", instructions: "Choose one answer for each question.", blueprint: cells(matched), questions: matched },
+  }, [...selected, ...alternatives], [
+    { title: "A — Multiple choice", instructions: "Choose one answer for each question.", blueprint: cells(matched), questions: [...matched, ...alternatives] },
     { title: "B — Written", instructions: "Explain your reasoning in full sentences.", blueprint: cells(written), questions: written },
   ]);
   const inSection = selected.map((question) => ({ ...question, sectionId: sections[question.type === "written" ? 1 : 0].id }));
@@ -100,8 +102,10 @@ async function archivedMidterm(tx: Tx, examiner: string, people: string[], pool:
       } else {
         const wrong = question.options.filter((option) => !question.answerKey.includes(option.id));
         const colluding = index === 8 || index === 9;
-        const chooseWrong = colluding || (index * 3 + question.position) % 6 >= 4;
-        const selectedId = chooseWrong ? wrong[colluding ? 0 : (index + question.position) % wrong.length].id : question.answerKey[0];
+        // Honest candidates err independently (deterministic hash), so only the planted pair shares many wrong answers.
+        const [roll, pick] = createHash("sha256").update(`${index}:${question.position}`).digest();
+        const chooseWrong = colluding || roll % 10 < 3;
+        const selectedId = chooseWrong ? wrong[colluding ? 0 : pick % wrong.length].id : question.answerKey[0];
         response = selectedId;
       }
       scoreCents += awardedCents ?? objectiveMarksCents(question.answerKey, response, question.marks, config.multiSelectRule);
@@ -163,12 +167,17 @@ async function seed() {
           title: item.title, startsAt: new Date(item.start), endsAt: new Date(item.end), durationMin: 30, course,
           examType: item.mode === "standard" ? "practice" as const : item.mode === "strict" ? "midterm" as const : "quiz" as const,
           instructions: "Read the instructions and answer each released question before submitting.",
-          settings: settings.parse({ blueprint, integrityMode: item.mode, openLimit: 1 }),
+          settings: item.mode === "standard"
+            ? settings.parse({ blueprint, integrityMode: "standard", openLimit: null, sequentialReveal: false })
+            : settings.parse({ blueprint, integrityMode: item.mode, openLimit: 1 }),
         }, currentPool);
+        if (item.mode === "standard") continue; // practice exams open without a key
+        // One key per candidate, derived from its row id; the key also seeds that candidate's paper.
         const issued = members.map((member) => {
-          const key = newActivationKey();
-          if (item.title === liveTitle && member.candidateId === people[0]) firstKey = key;
-          return { enrollmentId: member.id, keyHash: hashKey(key), hint: key.slice(-2) };
+          const id = randomUUID();
+          const key = activationKeyFor(id);
+          if (item.title === liveTitle && member.candidateId === people[0]) firstKey = displayKey(key);
+          return { id, enrollmentId: member.id, keyHash: hashKey(key), hint: key.slice(-2) };
         });
         await tx.insert(activationKeys).values(issued);
       }

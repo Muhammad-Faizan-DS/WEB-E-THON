@@ -11,10 +11,17 @@ export async function body<T extends z.ZodTypeAny>(request: Request, schema: T):
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? "")) {
     fail(415, "CONTENT_TYPE_REQUIRED", "Send this request as JSON.");
   }
-  const limit = 1_000_000;
+  const bytes = await requestBytes(request, 1_000_000);
+  let value: unknown;
+  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
+  catch { fail(400, "INVALID_JSON", "Send a valid JSON request."); }
+  return input(schema, value);
+}
+
+export async function requestBytes(request: Request, limit: number) {
   if (Number(request.headers.get("content-length")) > limit) fail(413, "BODY_TOO_LARGE", "Request is too large.");
   const stream = request.body?.getReader();
-  if (!stream) fail(400, "INVALID_JSON", "Send a valid JSON request.");
+  if (!stream) fail(400, "MISSING_BODY", "Send a request body.");
   const chunks: Uint8Array[] = [];
   let received = 0;
   try {
@@ -29,10 +36,7 @@ export async function body<T extends z.ZodTypeAny>(request: Request, schema: T):
       chunks.push(value);
     }
   } finally { stream.releaseLock(); }
-  let value: unknown;
-  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks))); }
-  catch { fail(400, "INVALID_JSON", "Send a valid JSON request."); }
-  return input(schema, value);
+  return Buffer.concat(chunks);
 }
 
 type Context = { params: Promise<Record<string, string>> };

@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { attempts, exams, reports, users } from "../../db/schema";
 import type { Actor } from "./auth";
 import { examSummary } from "./analytics";
+import { visibleResults } from "./grading";
 import { database } from "./database";
 import { fail } from "./errors";
 
@@ -20,7 +21,7 @@ const result = { attemptId: attempts.id, title: exams.title, totalMarks: exams.t
 async function resultRow(actor: Actor, id: string) {
   const [row] = await database().select(result).from(attempts)
     .innerJoin(exams, eq(attempts.examId, exams.id)).innerJoin(users, eq(attempts.candidateId, users.id))
-    .where(and(eq(attempts.id, id), eq(attempts.isSandbox, false), eq(attempts.status, "graded"), eq(exams.resultsPublished, true),
+    .where(and(eq(attempts.id, id), eq(attempts.isSandbox, false), eq(attempts.status, "graded"), visibleResults,
       actor.role === "candidate" ? eq(attempts.candidateId, actor.id) : eq(exams.examinerId, actor.id)));
   if (!row) fail(403, "FORBIDDEN", "This report is unavailable.");
   return row;
@@ -30,7 +31,7 @@ export async function verifyReport(code: string) {
   const [row] = await database().select({ ...result, hmac: reports.hmac }).from(reports)
     .innerJoin(attempts, eq(reports.attemptId, attempts.id)).innerJoin(exams, eq(attempts.examId, exams.id))
     .innerJoin(users, eq(attempts.candidateId, users.id)).where(and(eq(reports.verifyCode, code),
-      eq(exams.resultsPublished, true), eq(attempts.status, "graded"), eq(attempts.isSandbox, false)));
+      visibleResults, eq(attempts.status, "graded"), eq(attempts.isSandbox, false)));
   if (!row || !/^[a-f0-9]{64}$/.test(row.hmac) || !timingSafeEqual(Buffer.from(row.hmac, "hex"), Buffer.from(signature(code, row.attemptId), "hex"))) {
     return { valid: false as const };
   }
@@ -49,8 +50,8 @@ const styles = StyleSheet.create({
 });
 const date = (value: Date | null) => value?.toISOString().slice(0, 10) ?? "Unavailable";
 
-export async function candidatePdf(actor: Actor, id: string, requestUrl: string) {
-  const row = await resultRow(actor, id);
+/** Issues (once) the signed verification code for a visible, graded result and returns its public URL and QR image. */
+async function verification(id: string, requestUrl: string) {
   const db = database();
   const nonce = randomBytes(20).toString("hex");
   await db.insert(reports).values({ attemptId: id, verifyCode: nonce, hmac: signature(nonce, id) })
@@ -58,7 +59,19 @@ export async function candidatePdf(actor: Actor, id: string, requestUrl: string)
   const [report] = await db.select({ code: reports.verifyCode }).from(reports).where(eq(reports.attemptId, id));
   const origin = new URL(process.env.AUTH_URL ?? requestUrl).origin;
   const url = new URL("/verify/" + report.code, origin).href;
-  const qr = await QRCode.toDataURL(url, { margin: 1, errorCorrectionLevel: "M" });
+  return { verifyCode: report.code, verifyUrl: url, qrDataUrl: await QRCode.toDataURL(url, { margin: 1, errorCorrectionLevel: "M" }) };
+}
+
+/** Candidate results with verification details (results are already limited to the candidate's own visible attempts). */
+export async function withVerification<T extends { id: string }>(results: T[], requestUrl: string) {
+  const enriched = [];
+  for (const result of results) enriched.push({ ...result, ...await verification(result.id, requestUrl) });
+  return enriched;
+}
+
+export async function candidatePdf(actor: Actor, id: string, requestUrl: string) {
+  const row = await resultRow(actor, id);
+  const { verifyUrl: url, qrDataUrl: qr } = await verification(id, requestUrl);
   return renderToBuffer(<Document title="SecureExam score report"><Page size="A4" style={styles.page}>
     <Text style={styles.title}>SecureExam score report</Text>
     <Text style={styles.line}>{row.title}</Text><Text style={styles.line}>{row.name}</Text>

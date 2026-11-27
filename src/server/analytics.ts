@@ -8,7 +8,23 @@ import { answered, groupPapers, mark, paperRows, type GradeRow } from "./grading
 import type { PaperQuestion } from "./paper";
 
 const average = (values: number[]) => values.length ? values.reduce((sum, x) => sum + x, 0) / values.length : null;
-const round = (value: number | null) => value === null ? null : Math.round(value * 10_000) / 10_000;
+/** Two decimals for display-facing numbers (marks, rates, coefficients). */
+const round = (value: number | null) => value === null ? null : Math.round(value * 100) / 100;
+const standardDeviation = (values: number[]) => {
+  const mean = average(values);
+  return mean === null ? null : Math.sqrt(values.reduce((sum, x) => sum + (x - mean) ** 2, 0) / values.length);
+};
+
+/** Fine-grained histogram for paper difficulty (fraction 0–1) so a narrow blueprint spread is visible. */
+function fineDistribution(values: number[], width = 0.02) {
+  if (!values.length) return [];
+  const low = Math.floor(Math.min(...values) / width) * width;
+  const high = Math.ceil(Math.max(...values) / width) * width || width;
+  const count = Math.max(1, Math.round((high - low) / width));
+  const bins = Array.from({ length: count }, (_, i) => ({ from: round((low + i * width) * 100)!, to: round((low + (i + 1) * width) * 100)!, count: 0 }));
+  for (const value of values) bins[Math.min(count - 1, Math.max(0, Math.floor((value - low) / width)))].count++;
+  return bins;
+}
 
 function correlation(points: Array<[number, number]>) {
   if (points.length < 3) return null;
@@ -49,7 +65,7 @@ export async function examSummary(owner: string, examId: string) {
   const mid = Math.floor(sorted.length / 2);
   return {
     title: exam.title, published: exam.resultsPublished, totalMarks: exam.totalMarks, count: sorted.length,
-    mean: round(average(sorted)), median: sorted.length ? (sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2) : null,
+    mean: round(average(sorted)), median: round(sorted.length ? (sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2) : null),
     min: sorted[0] ?? null, max: sorted.at(-1) ?? null, passMark: exam.totalMarks * 0.5,
     passRate: round(average(sorted.map((score) => Number(score >= exam.totalMarks * 0.5)))),
     distribution: distribution(sorted.map((score) => score / exam.totalMarks)),
@@ -128,10 +144,18 @@ export async function fairness(owner: string, examId: string) {
     naive.push(ease(sample(pool, count)));
     blueprint.push(ease(groups.flatMap((group) => sample(group.items, group.count))));
   }
+  const percent = (value: number | null) => value === null ? null : Math.round(value * 1_000) / 10;
   const summary = (values: number[]) => ({
-    mean: round(average(values)), min: round(Math.min(...values)), max: round(Math.max(...values)), distribution: distribution(values),
+    mean: round(average(values)), min: round(Math.min(...values)), max: round(Math.max(...values)),
+    stdDev: Math.round((standardDeviation(values) ?? 0) * 10_000) / 10_000,
+    /** Spread in percentage points of expected facility, e.g. "±1.2%". */
+    spreadPercent: percent(standardDeviation(values)),
+    distribution: fineDistribution(values),
+    papers: values.map((value) => Math.round(value * 10_000) / 10_000),
   });
-  return { simulations: 500, blueprint: summary(blueprint), naive: summary(naive),
+  const b = summary(blueprint), n = summary(naive);
+  return { simulations: 500, blueprint: b, naive: n,
+    headline: `Blueprint ±${b.spreadPercent}% vs random ±${n.spreadPercent}%`,
     basis: measured.size ? "Observed facility where available; authored difficulty for the rest" : "Authored difficulty" };
 }
 
@@ -166,7 +190,11 @@ export async function collusion(owner: string, examId: string) {
     }
   }
   const names = new Map(rows.map(({ candidateId, name }) => [candidateId, name]));
-  return [...pairs.values()].filter((pair) => pair.observed >= 3 && pair.observed - pair.expected >= Math.max(2, 3 * Math.sqrt(pair.expected)))
+  // Flag only pairs far above the cohort: at least max(5, 2 × mean identical-wrong matches) and statistically unusual.
+  const all = [...pairs.values()];
+  const cohortMean = average(all.map(({ observed }) => observed)) ?? 0;
+  const floor = Math.max(5, 2 * cohortMean);
+  return all.filter((pair) => pair.observed >= floor && pair.observed - pair.expected >= Math.max(2, 3 * Math.sqrt(pair.expected)))
     .sort((a, b) => b.observed - a.observed).slice(0, 100).map((pair) => ({
       candidates: [names.get(pair.left), names.get(pair.right)], matchingWrongAnswers: pair.observed,
       questionsCompared: pair.shared, label: "Possible answer sharing — review",

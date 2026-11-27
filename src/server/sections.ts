@@ -1,13 +1,11 @@
-import { and, asc, eq, inArray, max, sql } from "drizzle-orm";
-import type { z } from "zod";
+import { and, asc, count, eq, max, ne } from "drizzle-orm";
 import { examQuestions, examSections, questions } from "../../db/schema";
 import type { QuestionInput } from "@/lib/contracts/core";
-import type { attachQuestions, sectionImport, SectionInput, SectionPatch } from "@/lib/contracts/sections";
+import type { SectionInput, SectionPatch } from "@/lib/contracts/sections";
 import { audit } from "./admin";
 import { database, type Tx } from "./database";
 import { fail } from "./errors";
 import { examSectionRows, ownedExam, revalidate, type Section } from "./exams";
-import { previewQuestions } from "./imports";
 
 /** Owner-only, and only before the first candidate starts (BR-20). */
 async function editableExam(tx: Tx, examinerId: string, examId: string) {
@@ -104,30 +102,77 @@ export function reorderSections(examinerId: string, examId: string, sectionIds: 
   });
 }
 
-async function link(tx: Tx, examId: string, section: Section, questionIds: string[], replace: boolean) {
-  if (replace) await tx.delete(examQuestions).where(eq(examQuestions.sectionId, section.id));
+
+type ImportRow = { row: number; source?: string };
+type ImportReader = () => Promise<{
+  valid: Array<ImportRow & { question: QuestionInput }>;
+  errors: Array<ImportRow & { message: string }>;
+  commit: boolean;
+  course?: string;
+  tags?: string[];
+}>;
+
+async function addQuestions(tx: Tx, examId: string, section: Section, ownerId: string, batch: QuestionInput[]) {
+  const [existing] = await tx.select({ total: count() }).from(examQuestions).where(eq(examQuestions.examId, examId));
+  if (existing.total + batch.length > 1_000) fail(400, "EXAM_QUESTION_LIMIT", "An exam can contain up to 1,000 eligible questions.");
   const [{ last }] = await tx.select({ last: max(examQuestions.position) }).from(examQuestions).where(eq(examQuestions.sectionId, section.id));
-  await tx.insert(examQuestions).values(questionIds.map((questionId, index) => ({
-    examId, questionId, sectionId: section.id, position: (last ?? 0) + index + 1,
-  }))).onConflictDoUpdate({
-    target: [examQuestions.examId, examQuestions.questionId],
-    set: { sectionId: sql`excluded.section_id`, position: sql`excluded.position`, snapshot: null },
+  const created = await tx.insert(questions).values(batch.map((question) => ({ ...question, ownerId }))).returning({ id: questions.id });
+  await tx.insert(examQuestions).values(created.map(({ id }, index) => ({
+    examId, sectionId: section.id, questionId: id, position: (last ?? 0) + index + 1,
+  })));
+  return created.map(({ id }) => id);
+}
+
+export function listSectionQuestions(examinerId: string, examId: string, sectionId: string) {
+  return database().transaction(async (tx) => {
+    const exam = await ownedExam(tx, examinerId, examId);
+    await ownedSection(tx, examId, sectionId);
+    const rows = await tx.select({ question: questions, snapshot: examQuestions.snapshot, position: examQuestions.position })
+      .from(examQuestions).innerJoin(questions, eq(examQuestions.questionId, questions.id))
+      .where(and(eq(examQuestions.examId, examId), eq(examQuestions.sectionId, sectionId), eq(questions.archived, false)))
+      .orderBy(asc(examQuestions.position), asc(questions.id));
+    return rows.map(({ question, snapshot, position }) => {
+      const content = exam.status === "published" && snapshot ? snapshot : question;
+      return { id: question.id, position, type: content.type, text: content.text, topic: content.topic, difficulty: content.difficulty,
+        marks: content.marks, options: content.options, course: content.course ?? question.course, tags: content.tags ?? question.tags };
+    });
   });
 }
 
-export function attachToSection(examinerId: string, examId: string, sectionId: string, input: z.infer<typeof attachQuestions>) {
+export function createSectionQuestion(examinerId: string, examId: string, sectionId: string, question: QuestionInput) {
   return database().transaction(async (tx) => {
     const exam = await editableExam(tx, examinerId, examId);
     const section = await ownedSection(tx, examId, sectionId);
-    const found = await tx.select({ id: questions.id, type: questions.type }).from(questions)
-      .where(and(inArray(questions.id, input.questionIds), eq(questions.ownerId, examinerId), eq(questions.archived, false)))
-      .orderBy(asc(questions.id)).for("share");
-    if (found.length !== input.questionIds.length) fail(400, "INVALID_QUESTION_POOL", "Select active questions from your bank.");
-    const issue = found.map(({ type }) => typeIssue(section, type)).find(Boolean);
+    const issue = typeIssue(section, question.type);
     if (issue) fail(400, "SECTION_TYPE_CONFLICT", issue);
-    await link(tx, examId, section, input.questionIds, input.replace);
+    const [id] = await addQuestions(tx, examId, section, examinerId, [{ ...question, course: question.course ?? exam.course }]);
     await revalidate(tx, exam);
-    return (await withQuestionIds(tx, examId)).find(({ id }) => id === sectionId)!;
+    return { id };
+  });
+}
+
+export function updateSectionQuestion(examinerId: string, examId: string, sectionId: string, questionId: string, question: QuestionInput) {
+  return database().transaction(async (tx) => {
+    const exam = await editableExam(tx, examinerId, examId);
+    const section = await ownedSection(tx, examId, sectionId);
+    const scope = and(eq(examQuestions.examId, examId), eq(examQuestions.sectionId, sectionId), eq(examQuestions.questionId, questionId));
+    const [current] = await tx.select({ id: examQuestions.questionId }).from(examQuestions).where(scope);
+    if (!current) fail(404, "QUESTION_NOT_IN_SECTION", "This question is unavailable in this section.");
+    const issue = typeIssue(section, question.type);
+    if (issue) fail(400, "SECTION_TYPE_CONFLICT", issue);
+    const changes = { ...question, course: question.course ?? exam.course };
+    const [shared] = await tx.select({ examId: examQuestions.examId }).from(examQuestions)
+      .where(and(eq(examQuestions.questionId, questionId), ne(examQuestions.examId, examId))).limit(1);
+    let id = questionId;
+    if (shared) {
+      const [copy] = await tx.insert(questions).values({ ...changes, ownerId: examinerId }).returning({ id: questions.id });
+      id = copy.id;
+      await tx.update(examQuestions).set({ questionId: id, snapshot: null }).where(scope);
+    } else {
+      await tx.update(questions).set(changes).where(eq(questions.id, questionId));
+    }
+    await revalidate(tx, exam);
+    return { id };
   });
 }
 
@@ -135,37 +180,35 @@ export function detachFromSection(examinerId: string, examId: string, sectionId:
   return database().transaction(async (tx) => {
     const exam = await editableExam(tx, examinerId, examId);
     await ownedSection(tx, examId, sectionId);
-    const removed = await tx.delete(examQuestions).where(and(eq(examQuestions.sectionId, sectionId), eq(examQuestions.questionId, questionId)))
-      .returning({ questionId: examQuestions.questionId });
-    if (!removed.length) fail(404, "QUESTION_NOT_IN_SECTION", "This question is not in the section.");
+    const removed = await tx.delete(examQuestions).where(and(eq(examQuestions.examId, examId),
+      eq(examQuestions.sectionId, sectionId), eq(examQuestions.questionId, questionId))).returning({ questionId: examQuestions.questionId });
+    if (!removed.length) fail(404, "QUESTION_NOT_IN_SECTION", "This question is unavailable in this section.");
     await revalidate(tx, exam);
-    return (await withQuestionIds(tx, examId)).find(({ id }) => id === sectionId)!;
+    return { id: questionId, removed: true };
   });
 }
 
-/**
- * Upload straight into a section (PRD §24.3): same preview/row-error flow as the bank import.
- * On commit, valid rows are saved to the bank tagged with the course and linked to the section, all in one transaction.
- */
-export function importIntoSection(examinerId: string, examId: string, sectionId: string, input: z.infer<typeof sectionImport>) {
-  return database().transaction(async (tx) => {
+export async function importIntoSection(examinerId: string, examId: string, sectionId: string, read: ImportReader) {
+  const db = database();
+  await db.transaction(async (tx) => {
+    await editableExam(tx, examinerId, examId);
+    await ownedSection(tx, examId, sectionId);
+  });
+  const { valid: parsed, errors, commit, course, tags } = await read();
+  return db.transaction(async (tx) => {
     const exam = await editableExam(tx, examinerId, examId);
     const section = await ownedSection(tx, examId, sectionId);
-    const { valid: parsed, errors } = previewQuestions(input);
-    const valid = parsed.flatMap((item) => {
-      const issue = typeIssue(section, item.question.type);
-      if (issue) { errors.push({ row: item.row, message: issue }); return []; }
-      return [{ row: item.row, question: { ...item.question, course: input.course ?? item.question.course ?? exam.course,
-        tags: input.tags ?? item.question.tags ?? [] } }];
+    const valid = parsed.flatMap(({ question, ...row }) => {
+      const issue = typeIssue(section, question.type);
+      if (issue) { errors.push({ ...row, message: issue }); return []; }
+      return [{ ...row, question: { ...question, course: course ?? question.course ?? exam.course, tags: tags ?? question.tags ?? [] } }];
     });
-    errors.sort((a, b) => a.row - b.row);
-    if (!input.commit || valid.length === 0) return { valid, errors, imported: 0, questionIds: [] as string[] };
-    const created = await tx.insert(questions).values(valid.map(({ question }) => ({ ...question, ownerId: examinerId })))
-      .returning({ id: questions.id });
-    const questionIds = created.map(({ id }) => id);
-    await link(tx, examId, section, questionIds, false);
+    errors.sort((a, b) => (a.source ?? "").localeCompare(b.source ?? "") || a.row - b.row);
+    if (!commit || !valid.length) return { valid, errors, imported: 0, questionIds: [] as string[] };
+    const questionIds = await addQuestions(tx, examId, section, examinerId, valid.map(({ question }) => question));
     await revalidate(tx, exam);
     await audit(tx, examinerId, "section_import", "exam", examId, { after: { sectionId, imported: questionIds.length } });
     return { valid, errors, imported: questionIds.length, questionIds };
   });
 }
+

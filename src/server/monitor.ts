@@ -4,7 +4,7 @@ import type { cameraExceptionInput, incidentReview, liveLimitInput, announcement
 import type { z } from "zod";
 import { audit } from "./admin";
 import type { Actor } from "./auth";
-import { database, type Tx } from "./database";
+import { database, inOrder, type Tx } from "./database";
 import { fail } from "./errors";
 import { ownedExam } from "./exams";
 import { expiredBy } from "./integrity";
@@ -16,7 +16,7 @@ export async function monitor(actor: Actor, examId: string) {
   await db.update(attempts).set({ status: "auto_submitted", submittedAt: attempts.deadlineAt })
     .where(and(eq(attempts.examId, exam.id), eq(attempts.status, "in_progress"), expiredBy(new Date())));
   const relevant = and(eq(attempts.examId, examId), eq(attempts.isSandbox, false));
-  const [live, flags, logs, alerts, news] = await Promise.all([
+  const [live, flags, logs, alerts, news] = await inOrder([
     db.select({
       id: attempts.id, candidate: users.name, status: attempts.status, deadlineAt: attempts.deadlineAt, lastHeartbeatAt: attempts.lastHeartbeatAt,
       timeCreditSec: attempts.timeCreditSec, scoreCents: attempts.scoreCents,

@@ -7,7 +7,9 @@ import { accountOrigin, readOrgSettings, temporaryPassword } from "./accounts";
 import { audit, knownEmails } from "./admin";
 import { database, type Tx } from "./database";
 import { fail } from "./errors";
-import { checkPaper, hashKey, newActivationKey, reattemptIssues, type PaperQuestion, type PaperSection } from "./paper";
+import { randomUUID } from "node:crypto";
+import { activationKeyFor, checkPaper, displayKey, hashKey, reattemptIssues, type PaperQuestion, type PaperSection } from "./paper";
+import { reattemptKey } from "./requests";
 
 type Exam = typeof exams.$inferSelect;
 export type Section = typeof examSections.$inferSelect;
@@ -55,22 +57,6 @@ export async function ensureDefaultSection(tx: Tx, examId: string) {
   return created;
 }
 
-/** Legacy `questionIds` writes replace the pool of a single-section exam. Multi-section exams use the section endpoints. */
-async function setQuestions(tx: Tx, exam: Exam, ids: string[]) {
-  const sections = await examSectionRows(tx, exam.id);
-  if (sections.length > 1) fail(409, "USE_SECTIONS", "This exam has sections. Add or remove questions per section.");
-  if (ids.length > 0) {
-    const found = await tx.select({ id: questions.id }).from(questions)
-      .where(and(inArray(questions.id, ids), eq(questions.ownerId, exam.examinerId), eq(questions.archived, false)))
-      .orderBy(asc(questions.id)).for("share");
-    if (found.length !== ids.length) fail(400, "INVALID_QUESTION_POOL", "Select active questions from your bank.");
-  }
-  await tx.delete(examQuestions).where(eq(examQuestions.examId, exam.id));
-  if (ids.length === 0) return;
-  const section = sections[0] ?? await ensureDefaultSection(tx, exam.id);
-  await tx.insert(examQuestions).values(ids.map((questionId, index) => ({ examId: exam.id, questionId, sectionId: section.id, position: index + 1 })));
-}
-
 export function listExams(examinerId?: string) {
   return database().select().from(exams).where(examinerId ? eq(exams.examinerId, examinerId) : undefined).orderBy(asc(exams.startsAt));
 }
@@ -91,19 +77,18 @@ export function getExam(examinerId: string, examId: string) {
   });
 }
 
-export function createExam(examinerId: string, { questionIds, startsAt, endsAt, ...input }: ExamInput) {
+export function createExam(examinerId: string, { startsAt, endsAt, ...input }: ExamInput) {
   return database().transaction(async (tx) => {
     const [exam] = await tx.insert(exams).values({ ...input, examinerId, startsAt: new Date(startsAt), endsAt: new Date(endsAt) }).returning();
     await ensureDefaultSection(tx, exam.id);
-    await setQuestions(tx, exam, questionIds);
-    return { ...exam, questionIds };
+    return exam;
   });
 }
 
 export function updateExam(examinerId: string, examId: string, input: Partial<ExamInput>) {
   return database().transaction(async (tx) => {
     const current = await ownedExam(tx, examinerId, examId);
-    const { questionIds, startsAt, endsAt, ...fields } = input;
+    const { startsAt, endsAt, ...fields } = input;
     if (current.frozenAt) {
       if (!endsAt || new Date(endsAt) <= current.endsAt || Object.keys(input).length !== 1) {
         fail(409, "EXAM_FROZEN", "Only the exam window can be extended after a candidate starts.");
@@ -114,9 +99,8 @@ export function updateExam(examinerId: string, examId: string, input: Partial<Ex
     if (Object.keys(patch).length > 0) {
       [exam] = await tx.update(exams).set(patch).where(eq(exams.id, examId)).returning();
     }
-    if (questionIds) await setQuestions(tx, exam, questionIds);
     if (exam.status === "published" && !current.frozenAt) {
-      if (questionIds || fields.settings) {
+      if (fields.settings) {
         await validateAndSnapshot(tx, { ...exam, status: "draft" });
       } else {
         const { issues } = await checklist(tx, exam);
@@ -141,13 +125,29 @@ async function checklist(tx: Tx, exam: Exam) {
   if (exam.settings.integrityMode === "strict") issues.push(...reattemptIssues(pool, sections));
   if (exam.endsAt <= exam.startsAt) issues.push("The exam must end after it starts.");
   if (exam.durationMin < 1) issues.push("Duration must be positive.");
-  return { canPublish: issues.length === 0, issues, pool };
+  // Explains the paper so "total marks" is never a surprise: a blueprint draws a subset of a larger pool.
+  const summary = sections.map((section) => {
+    const items = section.id === null ? pool : pool.filter((question) => question.sectionId === section.id);
+    const marksOf = (question: PaperQuestion) => section.marksPerQuestion ?? question.marks;
+    const drawn = section.blueprint
+      ? section.blueprint.map((cell) => ({ count: cell.count, marks: items.find((q) => q.topic === cell.topic && q.difficulty === cell.difficulty) }))
+      : items.map((question) => ({ count: 1, marks: question }));
+    return {
+      sectionId: section.id, title: section.title, poolQuestions: items.length,
+      paperQuestions: drawn.reduce((sum, cell) => sum + cell.count, 0),
+      paperMarks: drawn.reduce((sum, cell) => sum + cell.count * (cell.marks ? marksOf(cell.marks) : 0), 0),
+      drawsSubset: Boolean(section.blueprint) && drawn.reduce((sum, cell) => sum + cell.count, 0) < items.length,
+    };
+  });
+  return { canPublish: issues.length === 0, issues, pool, summary,
+    paper: { questions: summary.reduce((sum, item) => sum + item.paperQuestions, 0), marks: summary.reduce((sum, item) => sum + item.paperMarks, 0),
+      totalMarks: exam.totalMarks } };
 }
 
 export function getChecklist(examinerId: string, examId: string) {
   return database().transaction(async (tx) => {
-    const { canPublish, issues } = await checklist(tx, await ownedExam(tx, examinerId, examId));
-    return { canPublish, issues };
+    const { canPublish, issues, summary, paper } = await checklist(tx, await ownedExam(tx, examinerId, examId));
+    return { canPublish, issues, sections: summary, paper };
   });
 }
 
@@ -177,6 +177,7 @@ export function publishExam(examinerId: string, examId: string, publish: boolean
       fail(409, "EXAM_FROZEN", "An exam with candidate attempts cannot be unpublished.");
     }
     const [updated] = await tx.update(exams).set({ status: publish ? "published" : "draft" }).where(eq(exams.id, examId)).returning();
+    if (exam.status !== updated.status) await audit(tx, examinerId, publish ? "exam_published" : "exam_unpublished", "exam", examId);
     return updated;
   });
 }
@@ -226,9 +227,50 @@ export async function enrollCandidates(examinerId: string, examId: string, picks
       target: [enrollments.examId, enrollments.candidateId],
       set: { timeMultiplier: sql`excluded.time_multiplier`, allowPaste: sql`excluded.allow_paste` },
     }).returning();
+    // Every enrolled candidate gets their own key automatically; it also seeds their paper (paperSeed).
+    const keyed = await tx.select({ enrollmentId: activationKeys.enrollmentId }).from(activationKeys)
+      .where(and(inArray(activationKeys.enrollmentId, rows.map(({ id }) => id)), eq(activationKeys.status, "active")));
+    const needKey = rows.filter((row) => row.status === "active" && !row.cooldownUntil && !keyed.some((item) => item.enrollmentId === row.id))
+      .map(({ id }) => id);
+    const issued = new Map((await createKeys(tx, needKey)).map(({ enrollmentId, key }) => [enrollmentId, key]));
+    await audit(tx, examinerId, "candidates_enrolled", "exam", examId, { after: { enrollments: rows.length, keysIssued: issued.size } });
     return rows.map((row) => {
       const person = candidates.find(({ id }) => id === row.candidateId)!;
-      return { ...row, email: person.email, isExternal: person.isExternal, temporaryPassword: created.get(row.candidateId) ?? null };
+      return { ...row, email: person.email, isExternal: person.isExternal, temporaryPassword: created.get(row.candidateId) ?? null,
+        key: issued.get(row.id) ?? null };
+    });
+  });
+}
+
+/** Revokes any active key and issues a fresh per-candidate key. Returns display keys. */
+async function createKeys(tx: Tx, enrollmentIds: string[]) {
+  if (!enrollmentIds.length) return [];
+  await tx.update(activationKeys).set({ status: "revoked" })
+    .where(and(inArray(activationKeys.enrollmentId, enrollmentIds), eq(activationKeys.status, "active")));
+  const keys = enrollmentIds.map((enrollmentId) => {
+    const id = randomUUID();
+    return { id, enrollmentId, key: activationKeyFor(id) };
+  });
+  await tx.insert(activationKeys).values(keys.map(({ id, enrollmentId, key }) => ({ id, enrollmentId, hint: key.slice(-2), keyHash: hashKey(key) })));
+  return keys.map(({ enrollmentId, key }) => ({ enrollmentId, key: displayKey(key) }));
+}
+
+/** Examiner view of every candidate's key: re-displayable because keys are derived from the row id and AUTH_SECRET. */
+export function listKeys(examinerId: string, examId: string) {
+  return database().transaction(async (tx) => {
+    await ownedExam(tx, examinerId, examId);
+    const rows = await tx.select({
+      enrollmentId: enrollments.id, candidateId: users.id, name: users.name, email: users.email, isExternal: users.isExternal,
+      enrollmentStatus: enrollments.status, keyId: activationKeys.id, keyHash: activationKeys.keyHash, status: activationKeys.status,
+      hint: activationKeys.hint, failedTries: activationKeys.failedTries, issuedAt: activationKeys.issuedAt, usedAt: activationKeys.usedAt,
+    }).from(enrollments).innerJoin(users, eq(users.id, enrollments.candidateId))
+      .leftJoin(activationKeys, eq(activationKeys.enrollmentId, enrollments.id))
+      .where(eq(enrollments.examId, examId)).orderBy(asc(users.name), sql`${activationKeys.issuedAt} desc nulls last`);
+    const latest = new Map<string, (typeof rows)[number]>();
+    for (const row of rows) if (!latest.has(row.enrollmentId)) latest.set(row.enrollmentId, row);
+    return [...latest.values()].map(({ keyId, keyHash, ...row }) => {
+      const plain = keyId && row.status === "active" ? [activationKeyFor(keyId), reattemptKey(keyId)].find((key) => hashKey(key) === keyHash) : undefined;
+      return { ...row, status: row.status ?? "none", key: plain ? displayKey(plain) : null };
     });
   });
 }
@@ -244,9 +286,8 @@ export function issueKeys(examinerId: string, examId: string, ids: string[]) {
     if (eligible.length !== ids.length) fail(400, "INVALID_ENROLLMENT", "Select active enrollments for this exam.");
     const [started] = await tx.select({ id: attempts.id }).from(attempts).where(inArray(attempts.enrollmentId, ids)).limit(1);
     if (started) fail(409, "ATTEMPT_EXISTS", "A selected enrollment already has an attempt.");
-    await tx.update(activationKeys).set({ status: "revoked" }).where(and(inArray(activationKeys.enrollmentId, ids), eq(activationKeys.status, "active")));
-    const keys = ids.map((enrollmentId) => ({ enrollmentId, key: newActivationKey() }));
-    await tx.insert(activationKeys).values(keys.map(({ enrollmentId, key }) => ({ enrollmentId, hint: key.slice(-2), keyHash: hashKey(key) })));
+    const keys = await createKeys(tx, ids);
+    await audit(tx, examinerId, "keys_regenerated", "exam", examId, { after: { count: keys.length } });
     return keys;
   });
 }

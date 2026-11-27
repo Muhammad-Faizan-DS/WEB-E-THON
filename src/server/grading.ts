@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { answers, attempts, attemptQuestions, exams, gradeNotices, incidents, integrityEvents, reattemptRequests, users } from "../../db/schema";
 import type { AnswerResponse, ExamSettings } from "@/lib/contracts/core";
 import { audit } from "./admin";
@@ -59,6 +59,24 @@ export function groupPapers(rows: GradeRow[]) {
 function marksFor(attempt: Attempt, rows: GradeRow[]) {
   return rows.map((row) => mark(row, attempt.settings.multiSelectRule));
 }
+
+/**
+ * Practice exams (PRD §24.3 "instant after submit"): objective answers are marked at submission and the result is
+ * visible right away. A practice paper with an answered written question waits for examiner grading as usual.
+ */
+export async function gradePracticeOnSubmit(tx: Tx, attempt: Attempt) {
+  if (attempt.isSandbox) return null;
+  const [exam] = await tx.select({ examType: exams.examType, totalMarks: exams.totalMarks }).from(exams).where(eq(exams.id, attempt.examId));
+  if (exam?.examType !== "practice") return null;
+  const marks = marksFor(attempt, await paperRows(tx, [attempt.id]));
+  if (marks.some((value) => value === null)) return null;
+  const scoreCents = marks.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  await tx.update(attempts).set({ status: "graded", scoreCents }).where(eq(attempts.id, attempt.id));
+  return { score: scoreCents / 100, totalMarks: exam.totalMarks, percentage: Math.round(scoreCents / exam.totalMarks * 10) / 10 };
+}
+
+/** Results a candidate may see: published exams, plus practice exams graded at submission. */
+export const visibleResults = or(eq(exams.resultsPublished, true), eq(exams.examType, "practice"));
 
 async function examSubmissions(db: GradeDb, examId: string) {
   return db.select({ attempt: attempts, candidate: users.name }).from(attempts)
@@ -179,16 +197,18 @@ export async function candidateResults(candidateId: string) {
   const rows = await db.select({ id: attempts.id, examId: exams.id, title: exams.title, totalMarks: exams.totalMarks,
     scoreCents: attempts.scoreCents, submittedAt: attempts.submittedAt, settings: attempts.settings })
     .from(attempts).innerJoin(exams, eq(attempts.examId, exams.id)).where(and(eq(attempts.candidateId, candidateId),
-      eq(attempts.isSandbox, false), eq(attempts.status, "graded"), eq(exams.resultsPublished, true))).orderBy(desc(attempts.submittedAt));
+      eq(attempts.isSandbox, false), eq(attempts.status, "graded"), visibleResults)).orderBy(desc(attempts.submittedAt));
   const ids = rows.map(({ id }) => id);
   const papers = groupPapers(await paperRows(db, ids));
   const notices = ids.length ? await db.select({ attemptId: gradeNotices.attemptId, qid: gradeNotices.questionId, at: gradeNotices.createdAt })
     .from(gradeNotices).where(inArray(gradeNotices.attemptId, ids)).orderBy(desc(gradeNotices.createdAt)) : [];
   return rows.map(({ scoreCents, settings, ...result }) => ({
     ...result, score: (scoreCents ?? 0) / 100,
+    percentage: result.totalMarks ? Math.round((scoreCents ?? 0) / result.totalMarks * 10) / 10 : null,
     questions: (papers.get(result.id) ?? []).map((question) => {
       const points = mark(question, settings.multiSelectRule);
-      return { position: question.position, marks: question.marks, awarded: points === null ? null : points / 100, feedback: question.feedback,
+      return { position: question.position, text: question.text, type: question.type, marks: question.marks,
+        awarded: points === null ? null : points / 100, feedback: question.feedback,
         regradedAt: notices.find((notice) => notice.attemptId === result.id && notice.qid === question.qid)?.at ?? null };
     }),
   }));

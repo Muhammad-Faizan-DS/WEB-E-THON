@@ -57,19 +57,10 @@ export const sectionPatch = z.object({ id, ...Object.fromEntries(Object.entries(
 export const sectionReorder = z.object({
   sectionIds: z.array(id).min(1).max(50).refine((ids) => new Set(ids).size === ids.length, "Use each section once."),
 }).strict();
-export const attachQuestions = z.object({
-  questionIds: z.array(id).min(1).max(500).refine((ids) => new Set(ids).size === ids.length, "Use each question once."),
-  /** true = this list becomes the section's questions; false = append. A question already in another section of this exam moves here. */
-  replace: z.boolean().default(false),
-}).strict();
 export const sectionImport = questionImport.extend({
   /** Defaults to the exam's course. */
   course: course.optional(),
   tags: tags.optional(),
-}).strict();
-export const questionFilters = z.object({
-  course: course.optional(),
-  tag: z.string().trim().min(1).max(40).optional(),
 }).strict();
 
 export type SectionInput = z.infer<typeof sectionInput>;

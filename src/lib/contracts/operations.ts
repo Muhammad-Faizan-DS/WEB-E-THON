@@ -24,7 +24,7 @@ export const orgSettingsInput = z.object({
 }).strict();
 export const accountImport = z.object({ csv: z.string().min(1).max(350_000), commit: z.boolean().default(false) }).strict();
 export const questionImport = z.object({
-  format: z.enum(["csv", "json", "moodle-xml", "gift"]),
+  format: z.enum(["csv", "json", "moodle-xml", "gift", "text"]),
   content: z.string().min(1).max(600_000),
   commit: z.boolean().default(false),
 }).strict();

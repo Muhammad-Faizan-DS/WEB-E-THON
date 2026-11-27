@@ -57,7 +57,6 @@ export const examInput = z.object({
   durationMin: z.number().int().positive().max(1_440),
   totalMarks: z.number().int().positive().max(200_000),
   settings,
-  questionIds: z.array(id).max(1_000).refine((ids) => new Set(ids).size === ids.length, "Use each question once.").default([]),
 }).strict();
 export const examPatch = examInput.partial().extend({ id }).strict();
 
@@ -83,7 +82,8 @@ const deviceCheck = z.boolean();
 const cameraReady = z.boolean().optional();
 const session = z.object({ sessionId: id }).strict();
 export const startInput = z.union([
-  z.object({ sandbox: z.literal(false).default(false), key: z.string().trim().min(1).max(128), deviceCheck, cameraReady }).strict(),
+  /** `key` is required except for practice exams. */
+  z.object({ sandbox: z.literal(false).default(false), key: z.string().trim().min(1).max(128).optional(), deviceCheck, cameraReady }).strict(),
   z.object({ sandbox: z.literal(true), deviceCheck }).strict(),
 ]);
 export const heartbeatInput = z.union([session, z.object({ takeover: z.literal(true), deviceCheck }).strict()]);
@@ -142,4 +142,6 @@ export interface AttemptState {
   palette: Array<{ position: number; sectionId: string | null; seen: boolean; locked: boolean; flagged: boolean; answered: boolean }>;
   /** Sections in paper order; group the palette by `sectionId` and show `instructions` when entering a section. */
   sections: Array<{ id: string; title: string; instructions: string; firstPosition: number; count: number }>;
+  /** Present on submit of a practice exam whose answers could all be marked automatically. */
+  result?: { score: number; totalMarks: number; percentage: number };
 }

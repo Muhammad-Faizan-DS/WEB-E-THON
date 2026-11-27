@@ -90,10 +90,12 @@ export function reattemptIssues(pool: PaperQuestion[], sections: PaperSection[])
  * Draws one candidate paper: sections in order, blueprint cells drawn within each section,
  * questions shuffled within a section when it allows shuffling. A re-attempt keeps about half of the prior questions (BR-11).
  */
-export function drawPaper(pool: PaperQuestion[], settings: ExamSettings, options: { sections?: PaperSection[]; previous?: Set<string> } = {}) {
+export function drawPaper(pool: PaperQuestion[], settings: ExamSettings,
+  options: { sections?: PaperSection[]; previous?: Set<string>; seed?: Buffer } = {}) {
   const { previous } = options;
   const sections = options.sections ?? [wholePoolSection(settings)];
-  const seed = randomBytes(32);
+  // A candidate's activation key seeds the draw (see paperSeed), so the key alone reproduces that candidate's paper.
+  const seed = options.seed ?? randomBytes(32);
   let counter = 0;
   function shuffle<T>(items: T[]) {
     const copy = [...items];
@@ -150,14 +152,41 @@ export function newSessionId() {
   return randomUUID();
 }
 
+function secret() {
+  const value = process.env.AUTH_SECRET;
+  if (!value) throw new Error("AUTH_SECRET is required.");
+  return value;
+}
+
+/** Ignores case, spaces and dashes so "ab12-cd34" and "AB12CD34" are the same key. */
+export function normalizeKey(key: string) {
+  return key.toUpperCase().replace(/[^0-9A-Z]/g, "");
+}
+
 export function newActivationKey() {
   return randomBytes(8).toString("hex").toUpperCase();
 }
 
+/**
+ * The activation key for one key row: 16 random-looking hex characters derived from the row id and AUTH_SECRET.
+ * Only its hash is stored, yet the owning examiner can display or print it again; a database copy alone cannot.
+ */
+export function activationKeyFor(keyId: string) {
+  return createHmac("sha256", secret()).update("secureexam:issued-key:").update(keyId).digest("hex").slice(0, 16).toUpperCase();
+}
+
+/** Formats a key for people: ABCD-EF12-3456-7890. Entry accepts it with or without dashes. */
+export function displayKey(key: string) {
+  return normalizeKey(key).match(/.{1,4}/g)?.join("-") ?? key;
+}
+
 export function hashKey(key: string) {
-  const secret = process.env.AUTH_SECRET;
-  if (!secret) throw new Error("AUTH_SECRET is required.");
-  return createHmac("sha256", secret).update("secureexam:activation-key:").update(key.toUpperCase()).digest("hex");
+  return createHmac("sha256", secret()).update("secureexam:activation-key:").update(normalizeKey(key)).digest("hex");
+}
+
+/** The paper seed for a candidate: their activation key decides question selection, question order and option order. */
+export function paperSeed(key: string) {
+  return createHmac("sha256", secret()).update("secureexam:paper:").update(normalizeKey(key)).digest();
 }
 
 export function keyMatches(candidateKey: string, expectedHash: string) {

@@ -5,6 +5,7 @@ import { type z } from "zod";
 import { type Actor } from "./auth";
 import { database, type Tx } from "./database";
 import { ApiError, fail } from "./errors";
+import { gradePracticeOnSubmit } from "./grading";
 import { newSessionId } from "./paper";
 import { explain, expiredBy, normalSaveGrace, recordGap, recordSignal, reviewCounts, saveGrace, settleDeparture, writeSignal } from "./integrity";
 import type { eventInput } from "@/lib/contracts/operations";
@@ -228,7 +229,9 @@ export function submitAttempt(actor: Actor, attemptId: string, sessionId: string
     const status = now >= attempt.deadlineAt ? "auto_submitted" : "submitted";
     const submittedAt = status === "auto_submitted" ? attempt.deadlineAt : now;
     await tx.update(attempts).set({ status, submittedAt }).where(and(eq(attempts.id, attemptId), eq(attempts.status, "in_progress")));
-    return state(tx, { ...attempt, status, submittedAt });
+    const result = await gradePracticeOnSubmit(tx, { ...attempt, status, submittedAt });
+    const after = await state(tx, { ...attempt, status: result ? "graded" : status, submittedAt });
+    return result ? { ...after, result } : after;
   });
 }
 

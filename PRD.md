@@ -704,5 +704,11 @@ Feature works on deployed URL · FE + BE validation · server-side auth check ·
 **New/changed API:** `GET /api/exam-presets`, `POST/PATCH/DELETE /api/exams/:id/sections`, `POST /api/exams/:id/sections/:sid/questions` (attach from bank), `POST /api/exams/:id/sections/:sid/import` (upload → preview/commit), `PATCH /api/exams/:id/sections/reorder`.
 **Workspace:** palette grouped by section headers; section instructions shown when entering a section.
 
+### 24.4 Exam-owned question authoring
+
+The examiner creates an exam draft, then adds questions inside one of its sections. The four authoring actions are manual entry, pasted text, a question file (CSV, JSON, Moodle XML, GIFT, TXT), and a ZIP containing supported question files. File and paste imports support preview and row-level validation. The ZIP preview identifies both the source file and row.
+
+Question reads and writes are scoped by examiner, exam, and section. New questions belong to one exam. Existing shared records are copied on edit when another exam still uses the original. After the first candidate starts, BR-20 freezes question and section edits. The examiner opens Questions from an exam, and bookmarks for the former standalone question bank lead to Exams.
+
 ## 23. Out of scope (do not build)
 Safe Exam Browser integration, screen sharing, audio monitoring, face recognition/biometric identity, numeric cheating scores, encrypted offline hand-in files/QR answer transfer, extra roles, webhooks, dual-marker grading, LTI 1.3, Odoo, separate backend service, Redis, WebSockets. Don't quote unverified statistics in the pitch.

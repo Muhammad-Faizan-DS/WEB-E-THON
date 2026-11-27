@@ -6,7 +6,7 @@ import { type Actor } from "./auth";
 import { database } from "./database";
 import { fail } from "./errors";
 import { examPool, paperSections } from "./exams";
-import { checkPaper, drawPaper, hashKey, keyMatches, newSessionId, reattemptIssues } from "./paper";
+import { checkPaper, drawPaper, hashKey, keyMatches, newSessionId, paperSeed, reattemptIssues } from "./paper";
 import { reattemptKey, recentAttemptCondition } from "./requests";
 
 export function requireDesktop(deviceCheck: boolean, headers: Headers) {
@@ -23,7 +23,7 @@ export function deadline(startedAt: Date, endsAt: Date, durationMin: number, mul
 export async function candidateExams(candidateId: string) {
   const now = new Date();
   const rows = await database().select({
-    id: exams.id, title: exams.title, instructions: exams.instructions, startsAt: exams.startsAt, endsAt: exams.endsAt,
+    id: exams.id, title: exams.title, examType: exams.examType, instructions: exams.instructions, startsAt: exams.startsAt, endsAt: exams.endsAt,
     durationMin: exams.durationMin, timeMultiplier: enrollments.timeMultiplier, accessStatus: enrollments.status,
     allowPaste: enrollments.allowPaste, cameraCheck: exams.settings,
     cameraException: enrollments.cameraException,
@@ -47,6 +47,8 @@ export async function candidateExams(candidateId: string) {
       accessStatus: replacementReady ? "active" : row.accessStatus,
       reattemptKey: replacement && replacementHash && hashKey(replacement) === replacementHash ? replacement : null,
       cameraCheck: cameraCheck.cameraCheck && !cameraException,
+      integrityMode: cameraCheck.integrityMode,
+      keyRequired: row.examType !== "practice",
       availableSeconds: bucket === "available" ? Math.max(0, Math.floor(
         (deadline(now, row.endsAt, row.durationMin, row.timeMultiplier).getTime() - now.getTime()) / 1_000,
       )) : 0,
@@ -86,15 +88,19 @@ export async function startAttempt(actor: Actor, examId: string, input: z.infer<
       }
       if (settings.cameraCheck && !enrollment.cameraException && !input.cameraReady) fail(409, "CAMERA_CHECK_REQUIRED", "Complete the camera check before starting.");
       if (cooldownDone) await tx.update(enrollments).set({ status: "active" }).where(eq(enrollments.id, enrollment.id));
-      [key] = await tx.select().from(activationKeys)
-        .where(and(eq(activationKeys.enrollmentId, enrollment.id), eq(activationKeys.status, "active"))).for("update");
-      if (!key) fail(403, "KEY_UNAVAILABLE", "Request an active activation key from your examiner.");
-      if (!keyMatches(input.key, key.keyHash)) {
-        const count = key.failedTries + 1;
-        const locked = count >= 5;
-        await tx.update(activationKeys).set({ failedTries: count, status: locked ? "locked" : "active" }).where(eq(activationKeys.id, key.id));
-        if (locked) await tx.insert(auditLog).values({ actorId: actor.id, action: "activation_key_locked", entity: "enrollment", entityId: enrollment.id });
-        return { rejected: locked ? "KEY_LOCKED" : "INVALID_KEY" } as const;
+      // Practice exams open without a key (PRD §24.3 preset); every other exam needs the candidate's own key.
+      if (exam.examType !== "practice") {
+        [key] = await tx.select().from(activationKeys)
+          .where(and(eq(activationKeys.enrollmentId, enrollment.id), eq(activationKeys.status, "active"))).for("update");
+        if (!key) fail(403, "KEY_UNAVAILABLE", "Request an active activation key from your examiner.");
+        if (!input.key) fail(400, "KEY_REQUIRED", "Enter your activation key to start this exam.");
+        if (!keyMatches(input.key, key.keyHash)) {
+          const count = key.failedTries + 1;
+          const locked = count >= 5;
+          await tx.update(activationKeys).set({ failedTries: count, status: locked ? "locked" : "active" }).where(eq(activationKeys.id, key.id));
+          if (locked) await tx.insert(auditLog).values({ actorId: actor.id, action: "activation_key_locked", entity: "enrollment", entityId: enrollment.id });
+          return { rejected: locked ? "KEY_LOCKED" : "INVALID_KEY" } as const;
+        }
       }
     }
 
@@ -113,7 +119,9 @@ export async function startAttempt(actor: Actor, examId: string, input: z.infer<
     }).returning();
     const oldQuestions = previous ? await tx.select({ id: attemptQuestions.questionId }).from(attemptQuestions)
       .where(eq(attemptQuestions.attemptId, previous.id)) : null;
-    const paper = drawPaper(pool, settings, { sections, previous: oldQuestions ? new Set(oldQuestions.map(({ id }) => id)) : undefined });
+    // The verified activation key seeds this candidate's paper; sandbox and practice papers use a fresh random seed.
+    const paper = drawPaper(pool, settings, { sections, previous: oldQuestions ? new Set(oldQuestions.map(({ id }) => id)) : undefined,
+      seed: key && !input.sandbox && input.key ? paperSeed(input.key) : undefined });
     await tx.insert(attemptQuestions).values(paper.map((question) => ({
       ...question, attemptId: attempt.id, seenAt: question.position === 1 || !settings.sequentialReveal ? startedAt : null,
     })));
