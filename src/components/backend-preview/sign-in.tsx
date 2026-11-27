@@ -46,7 +46,7 @@ export function SignInPanel({ showDemoAccounts = false, institution = "SecureExa
   }
   return <main className="sign-in">
     <section className="sign-in-brand" aria-label="About SecureExam">
-      <div className="brand"><span aria-hidden="true">SE</span>SecureExam</div>
+      <div className="brand"><span aria-hidden="true">F</span>Fairmark</div>
       <div className="sign-in-pitch">
         {institution !== "SecureExam" && <p className="eyebrow">{institution}</p>}
         <h1>Exams that stay fair when things go wrong.</h1>

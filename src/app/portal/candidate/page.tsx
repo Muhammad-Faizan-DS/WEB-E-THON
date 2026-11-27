@@ -7,7 +7,7 @@ import { candidateResults } from "@/server/grading";
 import { candidateExams } from "@/server/start";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Candidate · SecureExam" };
+export const metadata = { title: "Candidate" };
 
 type ExamRow = { id: string; title: string; startsAt: Date; endsAt: Date; accessStatus: string; attemptStatus: string | null };
 

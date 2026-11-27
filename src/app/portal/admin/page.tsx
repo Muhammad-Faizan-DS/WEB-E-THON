@@ -8,7 +8,7 @@ import { listExams } from "@/server/exams";
 import { listRequests } from "@/server/requests";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Administrator · SecureExam" };
+export const metadata = { title: "Administrator" };
 
 export default async function AdminDashboard() {
   const user = await requireUser("admin");

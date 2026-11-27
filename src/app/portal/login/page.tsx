@@ -3,7 +3,7 @@ import { SignInPanel } from "@/components/backend-preview/sign-in";
 import { currentUser, roleHome } from "@/components/dashboard/guard";
 import { readOrgSettings } from "@/server/accounts";
 
-export const metadata = { title: "Sign in · SecureExam" };
+export const metadata = { title: "Sign in" };
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage() {

@@ -38,6 +38,12 @@ Use the [core contracts](src/lib/contracts/core.ts) for questions, exams, and ac
 - **Public:** `/verify/[code]` (QR target in report PDFs).
 - Frontend screens that still call frontend-only endpoints (for example `/api/me/exams`, `/api/attempts/:id/answers/:aq`) need to be pointed at the implemented routes listed in PRD §12; until then, use the portal for those flows.
 
+## Two Vercel projects (frontend preview + real backend)
+
+- **Frontend project (Fairmark, e.g. fairmark-three.vercel.app):** unchanged; deploys the frontend branch with `NEXT_PUBLIC_USE_MOCKS=1`.
+- **Backend project:** import the same repository again, Production Branch `integrate/main` (or `main`), and set `SECUREEXAM_PORTAL_ONLY=1`, `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, `SHOW_DEMO_ACCOUNTS=1`. In this mode `/`, `/login`, `/candidate`, `/examiner`, `/admin` and `/exam` redirect into the real system at `/portal` (see `src/proxy.ts`). The portal uses Fairmark's design tokens, fonts and light/dark theme.
+- **Sign in from the Fairmark site:** in the frontend project add a redirect so its sign-in opens the backend, e.g. a `vercel.json` on the frontend branch: `{ "redirects": [{ "source": "/login", "destination": "https://<backend-domain>/portal/login", "permanent": false }] }`.
+
 ## Deploy to Vercel and test it
 
 1. **Database.** Create a free Neon project and copy its pooled connection string. From your machine, run `DATABASE_URL=<neon url> pnpm db:migrate`, then `DATABASE_URL=<neon url> SEED_PASSWORD=<demo password> AUTH_SECRET=<same secret as Vercel> pnpm db:seed` (the seed refuses `NODE_ENV=production`, so run it locally). Keep `AUTH_SECRET` identical everywhere: it signs sessions and derives the activation keys.

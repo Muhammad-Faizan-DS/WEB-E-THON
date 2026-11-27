@@ -10,7 +10,7 @@ export function DashboardShell({ user, children }: { user: SignedInUser; childre
   return <div>
     <a className="skip" href="#workspace">Skip to workspace</a>
     <header className="topbar">
-      <Link href={roleHome(user.role)} className="brand"><span aria-hidden="true">SE</span>SecureExam</Link>
+      <Link href={roleHome(user.role)} className="brand"><span aria-hidden="true">F</span>Fairmark</Link>
       <div className="account">
         <NotificationBell />
         <div><strong>{user.name}</strong><small>{roleLabel[user.role]}</small></div>
