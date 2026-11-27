@@ -33,7 +33,7 @@ Use the [core contracts](src/lib/contracts/core.ts) for questions, exams, and ac
 ## Deploy to Vercel and test it
 
 1. **Database.** Create a free Neon project and copy its pooled connection string. From your machine, run `DATABASE_URL=<neon url> pnpm db:migrate`, then `DATABASE_URL=<neon url> SEED_PASSWORD=<demo password> AUTH_SECRET=<same secret as Vercel> pnpm db:seed` (the seed refuses `NODE_ENV=production`, so run it locally). Keep `AUTH_SECRET` identical everywhere: it signs sessions and derives the activation keys.
-2. **Vercel project settings → Environment Variables:** `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` (the production URL, e.g. `https://secureexam.vercel.app`), `CRON_SECRET`, and `SHOW_DEMO_ACCOUNTS=1` if judges should see the demo-account shortcuts on the sign-in page.
+2. **Vercel project settings → Environment Variables:** `DATABASE_URL`, `AUTH_SECRET`, `CRON_SECRET`, and optionally `AUTH_URL` (only to pin one canonical origin; sign-in and sign-out otherwise follow the host the request came from, so preview and production URLs both work), and `SHOW_DEMO_ACCOUNTS=1` if judges should see the demo-account shortcuts on the sign-in page.
 3. **Deploy.** `vercel.json` schedules the expiry sweeper `/api/cron/finalize` daily (the Hobby plan allows one run per day; attempts are also finalized lazily on every read, so nothing depends on the cron).
 4. **Check readiness.** Open `/api/health`. It returns `200 {"status":"ok"}` only when the database answers, all migrations are applied, and the required settings exist. It shows setting names, never values.
 5. **Smoke test the live URL** from your machine (credentials come from your shell, not a file):
