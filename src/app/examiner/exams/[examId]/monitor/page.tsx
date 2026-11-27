@@ -13,6 +13,9 @@ import { PhaseBadge } from "@/components/common/status";
 import { ExamSubnav } from "@/components/examiner/exam-subnav";
 import { ContactIndicator, IncidentCounts, NotEvidenceNote } from "@/components/examiner/severity";
 import { RequestDecisionDialog, RequestTypeBadge } from "@/components/examiner/request-decision";
+import { CandidatePanel } from "@/components/examiner/candidate-panel";
+import { ExamActions } from "@/components/examiner/exam-actions";
+import { openHelpByAttempt, ProctorState } from "@/lib/client/proctor";
 import { Button } from "@/components/ui/button";
 import { Badge, Status } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, StatStrip } from "@/components/ui/card";
@@ -21,7 +24,7 @@ import { Alert } from "@/components/ui/alert";
 import { Progress, Skeleton } from "@/components/ui/misc";
 import { cn, fmtAgo, fmtClock, fmtRelative, fmtTime } from "@/lib/utils";
 
-type Filter = "attention" | "all" | "in_progress" | "locked" | "finished" | "not_started";
+type Filter = "attention" | "all" | "help" | "in_progress" | "offline" | "locked" | "submitted" | "ended" | "not_started";
 
 const STATUS: Record<MonitorRow["status"], { label: string; tone: "neutral" | "primary" | "warning" | "success" | "info" }> = {
   not_started: { label: "Not started", tone: "neutral" },
@@ -43,7 +46,7 @@ function attention(r: MonitorRow) {
   if (r.status === "in_progress") s += 1;
   return s;
 }
-const needsAttention = (r: MonitorRow) => attention(r) >= 10;
+const isOffline = (r: MonitorRow) => (r.status === "in_progress" || r.status === "locked") && (r.contact === "stale" || r.contact === "lost");
 
 export default function MonitorPage() {
   const { examId } = useParams<{ examId: string }>();
@@ -56,6 +59,8 @@ export default function MonitorPage() {
   const [filter, setFilter] = React.useState<Filter>("all");
   const [query, setQuery] = React.useState("");
   const [deciding, setDeciding] = React.useState<ExamRequest | null>(null);
+  const [proctor, setProctor] = React.useState<ProctorState | null>(null);
+  const [selected, setSelected] = React.useState<string | null>(null);
   useTick(1000);
 
   const load = React.useCallback(async () => {
@@ -67,6 +72,7 @@ export default function MonitorPage() {
       ]);
       clock.sync(m.serverNow, sent);
       setData(m); setRequests(r.requests); setError(null); setLastLoad(clock.now());
+      api.get(`/api/exams/${examId}/proctor`, ProctorState).then(setProctor, () => {});
     } catch (e) {
       setError(e instanceof ApiError && e.status === 404 ? "This exam doesn't exist or isn't yours." : "Couldn't refresh. Retrying…");
     }
@@ -86,6 +92,10 @@ export default function MonitorPage() {
   }
 
   const now = clock.now();
+  const help = openHelpByAttempt(proctor?.messages ?? []);
+  const helpCount = (r: MonitorRow) => (r.attemptId ? help[r.attemptId]?.length ?? 0 : 0);
+  const score = (r: MonitorRow) => attention(r) + (helpCount(r) ? 90 : 0);
+  const needsAttention = (r: MonitorRow) => score(r) >= 10;
   const pendingReqs = requests.filter((r) => r.status === "pending");
   const q = query.trim().toLowerCase();
   const rows = data.rows
@@ -93,14 +103,17 @@ export default function MonitorPage() {
     .filter((r) => {
       switch (filter) {
         case "attention": return needsAttention(r);
+        case "help": return helpCount(r) > 0;
         case "in_progress": return r.status === "in_progress";
+        case "offline": return isOffline(r);
         case "locked": return r.status === "locked";
-        case "finished": return r.status === "submitted" || r.status === "expired";
+        case "submitted": return r.status === "submitted";
+        case "ended": return r.status === "expired";
         case "not_started": return r.status === "not_started";
         default: return true;
       }
     })
-    .sort((a, b) => attention(b) - attention(a) || a.candidateName.localeCompare(b.candidateName));
+    .sort((a, b) => score(b) - score(a) || a.candidateName.localeCompare(b.candidateName));
 
   const attentionCount = data.rows.filter(needsAttention).length;
   const closesIn = Date.parse(data.exam.closesAt) - now;
@@ -109,9 +122,12 @@ export default function MonitorPage() {
   const tiles = [
     { k: "all", label: "All enrolled", n: data.totals.enrolled },
     { k: "attention", label: "Needs attention", n: attentionCount },
+    { k: "help", label: "Asking for help", n: data.rows.filter((r) => helpCount(r) > 0).length },
     { k: "in_progress", label: "In progress", n: data.totals.inProgress },
+    { k: "offline", label: "Offline", n: data.rows.filter(isOffline).length },
     { k: "locked", label: "Locked", n: data.totals.locked },
-    { k: "finished", label: "Finished", n: data.totals.submitted + data.totals.expired },
+    { k: "submitted", label: "Submitted", n: data.totals.submitted },
+    { k: "ended", label: "Time ended", n: data.totals.expired },
     { k: "not_started", label: "Not started", n: data.totals.notStarted },
   ] as const;
 
@@ -134,14 +150,15 @@ export default function MonitorPage() {
             <Radio className={cn("size-4", paused ? "text-muted-foreground" : "text-success")} aria-hidden />
             {paused ? "Paused" : error ? <span className="text-danger">{error}</span> : `Live · updated ${updatedAgo ?? 0} s ago`}
           </span>
-          <Button variant="outline" size="sm" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>{paused ? <Play /> : <Pause />}{paused ? "Resume" : "Pause"}</Button>
+          <Button variant="outline" size="sm" onClick={() => setPaused((p) => !p)} aria-pressed={paused}>{paused ? <Play /> : <Pause />}{paused ? "Resume updates" : "Pause updates"}</Button>
         </div>
       </div>
+      <div className="mb-6"><ExamActions examId={examId} live={data.exam.phase === "ongoing"} inProgress={data.totals.inProgress + data.totals.locked} onDone={load} /></div>
 
       <NotEvidenceNote className="mb-6 max-w-3xl" />
 
       <div role="group" aria-label="Filter candidates by status" className="mb-8">
-        <StatStrip items={tiles.map((t) => ({ label: t.label, value: t.n, active: filter === t.k, onClick: () => setFilter(t.k), tone: t.k === "attention" && t.n > 0 ? "text-danger" : undefined }))} />
+        <StatStrip items={tiles.map((t) => ({ label: t.label, value: t.n, active: filter === t.k, onClick: () => setFilter(t.k), tone: (t.k === "attention" || t.k === "help") && t.n > 0 ? "text-danger" : undefined }))} />
       </div>
 
       <div className="grid gap-6 2xl:grid-cols-[1fr_22rem]">
@@ -182,7 +199,7 @@ export default function MonitorPage() {
                           </p>
                           <p className="pl-3.5 font-mono text-xs text-muted-foreground">{r.studentId ?? "—"}</p>
                         </td>
-                        <td className="px-3 py-3"><StatusCell r={r} now={now} onDecide={() => setDeciding(requests.find((x) => x.id === r.pendingRequest?.id) ?? null)} /></td>
+                        <td className="px-3 py-3"><StatusCell r={r} now={now} help={helpCount(r)} onDecide={() => setDeciding(requests.find((x) => x.id === r.pendingRequest?.id) ?? null)} /></td>
                         <td className="w-40 px-3 py-3"><ProgressCell r={r} /></td>
                         <td className="whitespace-nowrap px-3 py-3"><ContactIndicator contact={r.contact} lastAt={r.lastContactAt} now={now} /></td>
                         <td className="num px-3 py-3"><span className={cn(r.opensUsed > r.maxOpens && "font-semibold text-warning")}>{r.attemptId ? `${r.opensUsed}/${r.maxOpens}` : "—"}</span></td>
@@ -190,8 +207,9 @@ export default function MonitorPage() {
                           <IncidentCounts c={r.incidents} />
                           {r.unreviewed > 0 && <p className="mt-1 text-[12px] text-muted-foreground">{r.unreviewed} to review</p>}
                         </td>
-                        <td className="px-3 py-3 text-right">
-                          {r.attemptId && <Button asChild size="sm" variant={r.unreviewed ? "default" : "ghost"}><Link href={`/examiner/exams/${examId}/attempts/${r.attemptId}`}>Timeline <ArrowRight /></Link></Button>}
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          {r.attemptId && <Button size="sm" variant={helpCount(r) ? "default" : "outline"} onClick={() => setSelected(r.enrollmentId)} aria-label={`Manage ${r.candidateName}`}>Manage</Button>}
+                          {r.attemptId && <Button asChild size="sm" variant={r.unreviewed ? "default" : "ghost"} className="ml-1.5"><Link href={`/examiner/exams/${examId}/attempts/${r.attemptId}`}>Timeline <ArrowRight /></Link></Button>}
                         </td>
                       </tr>
                     ))}
@@ -204,12 +222,15 @@ export default function MonitorPage() {
                   <li key={r.enrollmentId} className="rounded-lg border bg-surface p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div><p className="flex items-center gap-2 font-medium">{needsAttention(r) && <span className="size-1.5 rounded-full bg-danger" aria-hidden />}{r.candidateName}</p><p className="font-mono text-xs text-muted-foreground">{r.studentId ?? "—"}</p></div>
-                      <StatusCell r={r} now={now} onDecide={() => setDeciding(requests.find((x) => x.id === r.pendingRequest?.id) ?? null)} />
+                      <StatusCell r={r} now={now} help={helpCount(r)} onDecide={() => setDeciding(requests.find((x) => x.id === r.pendingRequest?.id) ?? null)} />
                     </div>
                     <div className="mt-3 space-y-2"><ProgressCell r={r} /><ContactIndicator contact={r.contact} lastAt={r.lastContactAt} now={now} /></div>
                     <div className="mt-3 flex items-center justify-between gap-2">
                       <IncidentCounts c={r.incidents} />
-                      {r.attemptId && <Button asChild size="sm" variant="outline"><Link href={`/examiner/exams/${examId}/attempts/${r.attemptId}`}>Timeline <ArrowRight /></Link></Button>}
+                      <span className="flex gap-1.5">
+                        {r.attemptId && <Button size="sm" variant={helpCount(r) ? "default" : "outline"} onClick={() => setSelected(r.enrollmentId)} aria-label={`Manage ${r.candidateName}`}>Manage</Button>}
+                        {r.attemptId && <Button asChild size="sm" variant="outline"><Link href={`/examiner/exams/${examId}/attempts/${r.attemptId}`}>Timeline <ArrowRight /></Link></Button>}
+                      </span>
                     </div>
                   </li>
                 ))}
@@ -243,16 +264,26 @@ export default function MonitorPage() {
               <Link href={`/examiner/exams/${examId}/requests`} className="mt-3 inline-block text-sm text-primary hover:underline">All requests</Link>
             </CardContent>
           </Card>
-          <AnnouncementsCard examId={examId} list={data.announcements} onSent={load} />
+          <AnnouncementsCard examId={examId} list={data.announcements} acks={proctor?.acks ?? {}} onSent={load} />
         </aside>
       </div>
 
+      <CandidatePanel
+        examId={examId}
+        row={data.rows.find((r) => r.enrollmentId === selected) ?? null}
+        now={now}
+        messages={proctor?.messages ?? []}
+        extensions={proctor?.extensions ?? []}
+        open={!!selected}
+        onOpenChange={(o) => !o && setSelected(null)}
+        onChanged={load}
+      />
       <RequestDecisionDialog request={deciding} open={!!deciding} onOpenChange={(o) => !o && setDeciding(null)} onDecided={load} />
     </>
   );
 }
 
-function StatusCell({ r, now, onDecide }: { r: MonitorRow; now: number; onDecide: () => void }) {
+function StatusCell({ r, now, help, onDecide }: { r: MonitorRow; now: number; help: number; onDecide: () => void }) {
   const s = STATUS[r.status];
   const left = r.deadline && (r.status === "in_progress" || r.status === "locked") ? Date.parse(r.deadline) - now : null;
   return (
@@ -260,6 +291,7 @@ function StatusCell({ r, now, onDecide }: { r: MonitorRow; now: number; onDecide
       <Status tone={s.tone} pulse={r.status === "in_progress" && r.contact === "live"}>{s.label}</Status>
       {left !== null && <span className="num pl-4 text-[12px] text-muted-foreground">{fmtClock(left)} left</span>}
       {r.finalizedAt && <span className="num pl-4 text-[12px] text-muted-foreground">at {fmtTime(r.finalizedAt, false)}</span>}
+      {help > 0 && <span className="inline-flex items-center gap-1 pl-4 text-[12px] font-semibold text-flag"><Hand className="size-3.5" aria-hidden />Asking for help</span>}
       {r.pendingRequest && (
         <button type="button" onClick={onDecide} className="cursor-pointer pl-4 text-[12px] font-semibold text-primary underline-offset-2 hover:underline">
           {r.pendingRequest.type === "unlock" ? "Unlock requested" : "Re-attempt requested"} · review
@@ -280,7 +312,7 @@ function ProgressCell({ r }: { r: MonitorRow }) {
   );
 }
 
-function AnnouncementsCard({ examId, list, onSent }: { examId: string; list: ExamMonitor["announcements"]; onSent: () => void }) {
+function AnnouncementsCard({ examId, list, acks, onSent }: { examId: string; list: ExamMonitor["announcements"]; acks: ProctorState["acks"]; onSent: () => void }) {
   const [body, setBody] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
@@ -314,7 +346,17 @@ function AnnouncementsCard({ examId, list, onSent }: { examId: string; list: Exa
         {list.length > 0 && (
           <ol className="space-y-2 border-t pt-3">
             {[...list].reverse().map((a) => (
-              <li key={a.id} className="text-sm"><span className="font-mono text-xs text-muted-foreground">{fmtTime(a.createdAt, false)}</span> <span>{a.body}</span></li>
+              <li key={a.id} className="text-sm">
+                <span className="font-mono text-xs text-muted-foreground">{fmtTime(a.createdAt, false)}</span> <span>{a.body}</span>
+                {acks[a.id] && acks[a.id].total > 0 && (
+                  <details className="mt-1 text-xs text-muted-foreground">
+                    <summary className="cursor-pointer select-none">
+                      <span className={cn("font-medium", acks[a.id].acked === acks[a.id].total ? "text-success" : "text-foreground")}>{acks[a.id].acked} of {acks[a.id].total}</span> acknowledged
+                    </summary>
+                    {acks[a.id].missing.length > 0 ? <p className="mt-1">Not yet: {acks[a.id].missing.join(", ")}</p> : <p className="mt-1">Everyone who started has seen it.</p>}
+                  </details>
+                )}
+              </li>
             ))}
           </ol>
         )}

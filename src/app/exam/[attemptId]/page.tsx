@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, ArrowRight, Eraser, Flag, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send, X,
+  ArrowLeft, ArrowRight, Eraser, Flag, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send,
 } from "lucide-react";
 import { useExamEngine } from "@/lib/client/exam-engine";
 import { useMe } from "@/lib/client/me";
@@ -22,6 +22,10 @@ import { Alert } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/misc";
+import { HelpButton } from "@/components/exam/help-panel";
+import { useInbox } from "@/lib/client/proctor";
+import { api as apiClient } from "@/lib/client/api";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export default function WorkspacePage() {
@@ -44,6 +48,23 @@ export default function WorkspacePage() {
   const isFullscreen = useIsFullscreen();
   const [dismissedAnn, setDismissedAnn] = React.useState<string | null>(null);
   const mainRef = React.useRef<HTMLDivElement>(null);
+
+  // guide feature: private messages and help requests with the examiner, plus announcement read receipts
+  const inboxOn = ex.status === "in_progress" || ex.status === "locked";
+  const help = useInbox(attemptId, inboxOn);
+  const lastToasted = React.useRef<string | null | undefined>(undefined);
+  React.useEffect(() => {
+    const m = help.latestFromExaminer;
+    if (lastToasted.current === undefined) { lastToasted.current = m?.id ?? null; return; } // first load: no toast for old messages
+    if (m && m.id !== lastToasted.current) {
+      lastToasted.current = m.id;
+      toast.info(m.kind === "reminder" ? "Reminder from your examiner" : "Message from your examiner", { description: m.body, duration: 12000 });
+    }
+  }, [help.latestFromExaminer]);
+  const acknowledge = React.useCallback(async (annId: string) => {
+    setDismissedAnn(annId);
+    try { await apiClient.post(`/api/attempts/${attemptId}/announcements/${annId}/ack`); help.reload(); } catch { /* offline: the banner is dismissed locally; the examiner sees it as not yet acknowledged */ }
+  }, [attemptId, help]);
 
   const questions = React.useMemo(() => ex.attempt?.questions ?? [], [ex.attempt]);
   const q = questions[Math.min(current, Math.max(0, questions.length - 1))];
@@ -187,17 +208,18 @@ export default function WorkspacePage() {
             <Button variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={() => setToolsOpen((o) => !o)} aria-pressed={toolsOpen} aria-label={toolsOpen ? "Hide tools" : "Show scratchpad and display tools"}>
               {toolsOpen ? <PanelRightClose /> : <PanelRightOpen />}
             </Button>
+            {inboxOn && ex.activeSession && <HelpButton attemptId={attemptId} messages={help.inbox.messages} unread={help.unread} onOpen={help.markRead} onSent={help.reload} />}
             <Button size="sm" className="hidden sm:inline-flex" onClick={() => setView("review")} disabled={inputsDisabled}>Review &amp; submit</Button>
           </div>
         </div>
         {ex.attempt.isSandbox && <p className="border-t bg-info-soft px-5 py-1.5 text-[12px] font-medium text-info">Sandbox preview: nothing you do here is recorded or counted.</p>}
       </header>
       <OfflineBanner connection={ex.connection} pendingCount={ex.pendingCount} />
-      {latestAnn && dismissedAnn !== latestAnn.id && (
+      {latestAnn && dismissedAnn !== latestAnn.id && !help.inbox.acked.includes(latestAnn.id) && (
         <div role="status" aria-live="polite" className="flex items-start gap-2.5 border-b bg-primary-soft px-5 py-2.5 text-[13px]">
           <Megaphone className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
           <p className="flex-1"><b>From your examiner:</b> {latestAnn.body}</p>
-          <button className="rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setDismissedAnn(latestAnn.id)} aria-label="Dismiss announcement"><X className="size-4" /></button>
+          <Button size="sm" variant="outline" className="h-7 shrink-0 px-2.5 text-[12px]" onClick={() => acknowledge(latestAnn.id)}>Got it</Button>
         </div>
       )}
 

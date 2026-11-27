@@ -51,7 +51,23 @@ interface MDb {
   announcements: { id: string; examId: string; body: string; createdAt: string }[];
   reattemptGranted: Record<string, boolean>; // `${examId}:${userId}`
   reviews: Record<string, IncidentReview>;
+  /** proctoring additions (guide features); created lazily so older stored DBs keep working */
+  proctor?: MProctor;
 }
+interface MMessage {
+  id: string; examId: string; attemptId: string; from: "examiner" | "candidate";
+  kind: "message" | "reminder" | "help"; category: "question" | "technical" | "break" | null;
+  body: string; createdAt: string; by: string; resolvedAt: string | null;
+}
+interface MProctor {
+  messages: MMessage[];
+  acks: Record<string, string[]>; // announcementId -> userIds
+  extensions: { id: string; examId: string; attemptId: string | null; minutes: number; reason: string; by: string; at: string; affected: number }[];
+  issues: { id: string; examId: string | null; category: string; body: string; by: string; role: string; at: string }[];
+  notes: Record<string, string>; // examId -> examiner-only instructions
+  closedAt: Record<string, string>; // examId -> when the examiner closed it early
+}
+const px = (db: MDb): MProctor => (db.proctor ??= { messages: [], acks: {}, extensions: [], issues: [], notes: {}, closedAt: {} });
 
 const uid = () => crypto.randomUUID();
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -88,7 +104,11 @@ function shuffle<T>(arr: T[], rnd: () => number) {
 }
 
 const opens = (db: MDb, e: MockExam) => db.epoch + e.opensOffsetMin * 60000;
-const closes = (db: MDb, e: MockExam) => db.epoch + e.closesOffsetMin * 60000;
+const closes = (db: MDb, e: MockExam) => {
+  const planned = db.epoch + e.closesOffsetMin * 60000;
+  const early = db.proctor?.closedAt[e.id];
+  return early ? Math.min(planned, Date.parse(early)) : planned;
+};
 const userById = (id: string) => USERS.find((u) => u.id === id)!;
 const examById = (id: string) => EXAMS.find((e) => e.id === id);
 
@@ -611,6 +631,153 @@ on("POST", "/api/requests/:id/decision", ([id], b, db) => {
   }
   Object.assign(r, { status: approve ? "approved" : "denied", decidedAt: iso(Date.now()), decidedBy: me(db)!.name, note });
   return ok({ id: r.id, status: r.status });
+});
+
+// ---------- proctoring additions (guide features) ----------
+const MINUTES = (v: unknown) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 1 && n <= 60 ? n : null; };
+
+on("GET", "/api/ping", () => ok({ serverNow: iso(Date.now()) }));
+
+on("GET", "/api/exams/:id/proctor", ([id], _b, db) => {
+  const e = examOwned(db, id);
+  if (!e) return fail(404, "NOT_FOUND", "Exam not found.");
+  const P = px(db);
+  const attempts = db.attempts.filter((a) => a.examId === e.id && !a.isSandbox && a.status !== "voided");
+  const started = new Set(attempts.map((a) => a.userId));
+  const anns = db.announcements.filter((x) => x.examId === e.id);
+  return ok({
+    serverNow: iso(Date.now()),
+    instructions: e.instructions,
+    notes: P.notes[e.id] ?? "",
+    closedAt: P.closedAt[e.id] ?? null,
+    messages: P.messages.filter((m) => m.examId === e.id),
+    extensions: P.extensions.filter((x) => x.examId === e.id),
+    acks: Object.fromEntries(anns.map((a) => {
+      const acked = new Set(P.acks[a.id] ?? []);
+      const audience = e.enrolled.filter((u) => started.has(u));
+      return [a.id, { acked: audience.filter((u) => acked.has(u)).length, total: audience.length, missing: audience.filter((u) => !acked.has(u)).map((u) => userById(u).name) }];
+    })),
+  });
+});
+
+on("POST", "/api/attempts/:id/messages", ([id], b, db) => {
+  const a = examinerAttempt(db, id);
+  if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
+  const body = String(b.body ?? "").trim();
+  if (body.length < 1 || body.length > 500) return fail(422, "VALIDATION", "Write a message (up to 500 characters).", { fields: { body: "1–500 characters" } });
+  const kind = b.kind === "reminder" ? "reminder" : "message";
+  const now = iso(Date.now());
+  const P = px(db);
+  P.messages.filter((m) => m.attemptId === a.id && m.kind === "help" && !m.resolvedAt).forEach((m) => { m.resolvedAt = now; });
+  const m: MMessage = { id: uid(), examId: a.examId, attemptId: a.id, from: "examiner", kind, category: null, body, createdAt: now, by: me(db)!.name, resolvedAt: null };
+  P.messages.push(m);
+  return ok(m, 201);
+});
+
+function extend(db: MDb, a: MAttempt, minutes: number) {
+  a.deadline = iso(Date.parse(a.deadline) + minutes * 60000);
+}
+
+on("POST", "/api/attempts/:id/extend", ([id], b, db) => {
+  const a = examinerAttempt(db, id);
+  if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
+  const minutes = MINUTES(b.minutes);
+  const reason = String(b.reason ?? "").trim();
+  if (!minutes) return fail(422, "VALIDATION", "Choose between 1 and 60 minutes.", { fields: { minutes: "1–60" } });
+  if (reason.length < 5) return fail(422, "VALIDATION", "Add a reason for the record.", { fields: { reason: "At least 5 characters" } });
+  if (a.status !== "in_progress" && a.status !== "locked") return fail(409, "ATTEMPT_CLOSED", "This attempt has already ended.");
+  extend(db, a, minutes);
+  const P = px(db); const by = me(db)!.name; const now = iso(Date.now());
+  P.extensions.push({ id: uid(), examId: a.examId, attemptId: a.id, minutes, reason, by, at: now, affected: 1 });
+  P.messages.push({ id: uid(), examId: a.examId, attemptId: a.id, from: "examiner", kind: "message", category: null, body: `Your examiner added ${minutes} min to your time.`, createdAt: now, by, resolvedAt: null });
+  return ok({ deadline: a.deadline });
+});
+
+on("POST", "/api/exams/:id/extend", ([id], b, db) => {
+  const e = examOwned(db, id);
+  if (!e) return fail(404, "NOT_FOUND", "Exam not found.");
+  const minutes = MINUTES(b.minutes);
+  const reason = String(b.reason ?? "").trim();
+  if (!minutes) return fail(422, "VALIDATION", "Choose between 1 and 60 minutes.", { fields: { minutes: "1–60" } });
+  if (reason.length < 5) return fail(422, "VALIDATION", "Add a reason for the record.", { fields: { reason: "At least 5 characters" } });
+  const live = db.attempts.filter((a) => a.examId === e.id && !a.isSandbox && (a.status === "in_progress" || a.status === "locked"));
+  live.forEach((a) => extend(db, a, minutes));
+  const P = px(db); const by = me(db)!.name; const now = iso(Date.now());
+  P.extensions.push({ id: uid(), examId: e.id, attemptId: null, minutes, reason, by, at: now, affected: live.length });
+  db.announcements.push({ id: uid(), examId: e.id, body: `Everyone has ${minutes} more minutes. Reason: ${reason}`, createdAt: now });
+  return ok({ affected: live.length });
+});
+
+on("POST", "/api/exams/:id/close", ([id], b, db) => {
+  const e = examOwned(db, id);
+  if (!e) return fail(404, "NOT_FOUND", "Exam not found.");
+  const reason = String(b.reason ?? "").trim();
+  if (reason.length < 5) return fail(422, "VALIDATION", "Add a reason for the record.", { fields: { reason: "At least 5 characters" } });
+  const now = Date.now();
+  px(db).closedAt[e.id] = iso(now);
+  const live = db.attempts.filter((a) => a.examId === e.id && (a.status === "in_progress" || a.status === "locked"));
+  live.forEach((a) => finalize(db, a, "examiner_close"));
+  db.announcements.push({ id: uid(), examId: e.id, body: `The examiner closed this exam. Your accepted answers were submitted. Reason: ${reason}`, createdAt: iso(now) });
+  return ok({ finalized: live.length });
+});
+
+on("PUT", "/api/exams/:id/notes", ([id], b, db) => {
+  const e = examOwned(db, id);
+  if (!e) return fail(404, "NOT_FOUND", "Exam not found.");
+  const notes = String(b.notes ?? "").slice(0, 2000);
+  px(db).notes[e.id] = notes;
+  return ok({ notes });
+});
+
+on("POST", "/api/issues", (_p, b, db) => {
+  const u = me(db)!;
+  const body = String(b.body ?? "").trim();
+  if (body.length < 10) return fail(422, "VALIDATION", "Describe the issue in a sentence or two.", { fields: { body: "At least 10 characters" } });
+  const issue = { id: uid(), examId: typeof b.examId === "string" ? b.examId : null, category: String(b.category ?? "other"), body: body.slice(0, 1000), by: u.name, role: u.role, at: iso(Date.now()) };
+  px(db).issues.push(issue);
+  return ok(issue, 201);
+});
+
+on("GET", "/api/issues", (_p, _b, db) => {
+  const u = me(db)!;
+  if (u.role === "candidate") return fail(403, "FORBIDDEN", "Staff only.");
+  const list = px(db).issues.filter((i) => u.role === "admin" || i.by === u.name);
+  return ok({ issues: [...list].reverse() });
+});
+
+// candidate side
+on("GET", "/api/attempts/:id/inbox", ([id], _b, db) => {
+  const a = ownAttempt(db, id);
+  if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
+  const P = px(db);
+  const u = me(db)!;
+  return ok({
+    messages: P.messages.filter((m) => m.attemptId === a.id),
+    acked: db.announcements.filter((x) => x.examId === a.examId && (P.acks[x.id] ?? []).includes(u.id)).map((x) => x.id),
+  });
+});
+
+on("POST", "/api/attempts/:id/help", ([id], b, db) => {
+  const a = ownAttempt(db, id);
+  if (!a) return fail(404, "NOT_FOUND", "Attempt not found.");
+  if (a.status !== "in_progress" && a.status !== "locked") return fail(409, "ATTEMPT_CLOSED", "This attempt has ended.");
+  const body = String(b.body ?? "").trim();
+  if (body.length < 3 || body.length > 500) return fail(422, "VALIDATION", "Tell your examiner what you need (3–500 characters).", { fields: { body: "3–500 characters" } });
+  const category = b.category === "technical" || b.category === "break" ? b.category : "question";
+  const P = px(db);
+  if (P.messages.filter((m) => m.attemptId === a.id && m.kind === "help" && !m.resolvedAt).length >= 3) return fail(429, "RATE_LIMITED", "You already have open requests. Your examiner will reply.");
+  const m: MMessage = { id: uid(), examId: a.examId, attemptId: a.id, from: "candidate", kind: "help", category, body, createdAt: iso(Date.now()), by: me(db)!.name, resolvedAt: null };
+  P.messages.push(m);
+  a.lastSeenAt = m.createdAt;
+  return ok(m, 201);
+});
+
+on("POST", "/api/attempts/:id/announcements/:ann/ack", ([id, ann], _b, db) => {
+  const a = ownAttempt(db, id);
+  if (!a || !db.announcements.some((x) => x.id === ann && x.examId === a.examId)) return fail(404, "NOT_FOUND", "Announcement not found.");
+  const P = px(db); const u = me(db)!.id;
+  P.acks[ann] = Array.from(new Set([...(P.acks[ann] ?? []), u]));
+  return ok({ ok: true });
 });
 
 // ---------- entry ----------

@@ -7,7 +7,8 @@ import { ExaminerDashboard, type ExaminerExamRow } from "@/contracts";
 import { api } from "@/lib/client/api";
 import { ExamSubnav } from "@/components/examiner/exam-subnav";
 import { PhaseBadge } from "@/components/common/status";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, StatStrip } from "@/components/ui/card";
+import { PreExamChecklist } from "@/components/examiner/pre-exam";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/misc";
@@ -35,9 +36,7 @@ export default function ExamOverview() {
         <h1 className="text-2xl font-semibold tracking-tight">{exam.title}</h1>
         <PhaseBadge phase={exam.phase} />
       </div>
-      <dl className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {facts.map(([k, v]) => <div key={k} className="rounded-lg border bg-surface p-3"><dt className="text-xs text-muted-foreground">{k}</dt><dd className="mt-0.5 font-semibold">{v}</dd></div>)}
-      </dl>
+      <StatStrip className="mb-8" items={facts.map(([k, v]) => ({ label: k, value: <span className="text-[17px]">{v}</span> }))} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Radio className="size-4 text-success" aria-hidden />Live monitor</CardTitle><CardDescription>Progress, contact, incidents and announcements for everyone in this exam.</CardDescription></CardHeader>
@@ -48,6 +47,7 @@ export default function ExamOverview() {
           <CardContent><Button asChild variant="outline"><Link href={`/examiner/exams/${examId}/requests`}>View requests <ArrowRight /></Link></Button></CardContent>
         </Card>
       </div>
+      <PreExamChecklist examId={examId} />
     </>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Radio } from "lucide-react";
+import { AlertTriangle, Flag, Radio } from "lucide-react";
 import { ExaminerDashboard, type ExaminerExamRow } from "@/contracts";
 import { api } from "@/lib/client/api";
 import { PageHeader } from "@/components/common/app-shell";
@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button";
 import { StatStrip } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/misc";
+import { ReportIssueDialog } from "@/components/examiner/pre-exam";
 import { cn, fmtDateTime } from "@/lib/utils";
 
 export default function ExaminerHome() {
   const [data, setData] = React.useState<ExaminerDashboard | null>(null);
   const [error, setError] = React.useState(false);
+  const [reporting, setReporting] = React.useState(false);
 
   React.useEffect(() => {
     const load = () => api.get("/api/exams", ExaminerDashboard).then((d) => { setData(d); setError(false); }, () => setError(true));
@@ -35,7 +37,9 @@ export default function ExaminerHome() {
 
   return (
     <>
-      <PageHeader title="Dashboard" description="What needs your attention across your exams."  />
+      <PageHeader title="Dashboard" description="What needs your attention across your exams."
+        actions={<Button variant="outline" size="sm" onClick={() => setReporting(true)}><Flag /> Report an issue</Button>} />
+      <ReportIssueDialog open={reporting} onOpenChange={setReporting} />
       {error && <Alert tone="warning" className="mb-4">Couldn&apos;t refresh. Showing the last data loaded.</Alert>}
       <StatStrip className="mb-10" items={tiles.map((t) => ({ label: t.label, value: data ? t.n : "–", tone: data && t.n > 0 && t.alert ? "text-danger" : undefined }))} />
       <h2 className="mb-3 text-base font-semibold">Your exams</h2>
