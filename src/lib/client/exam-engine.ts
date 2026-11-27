@@ -47,6 +47,36 @@ export function isAnswered(v: AnswerValue | null | undefined) {
 export const receiptKey = (attemptId: string) => `fm:receipt:${attemptId}`;
 export interface StoredReceipt { receipt: SubmissionReceipt; notAccepted: number[] }
 
+/** Receipts outlive the tab: kept in localStorage (and sessionStorage as a fallback). Never throws. */
+export function readReceipt(attemptId: string): StoredReceipt | null {
+  for (const store of [() => localStorage, () => sessionStorage]) {
+    try {
+      const raw = store().getItem(receiptKey(attemptId));
+      if (raw) return JSON.parse(raw) as StoredReceipt;
+    } catch { /* blocked or corrupt: try the next store */ }
+  }
+  return null;
+}
+export function saveReceipt(attemptId: string, next: StoredReceipt) {
+  // keep the most informative list of edits that did not count (a later reload can no longer see them)
+  const prev = readReceipt(attemptId);
+  const notAccepted = [...new Set([...(prev?.notAccepted ?? []), ...next.notAccepted])].sort((a, b) => a - b);
+  const raw = JSON.stringify({ receipt: next.receipt, notAccepted } satisfies StoredReceipt);
+  try { localStorage.setItem(receiptKey(attemptId), raw); } catch { /* storage full or blocked */ }
+  try { sessionStorage.setItem(receiptKey(attemptId), raw); } catch { /* storage full or blocked */ }
+}
+
+/** Questions whose latest local edit is newer than the version the server kept: those edits did not count. */
+function editsThatDidNotCount(st: AttemptState, localRev: (aqId: string) => number | undefined) {
+  return st.questions
+    .filter((q) => {
+      const local = localRev(q.aqId);
+      const kept = st.answers.find((a) => a.aqId === q.aqId)?.revision ?? 0;
+      return local !== undefined && local > kept;
+    })
+    .map((q) => q.position);
+}
+
 export function useExamEngine(attemptId: string, userId: string) {
   const clock = useServerClock();
   const [phase, setPhase] = React.useState<"loading" | "ready" | "error" | "finalized">("loading");
@@ -63,6 +93,8 @@ export function useExamEngine(attemptId: string, userId: string) {
   const [pendingRequest, setPendingRequest] = React.useState<PendingRequest>(null);
   const [lastAckAt, setLastAckAt] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+  // true when the device copy could not be written (private mode, storage full): "saved on this device" would be a lie
+  const [deviceSaveFailed, setDeviceSaveFailed] = React.useState(false);
 
   const sid = React.useRef<string>("");
   const examId = React.useRef<string>("");
@@ -76,6 +108,8 @@ export function useExamEngine(attemptId: string, userId: string) {
   const finalizing = React.useRef(false);
   const seenAnnouncements = React.useRef<Set<string>>(new Set());
   const flushRef = React.useRef<(aqId: string) => void>(() => {});
+  const submitRef = React.useRef<() => Promise<unknown>>(async () => null);
+  const finalizeRef = React.useRef<() => Promise<void>>(async () => {});
   const answersRef = React.useRef(answers);
   const attemptRef = React.useRef(attempt);
   React.useEffect(() => { answersRef.current = answers; }, [answers]);
@@ -84,7 +118,10 @@ export function useExamEngine(attemptId: string, userId: string) {
   const pendingKey = `fm:${userId}:${attemptId}:pending`;
   const persistPending = React.useCallback(() => {
     const p = pending.current;
-    (Object.keys(p).length ? set(pendingKey, p) : del(pendingKey)).catch(() => {});
+    (Object.keys(p).length ? set(pendingKey, p) : del(pendingKey)).then(
+      () => setDeviceSaveFailed(false),
+      () => setDeviceSaveFailed(true),
+    );
   }, [pendingKey]);
 
   const patch = React.useCallback((aqId: string, p: Partial<LocalAnswer>) => {
@@ -223,7 +260,10 @@ export function useExamEngine(attemptId: string, userId: string) {
       let sent = Date.now();
       let st = await api.get(`/api/attempts/${attemptId}`, AttemptState);
       if (st.receipt) {
-        sessionStorage.setItem(receiptKey(attemptId), JSON.stringify({ receipt: st.receipt, notAccepted: [] } satisfies StoredReceipt));
+        // finalized elsewhere (expiry sweep, examiner close, another tab): compare with what this device still holds
+        const held = ((await get(pendingKey).catch(() => undefined)) ?? {}) as Record<string, PendingEntry>;
+        saveReceipt(attemptId, { receipt: st.receipt, notAccepted: editsThatDidNotCount(st, (id) => held[id]?.rev) });
+        await del(pendingKey).catch(() => {});
         setPhase("finalized");
         return;
       }
@@ -293,6 +333,8 @@ export function useExamEngine(attemptId: string, userId: string) {
       setActiveSession(hb.activeSession);
       setPendingRequest(hb.pendingRequest);
       absorbAnnouncements(hb.announcements, true);
+      if (hb.status !== "in_progress" && hb.status !== "locked") { void finalizeRef.current(); return; }
+      if (hb.status === "in_progress" && Date.parse(hb.deadline) <= clock.now()) { void submitRef.current(); return; }
       if (Object.keys(pending.current).length) flushAll();
     } catch (e) {
       if ((e as ApiError).isNetwork) markUnreachable();
@@ -337,7 +379,7 @@ export function useExamEngine(attemptId: string, userId: string) {
       const cur = answersRef.current;
       const notAccepted = qs.filter((q) => pending.current[q.aqId] || cur[q.aqId]?.sync === "rejected").map((q) => q.position);
       const stored: StoredReceipt = { receipt, notAccepted };
-      sessionStorage.setItem(receiptKey(attemptId), JSON.stringify(stored));
+      saveReceipt(attemptId, stored);
       pending.current = {};
       await del(pendingKey).catch(() => {});
       setPhase("finalized");
@@ -354,6 +396,26 @@ export function useExamEngine(attemptId: string, userId: string) {
       setSubmitting(false);
     }
   }, [attemptId, flushAll, markUnreachable, pendingKey, sendEvents]);
+  React.useEffect(() => { submitRef.current = submit; }, [submit]);
+
+  /** The server already finalized this attempt (expiry sweep or examiner close): fetch the receipt and leave. */
+  const finalizeFromServer = React.useCallback(async () => {
+    if (finalizing.current) return;
+    finalizing.current = true;
+    try {
+      const st = await api.get(`/api/attempts/${attemptId}`, AttemptState);
+      if (!st.receipt) { finalizing.current = false; return; }
+      const cur = answersRef.current;
+      saveReceipt(attemptId, { receipt: st.receipt, notAccepted: editsThatDidNotCount(st, (id) => cur[id]?.rev) });
+      pending.current = {};
+      await del(pendingKey).catch(() => {});
+      setPhase("finalized");
+    } catch {
+      finalizing.current = false; // try again on the next heartbeat
+    }
+  }, [attemptId, pendingKey]);
+  React.useEffect(() => { finalizeRef.current = finalizeFromServer; }, [finalizeFromServer]);
+
   const takeOver = React.useCallback(async () => {
     try {
       const sent = Date.now();
@@ -370,7 +432,7 @@ export function useExamEngine(attemptId: string, userId: string) {
 
   return {
     phase, loadError, attempt, answers, connection, deadline, status, activeSession, announcements, pendingRequest,
-    lastAckAt, pendingCount, rejectedCount, submitting, now: clock.now,
+    lastAckAt, pendingCount, rejectedCount, submitting, deviceSaveFailed, now: clock.now,
     setAnswer, toggleFlag, logEvent, submit, takeOver, refreshStatus: heartbeat,
     reload: () => { setPhase("loading"); load(); },
   };

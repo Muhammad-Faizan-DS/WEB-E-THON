@@ -24,3 +24,9 @@ export const useFullscreenSupported = () => useBrowserValue(noop, () => !!docume
 
 /** Read a sessionStorage string once on the client (stable primitive, safe for SSR). */
 export const useSessionItem = (key: string) => useBrowserValue(noop, () => sessionStorage.getItem(key), null);
+
+/** Read a string kept in localStorage, falling back to sessionStorage (stable primitive, safe for SSR, never throws). */
+export const useStoredItem = (key: string) =>
+  useBrowserValue(noop, () => {
+    try { return localStorage.getItem(key) ?? sessionStorage.getItem(key); } catch { return null; }
+  }, null);

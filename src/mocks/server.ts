@@ -69,6 +69,14 @@ interface MProctor {
 }
 const px = (db: MDb): MProctor => (db.proctor ??= { messages: [], acks: {}, extensions: [], issues: [], notes: {}, closedAt: {} });
 
+/** Admin state: disabled accounts, one-time passwords issued by a reset, and the admin audit trail. */
+interface MAdmin {
+  disabled: string[];
+  passwords: Record<string, string>; // userId -> temporary password (replaces the demo one)
+  audit: { id: string; at: string; by: string; action: string; target: string; note: string }[];
+}
+const adm = (db: MDb): MAdmin => ((db as MDb & { admin?: MAdmin }).admin ??= { disabled: [], passwords: {}, audit: [] });
+
 const uid = () => crypto.randomUUID();
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -122,7 +130,7 @@ function phase(db: MDb, e: MockExam, now: number): ExamPhase {
 
 function me(db: MDb): MockUser | null {
   const u = USERS.find((x) => x.id === db.session);
-  return u && u.isActive ? u : null;
+  return u && u.isActive && !adm(db).disabled.includes(u.id) ? u : null;
 }
 
 function isAnswered(v: AnswerValue | null) {
@@ -321,12 +329,59 @@ const meDto = (db: MDb, u: MockUser): Me => ({ id: u.id, name: u.name, email: u.
 
 on("POST", "/api/auth/login", (_p, b, db) => {
   const u = USERS.find((x) => x.email === String(b.email ?? "").toLowerCase().trim());
-  if (!u || b.password !== DEMO_PASSWORD) return fail(401, "UNAUTHENTICATED", "Email or password is incorrect.");
-  if (!u.isActive) return fail(401, "UNAUTHENTICATED", "This account is disabled. Contact your administrator.");
+  if (!u || b.password !== (adm(db).passwords[u.id] ?? DEMO_PASSWORD)) return fail(401, "UNAUTHENTICATED", "Email or password is incorrect.");
+  if (!u.isActive || adm(db).disabled.includes(u.id)) return fail(401, "UNAUTHENTICATED", "This account is disabled. Contact your administrator.");
   db.session = u.id;
   return ok(meDto(db, u));
 });
 on("POST", "/api/auth/logout", (_p, _b, db) => { db.session = null; return ok({ ok: true }); });
+
+// ---------- admin (accounts and audit log) ----------
+const adminOnly = (db: MDb) => (me(db)?.role === "admin" ? null : fail(403, "FORBIDDEN", "Admins only."));
+const userRow = (db: MDb, u: MockUser) => ({
+  id: u.id, name: u.name, email: u.email, role: u.role, studentId: u.studentId ?? null,
+  active: u.isActive && !adm(db).disabled.includes(u.id), tempPassword: !!adm(db).passwords[u.id],
+});
+on("GET", "/api/admin/users", (_p, _b, db) => adminOnly(db) ?? ok({ users: USERS.map((u) => userRow(db, u)) }));
+on("POST", "/api/admin/users/:id/status", ([id], b, db) => {
+  const no = adminOnly(db); if (no) return no;
+  const u = USERS.find((x) => x.id === id);
+  if (!u) return fail(404, "NOT_FOUND", "User not found.");
+  if (u.id === db.session) return fail(409, "CONFLICT", "You can't disable your own account.");
+  const reason = String(b.reason ?? "").trim();
+  if (reason.length < 4) return fail(422, "VALIDATION", "Give a short reason; it is kept in the audit log.");
+  const a = adm(db);
+  a.disabled = b.active ? a.disabled.filter((x) => x !== id) : [...new Set([...a.disabled, id])];
+  a.audit.push({ id: uid(), at: iso(Date.now()), by: me(db)!.email, action: b.active ? "Re-enabled account" : "Disabled account", target: u.email, note: reason });
+  return ok(userRow(db, u));
+});
+on("POST", "/api/admin/users/:id/reset-password", ([id], _b, db) => {
+  const no = adminOnly(db); if (no) return no;
+  const u = USERS.find((x) => x.id === id);
+  if (!u) return fail(404, "NOT_FOUND", "User not found.");
+  if (u.id === db.session) return fail(409, "CONFLICT", "Use your own settings to change your password.");
+  const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  const temp = Array.from(crypto.getRandomValues(new Uint8Array(10)), (n) => alphabet[n % alphabet.length]).join("").replace(/(.{5})/, "$1-");
+  adm(db).passwords[id] = temp; // the old password stops working immediately
+  adm(db).audit.push({ id: uid(), at: iso(Date.now()), by: me(db)!.email, action: "Reset password", target: u.email, note: "Temporary password issued; old password no longer works" });
+  return ok({ temporaryPassword: temp });
+});
+on("GET", "/api/admin/audit", (_p, _b, db) => {
+  const no = adminOnly(db); if (no) return no;
+  const ex = (id: string) => examById(id)?.title ?? "exam";
+  const extensions = px(db).extensions.map((x) => ({ id: x.id, at: x.at, by: x.by, action: x.attemptId ? "Added time for one candidate" : "Added time for everyone", target: ex(x.examId), note: `+${x.minutes} min · ${x.reason}` }));
+  const decisions = db.attempts.flatMap((a) => a.requests.filter((r) => r.decidedAt).map((r) => ({
+    id: r.id, at: r.decidedAt!, by: r.decidedBy ?? "examiner", action: `${r.status === "approved" ? "Approved" : "Denied"} ${r.type === "unlock" ? "unlock" : "re-attempt"} request`,
+    target: `${USERS.find((u) => u.id === a.userId)?.name ?? "candidate"} · ${ex(a.examId)}`, note: r.note ?? "",
+  })));
+  const closes = Object.entries(px(db).closedAt).map(([examId, at]) => ({ id: `close-${examId}`, at, by: "examiner", action: "Closed exam early", target: ex(examId), note: "Accepted answers submitted for everyone" }));
+  const seeded = [
+    { id: "seed-1", at: iso(db.epoch - 3 * 3600_000), by: "admin@exam.test", action: "Imported candidates", target: "24 accounts", note: "0 rows rejected" },
+    { id: "seed-2", at: iso(db.epoch - 2 * 3600_000), by: "admin@exam.test", action: "Created account", target: "examiner2@exam.test", note: "Role: examiner" },
+  ];
+  const entries = [...adm(db).audit, ...extensions, ...decisions, ...closes, ...seeded].sort((x, y) => Date.parse(y.at) - Date.parse(x.at));
+  return ok({ entries });
+});
 on("GET", "/api/auth/me", (_p, _b, db) => ok(meDto(db, me(db)!)));
 on("PUT", "/api/me/preferences", (_p, b, db) => {
   const u = me(db)!;
@@ -334,6 +389,18 @@ on("PUT", "/api/me/preferences", (_p, b, db) => {
   return ok({ ...DEFAULT_PREFERENCES, ...db.prefs[u.id] });
 });
 
+on("GET", "/api/me/exams/:id/result", ([id], _b, db) => {
+  const u = me(db)!;
+  const e = examById(id);
+  if (!e || !e.enrolled.includes(u.id) || e.status !== "published") return fail(404, "NOT_FOUND", "Exam not found.");
+  if (!e.resultsPublished) return fail(409, "RESULTS_NOT_PUBLISHED", "Results for this exam haven't been published yet.");
+  const pct = PUBLISHED_SCORES[u.id] ?? null;
+  return ok({
+    examId: e.id, title: e.title, code: e.code, examinerName: userById(e.ownerId).name, candidateName: u.name, studentId: u.studentId ?? null,
+    publishedAt: iso(closes(db, e)), totalMarks: e.totalMarks, questionCount: e.questions.length || STAT_Q1_QUESTION_COUNT,
+    scorePct: pct, marks: pct === null ? null : Math.round((pct / 100) * e.totalMarks * 10) / 10,
+  });
+});
 on("GET", "/api/me/exams", (_p, _b, db) => {
   const u = me(db)!;
   if (u.role !== "candidate") return fail(403, "FORBIDDEN", "Candidates only.");
