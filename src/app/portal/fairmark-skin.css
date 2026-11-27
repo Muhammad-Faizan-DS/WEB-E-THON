@@ -1,0 +1,126 @@
+/* Fairmark skin for the real-data portal (/portal).
+   Visual layer only: maps the portal's existing class names onto DESIGN.md (Linear-clean neutrals, one emerald accent,
+   Poppins ≤600, hairlines instead of shadows, status = dot + word). No markup or behaviour changes.
+   Loaded after secureexam.css so equal-specificity rules win. */
+
+.portal-root,.verify{font:14px/1.55 var(--font-poppins),system-ui,sans-serif;color:var(--foreground);background:var(--background);
+  --ink:var(--foreground);--muted:var(--muted-foreground);--paper:var(--surface);--bg:var(--background);--line:var(--border);--line-strong:var(--border-strong);
+  --accent:var(--primary);--accent-dark:var(--primary);--mint:var(--surface-2)}
+.portal-root h1,.portal-root h2,.portal-root h3{font-weight:600;letter-spacing:-.02em}
+.portal-root h1{font-size:26px;line-height:1.2}
+.portal-root h2{font-size:17px}
+.portal-root h3{font-size:15px}
+.portal-root strong,.portal-root dd,.portal-root label,.portal-root summary,.portal-root th{font-weight:500}
+.portal-root small,.portal-root .muted,.portal-root th{color:var(--muted-foreground)}
+.portal-root a{color:var(--foreground);text-decoration-color:var(--border-strong)}
+.portal-root a:hover{text-decoration-color:var(--foreground)}
+
+/* Buttons: 36px, 6px radius, ink/outlined secondary, one emerald primary */
+.portal-root button,.portal-root .button{min-height:36px;padding:6px 14px;font-size:14px;font-weight:500;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--foreground);transition:background-color .15s ease-out,border-color .15s ease-out}
+.portal-root button:hover,.portal-root .button:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--foreground)}
+.portal-root .primary,.portal-root button.primary{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.portal-root .primary:hover{background:var(--primary-hover,var(--primary));border-color:var(--primary-hover,var(--primary));color:var(--primary-foreground)}
+.portal-root .danger{color:var(--danger)}
+.portal-root input:not([type=radio],[type=checkbox]),.portal-root select,.portal-root textarea{min-height:36px;padding:7px 10px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);font-size:14px}
+.portal-root label{gap:6px;font-size:13px}
+
+/* Header: same rhythm as the frontend AppShell (56px, hairline, logo left) */
+.portal-root .topbar{height:56px;padding:0 max(16px,calc((100vw - 1152px)/2));background:var(--background);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:30}
+.portal-root .topbar .brand{font-size:16px;font-weight:600;letter-spacing:-.025em;color:var(--foreground);text-decoration:none}
+.portal-root .account{gap:12px;font-size:13px}
+.portal-root .account small{font-size:12px}
+.portal-root .workspace{max-width:1152px;padding:32px 16px 80px}
+
+/* Side navigation: quiet ink list, current item = surface-2 well */
+.portal-root .side-nav a{color:var(--muted-foreground);font-weight:500;font-size:14px;border-radius:6px;text-decoration:none}
+.portal-root .side-nav a:hover{color:var(--foreground);background:var(--surface-2)}
+.portal-root .side-nav a[aria-current=page]{color:var(--foreground);background:var(--surface-2)}
+.portal-root .side-nav a[aria-current=page] svg{color:var(--primary)}
+
+/* Surfaces: hairlines, no shadows, never nested cards */
+.portal-root .panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;box-shadow:none}
+.portal-root .panel .panel,.portal-root .question-editor,.portal-root .questions-empty,.portal-root .import-preview{background:var(--surface-2);border-color:var(--border)}
+.portal-root .menu,.portal-root .exam-status>*{box-shadow:0 1px 2px rgba(0,0,0,.06);border:1px solid var(--border)}
+
+/* Stat strip: one bordered row with divided cells (DESIGN.md "stat strip") */
+.portal-root .stats{gap:0;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden}
+.portal-root .stat{border:0;border-radius:0;border-left:1px solid var(--border);background:transparent;padding:14px 20px}
+.portal-root .stat:first-child{border-left:0}
+.portal-root .stat dt{font-size:12px;font-weight:500;color:var(--muted-foreground)}
+.portal-root .stat dd{font-size:26px;font-weight:600}
+.portal-root .monitor-counts>div{border-radius:6px;background:var(--surface)}
+.portal-root .monitor-counts dd{font-weight:600}
+
+/* Tabs: underline only */
+.portal-root .tabs{gap:20px;padding:0;margin-bottom:24px}
+.portal-root .tabs a,.portal-root .tabs button,.portal-root .monitor-filters button{min-height:0;padding:10px 0;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--muted-foreground);font-weight:500;margin-bottom:-1px}
+.portal-root .tabs [aria-current=page],.portal-root .tabs [aria-selected=true],.portal-root .monitor-filters button[aria-selected=true]{background:transparent;color:var(--foreground);border-bottom-color:var(--foreground)}
+.portal-root .exam-tabs a{font-weight:500}
+.portal-root .exam-tabs a[aria-current=page]{color:var(--foreground);border-bottom-color:var(--foreground)}
+.portal-root .monitor-filters{gap:20px}
+
+/* Status: dot + word, label stays ink */
+.portal-root .pill{background:transparent;color:var(--foreground);padding:0;border-radius:0;font-weight:500;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+.portal-root .pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--border-strong);flex:none}
+.portal-root .pill[data-status=published]::before,.portal-root .pill[data-status=active]::before,.portal-root .pill[data-status=open]::before,.portal-root .pill[data-status=in_progress]::before{background:var(--success)}
+.portal-root .pill[data-status=used]::before,.portal-root .pill[data-status=graded]::before,.portal-root .pill[data-status=submitted]::before,.portal-root .pill[data-status=scheduled]::before{background:var(--info)}
+.portal-root .pill[data-status=results_published]::before{background:var(--primary)}
+.portal-root .pill[data-status=voided],.portal-root .pill[data-status=blocked]{color:var(--danger)}
+.portal-root .pill[data-status=voided]::before,.portal-root .pill[data-status=blocked]::before,.portal-root .pill[data-status=unreviewed]::before,.portal-root .pill[data-status=locked]::before,.portal-root .pill[data-status=revoked]::before{background:var(--danger)}
+.portal-root .pill[data-status=pending]::before,.portal-root .pill[data-status=cooldown]::before,.portal-root .pill[data-status=offline]::before{background:var(--warning-dot)}
+.portal-root .pill.external{border:1px solid var(--border-strong);border-radius:4px;padding:1px 6px;color:var(--muted-foreground)}
+.portal-root .pill.external::before{display:none}
+.portal-root .badge{border:1px solid var(--border);background:transparent;color:var(--muted-foreground);font-weight:500}
+.portal-root .badge.warn,.portal-root .badge[data-priority=review]{border-color:var(--warning-dot);background:transparent;color:var(--foreground)}
+.portal-root .badge.bad,.portal-root .badge[data-priority=priority]{border-color:var(--danger);background:transparent;color:var(--danger)}
+
+/* Notices */
+.portal-root .notice{background:var(--surface-2);color:var(--foreground);border:1px solid var(--border)}
+.portal-root .error{background:var(--danger-soft);color:var(--danger);border:1px solid transparent}
+
+/* Tables: hairline rows, surface-2 head, row hover, 44px rows */
+.portal-root table{font-size:14px}
+.portal-root thead th{background:var(--surface-2);font-size:12px;font-weight:500;padding:10px 12px}
+.portal-root td{padding:11px 12px;vertical-align:middle}
+.portal-root tbody tr{transition:background-color .15s ease-out}
+.portal-root tbody tr:hover{background:var(--surface-2)}
+
+/* Sign-in: neutral brand column, same as the frontend login */
+.portal-root .sign-in{background:var(--background)}
+.portal-root .sign-in-brand{background:var(--surface-2);color:var(--foreground);border-right:1px solid var(--border)}
+.portal-root .sign-in-brand .brand{color:var(--foreground)}
+.portal-root .sign-in-brand h1{font-size:clamp(1.9rem,3vw,2.6rem);font-weight:600;letter-spacing:-.03em;line-height:1.1}
+.portal-root .sign-in-pitch .eyebrow{color:var(--muted-foreground);font-weight:500;letter-spacing:.04em;text-transform:none;font-size:13px}
+.portal-root .promises li{border-left:1px solid var(--border-strong)}
+.portal-root .promises strong{color:var(--foreground);font-weight:500}
+.portal-root .promises span,.portal-root .sign-in-foot{color:var(--muted-foreground)}
+.portal-root .sign-in-form{background:var(--background)}
+.portal-root .sign-in-form h2{font-size:24px;font-weight:600}
+.portal-root .sign-in-form button.primary{min-height:40px}
+
+/* Exam workspace */
+.portal-root .exam-shell[data-theme=dark]{--ink:var(--foreground);--muted:var(--muted-foreground);--paper:var(--surface);--bg:var(--background);--line:var(--border);--mint:var(--surface-2);--accent-dark:var(--primary)}
+.portal-root .stem,.portal-root .exam-shell .stem *{font-family:var(--font-source-serif),Georgia,serif;font-size:17px;line-height:1.6}
+.portal-root .timer{font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.portal-root .timer[data-urgency=critical]{background:transparent;color:var(--danger)}
+.portal-root .save-chip{background:transparent;border:1px solid var(--border);color:var(--muted-foreground);font-weight:500}
+.portal-root .save-chip[data-state=offline]{border-color:var(--danger);color:var(--danger);background:transparent}
+.portal-root .answer{border-color:var(--border-strong);transition:border-color .15s ease-out,background-color .15s ease-out}
+.portal-root .answer:has(input:checked){border-color:var(--foreground);background:var(--surface-2)}
+.portal-root .palette button{min-width:36px;min-height:36px;padding:0;border-radius:4px;font-variant-numeric:tabular-nums}
+.portal-root .palette button[data-answered=true]{background:var(--foreground);color:var(--background);border-color:var(--foreground)}
+.portal-root .palette button[data-locked=true]{background:var(--primary);color:var(--primary-foreground);border-color:var(--primary)}
+.portal-root .palette button[aria-current=true]{border:2px solid var(--foreground)}
+.portal-root .palette-legend [data-k=answered]::before{background:var(--foreground);border-color:var(--foreground)}
+.portal-root .palette-legend [data-k=locked]::before{background:var(--primary);border-color:var(--primary)}
+.portal-root .countdown{font-weight:600;color:var(--foreground)}
+.portal-root .progress span{background:var(--foreground)}
+.portal-root .conn[data-state=online]{background:var(--success)}
+.portal-root .tile{border-color:var(--border);border-radius:8px}
+.portal-root .tile:hover{border-color:var(--border-strong);background:var(--surface)}
+.portal-root .tile[aria-pressed=true]{outline:2px solid var(--foreground)}
+.portal-root code,.portal-root code.key,.portal-root .mono{font-family:var(--font-plex-mono),ui-monospace,monospace;font-weight:500}
+.portal-root .live-dot::before{background:var(--success)}
+@media (prefers-reduced-motion:reduce){.portal-root *{transition:none!important}}
+/* The old brand rule styled every <span> inside .brand as a 38px teal tile; let the Fairmark <Logo /> render as designed. */
+.portal-root .brand>span{display:inline-flex;width:auto;height:auto;background:none;color:inherit;border-radius:0;font-size:16px;font-weight:600;letter-spacing:-.025em}

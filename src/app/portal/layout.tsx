@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./secureexam.css";
+import "./fairmark-skin.css";
 
 export const metadata: Metadata = { description: "Secure, fair and explainable online examinations." };
 
