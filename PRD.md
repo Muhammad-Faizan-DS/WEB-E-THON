@@ -793,5 +793,9 @@ The examiner creates an exam draft, then adds questions inside one of its sectio
 
 Question reads and writes are scoped by examiner, exam, and section. New questions belong to one exam. Existing shared records are copied on edit when another exam still uses the original. After the first candidate starts, BR-20 freezes question and section edits. The examiner opens Questions from an exam, and bookmarks for the former standalone question bank lead to Exams.
 
+### 24.5 Camera rules (owner decision, 27 Nov evening)
+- **Several people in view** (`camera_multiple_faces`): incident priority is always **priority** (red on the monitor tile and alerts inbox), with the 3-frame burst. Still reviewed by a person.
+- **No face for 10 minutes** on a camera-checked exam: the server tracks the absence (`attempts.camera_absent_since`, started by `camera_no_face`, cleared by `camera_return`) and, on the next request after 10 minutes, voids the attempt with a `camera_absence_limit` incident. This uses the strict-mode path: a re-attempt request goes to the examiner, then the administrator (§6.4), so a person makes the final call. A client that stops sending camera signals cannot be detected this way (stated limit).
+
 ## 23. Out of scope (do not build)
 Safe Exam Browser integration, screen sharing, audio monitoring, face recognition/biometric identity, numeric cheating scores, encrypted offline hand-in files/QR answer transfer, extra roles, webhooks, dual-marker grading, LTI 1.3, Odoo, separate backend service, Redis, WebSockets. Don't quote unverified statistics in the pitch.

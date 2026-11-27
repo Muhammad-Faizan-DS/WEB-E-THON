@@ -125,6 +125,8 @@ export const attempts = pgTable("attempts", {
   reviewUntil: time("review_until"),
   /** "Ask examiner" (raised hand): set by the candidate, cleared when they lower it or the examiner replies privately. */
   handRaisedAt: time("hand_raised_at"),
+  /** Start of the current "no face in camera" stretch (camera-checked exams); cleared when the face returns. */
+  cameraAbsentSince: time("camera_absent_since"),
   handMessage: text("hand_message"),
   scoreCents: integer("score_cents"),
   settings: jsonb("settings").$type<ExamSettings>().notNull(),

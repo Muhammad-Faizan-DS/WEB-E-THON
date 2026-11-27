@@ -36,6 +36,13 @@
       "when": 1795780552315,
       "tag": "0004_notifications_disputes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795783709821,
+      "tag": "0005_camera_absence",
+      "breakpoints": true
     }
   ]
 }

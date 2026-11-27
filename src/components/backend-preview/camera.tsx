@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import type { FaceDetector } from "@mediapipe/tasks-vision";
 import { message } from "./client";
 
-type CameraSignal = "camera_no_face" | "camera_multiple_faces" | "camera_out_of_frame";
+type CameraSignal = "camera_no_face" | "camera_multiple_faces" | "camera_out_of_frame" | "camera_return";
 type CameraSession = { stream: MediaStream; detector: FaceDetector };
 let camera: CameraSession | undefined;
 let using: Promise<CameraSession> | undefined;
@@ -89,12 +89,15 @@ export async function monitorCamera(video: HTMLVideoElement, warning: (signal: C
   let last = -Infinity;
   let recording = false;
   let cancelled = false;
+  let absent = false;
   const timer = setInterval(async () => {
     if (recording || cancelled || video.readyState < 2) return;
     const signal = detect(video, active.detector);
     const now = performance.now();
     if (signal === "camera_no_face") missingSince ||= now;
     else missingSince = 0;
+    // Tell the server the face is back so the 10-minute absence clock stops.
+    if (absent && signal !== "camera_no_face") { absent = false; warning("camera_return", []); }
     if (!signal || now - last < 20_000 || (signal === "camera_no_face" && now - missingSince < 5_000)) return;
     recording = true;
     try {
@@ -109,6 +112,7 @@ export async function monitorCamera(video: HTMLVideoElement, warning: (signal: C
         if (i < 2) await new Promise((resolve) => setTimeout(resolve, 200));
       }
       if (!cancelled) warning(signal, frames);
+      if (signal === "camera_no_face") absent = true;
       last = now;
     } finally { recording = false; }
   }, 1_500);

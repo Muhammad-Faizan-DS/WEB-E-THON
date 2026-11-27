@@ -73,7 +73,17 @@ export async function voidAttempt(tx: Tx, attempt: Attempt, now: Date, adminActi
   return updated;
 }
 
+/** Camera-checked exams: no face for this long voids the attempt for human review (re-attempt request, like strict mode). */
+export const cameraAbsenceLimitMs = 10 * 60_000;
+
 export async function settleDeparture(tx: Tx, attempt: Attempt, now: Date) {
+  if (attempt.status === "in_progress" && attempt.settings.cameraCheck && attempt.cameraAbsentSince &&
+      now.getTime() - attempt.cameraAbsentSince.getTime() >= cameraAbsenceLimitMs) {
+    const minutes = Math.floor((now.getTime() - attempt.cameraAbsentSince.getTime()) / 60_000);
+    await writeSignal(tx, attempt, "camera_absence_limit", now, { priority: "priority",
+      detail: `No face in the camera for ${minutes} minutes; attempt voided for examiner and administrator review.` });
+    return voidAttempt(tx, { ...attempt, cameraAbsentSince: null }, now);
+  }
   if (attempt.status !== "in_progress" || !attempt.pendingIntegrityAt || now >= attempt.deadlineAt ||
       now.getTime() < attempt.pendingIntegrityAt.getTime() + awayGraceMs) return attempt;
   if (attempt.settings.integrityMode === "strict") return voidAttempt(tx, attempt, now);
@@ -98,6 +108,14 @@ export async function recordSignal(tx: Tx, attempt: Attempt, now: Date, input: E
   const [recent] = await tx.select({ total: count() }).from(integrityEvents).where(and(eq(integrityEvents.attemptId, attempt.id),
     gte(integrityEvents.at, new Date(now.getTime() - 60_000))));
   if (recent.total >= 120) fail(429, "SIGNAL_RATE_LIMIT", "Too many integrity events.");
+  if (input.type === "camera_return") {
+    if (attempt.cameraAbsentSince) await tx.update(attempts).set({ cameraAbsentSince: null }).where(eq(attempts.id, attempt.id));
+    return { accepted: true };
+  }
+  // The client reports no_face after 5 s without a face, so the stretch started 5 s earlier.
+  if (input.type === "camera_no_face" && !attempt.cameraAbsentSince) {
+    await tx.update(attempts).set({ cameraAbsentSince: new Date(now.getTime() - 5_000) }).where(eq(attempts.id, attempt.id));
+  }
   if (camera) {
     const [last] = await tx.select({ at: integrityEvents.at }).from(integrityEvents).where(and(eq(integrityEvents.attemptId, attempt.id),
       eq(integrityEvents.type, input.type), gte(integrityEvents.at, new Date(now.getTime() - 20_000)))).limit(1);
@@ -108,7 +126,9 @@ export async function recordSignal(tx: Tx, attempt: Attempt, now: Date, input: E
     .where(and(eq(integrityEvents.attemptId, attempt.id), eq(snapshots.seq, 1))) : [];
   const activeDeparture = departure.has(input.type) && attempt.settings.integrityMode !== "standard";
   const incidentId = await writeSignal(tx, attempt, input.type, now, { qid: input.qid, chars: input.chars,
-    frames: bursts && bursts.total < 20 ? input.frames : undefined, priority: activeDeparture ? "review" : "low" });
+    frames: bursts && bursts.total < 20 ? input.frames : undefined,
+    // Another person in view is the strongest camera signal: top priority on the monitor, still a human decision.
+    priority: input.type === "camera_multiple_faces" ? "priority" : activeDeparture || camera ? "review" : "low" });
   if (activeDeparture && !attempt.pendingIntegrityAt) {
     await tx.update(attempts).set({ pendingIntegrityAt: now, integrityIncidentId: incidentId }).where(eq(attempts.id, attempt.id));
   } else if (input.type === "return" && attempt.pendingIntegrityAt && !attempt.reviewUntil) {

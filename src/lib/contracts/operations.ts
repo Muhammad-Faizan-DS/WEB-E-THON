@@ -37,7 +37,7 @@ export type WorkspacePreferences = z.infer<typeof workspacePrefs>;
 
 export const integrityType = z.enum(["fullscreen_exit", "visibility_hidden", "window_blur", "return", "paste_blocked",
   "copy_blocked", "cut_blocked", "contextmenu_blocked", "drop_blocked", "page_hidden", "camera_no_face",
-  "camera_multiple_faces", "camera_out_of_frame"]);
+  "camera_multiple_faces", "camera_out_of_frame", "camera_return"]);
 export const eventInput = mutateAttempt.extend({
   type: integrityType,
   qid: id.optional(),

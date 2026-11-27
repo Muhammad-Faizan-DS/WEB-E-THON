@@ -1,0 +1,1 @@
+ALTER TABLE "attempts" ADD COLUMN "camera_absent_since" timestamp with time zone;

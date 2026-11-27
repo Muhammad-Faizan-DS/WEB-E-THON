@@ -680,4 +680,41 @@ describe("SecureExam HTTP API", () => {
     expect(started.status).toBe(201);
     expectCode(await removal(admin, enrollmentOf(identities.candidate), "Administrator removal after start attempt."), 409, "ATTEMPT_EXISTS");
   });
+
+  it("flags several people in camera as priority and voids an attempt for review after 10 minutes without a face", async ({ onTestFailed }) => {
+    onTestFailed(() => { console.error(logs); });
+    const examiner = await login("examiner");
+    const candidate = await login("candidate");
+    const draft = await createDraft(examiner, { title: "Camera exam", totalMarks: 1, settings: { integrityMode: "review", cameraCheck: true, sequentialReveal: false } });
+    await request(draft.questions, { cookie: examiner, method: "POST", data: { type: "single", text: "3 + 3", topic: "Arithmetic", difficulty: 1, marks: 1,
+      options: [{ id: "a", text: "6", isCorrect: true }, { id: "b", text: "7", isCorrect: false }] } });
+    expect((await request(draft.exam + "/publish", { cookie: examiner, method: "POST" })).status).toBe(200);
+    const enrolled = await request(draft.exam + "/enrollments", { cookie: examiner, method: "POST", data: { candidates: [{ candidateId: identities.candidate }] } });
+    const started = await request(draft.exam + "/attempts", { cookie: candidate, method: "POST", data: { deviceCheck: true, cameraReady: true, key: enrolled.data[0].key } });
+    expect(started, JSON.stringify(started)).toMatchObject({ status: 201 });
+    const a = `/api/attempts/${started.data.id}`;
+    const sessionId = started.data.sessionId as string;
+    const signal = (type: string) => request(a + "/events", { cookie: candidate, method: "POST", data: { sessionId, type } });
+    const absentSince = async () => (await engine!.query<{ since: string | null }>("select camera_absent_since as since from attempts where id = $1", [started.data.id])).rows[0].since;
+
+    expect((await signal("camera_multiple_faces")).status).toBe(200);
+    let monitor = await request(draft.exam + "/monitor", { cookie: examiner });
+    expect(monitor.data.incidents[0]).toMatchObject({ priority: "priority", summary: expect.stringContaining("camera multiple faces") });
+    expect(monitor.data.candidates[0].incidents.priority).toBe(1);
+
+    await signal("camera_no_face");
+    expect(await absentSince()).not.toBeNull();
+    await signal("camera_return");
+    expect(await absentSince()).toBeNull();
+
+    await signal("camera_no_face");
+    await engine!.query("update attempts set camera_absent_since = now() - interval '11 minutes' where id = $1", [started.data.id]);
+    const beat = await request(a + "/heartbeat", { cookie: candidate, method: "POST", data: { sessionId } });
+    expect(beat.data.status).toBe("voided");
+    monitor = await request(draft.exam + "/monitor", { cookie: examiner });
+    expect(monitor.data.candidates[0].status).toBe("voided");
+    expect(monitor.data.events.map(({ type }: { type: string }) => type)).toContain("camera_absence_limit");
+    const queue = await request("/api/requests", { cookie: examiner });
+    expect(queue.data).toEqual(expect.arrayContaining([expect.objectContaining({ attemptId: started.data.id, status: "pending_examiner" })]));
+  });
 });

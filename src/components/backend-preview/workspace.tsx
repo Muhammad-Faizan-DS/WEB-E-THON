@@ -13,7 +13,7 @@ import { monitorCamera, stopCamera } from "./camera";
 type Props = { attemptId: string; userId: string; name: string; back: string; sandbox?: boolean; allowPaste?: boolean; cameraRequired?: boolean; title?: string };
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 type Signal = "fullscreen_exit" | "visibility_hidden" | "window_blur" | "return" | "paste_blocked" | "copy_blocked" | "cut_blocked"
-  | "contextmenu_blocked" | "drop_blocked" | "page_hidden" | "camera_no_face" | "camera_multiple_faces" | "camera_out_of_frame";
+  | "contextmenu_blocked" | "drop_blocked" | "page_hidden" | "camera_no_face" | "camera_multiple_faces" | "camera_out_of_frame" | "camera_return";
 
 export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allowPaste, cameraRequired, title }: Props) {
   const heading = sandbox ? `Sandbox · ${title ?? "exam preview"}` : title ?? "Exam";
@@ -228,8 +228,10 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
     let dispose: (() => void) | undefined;
     let stopped = false;
     void monitorCamera(video.current, (type, frames) => {
-      setNotice(type === "camera_no_face" ? "Move your face into view." : type === "camera_multiple_faces" ? "Keep only one face in view." : "Center your face in the camera.");
-      void signal(type, { frames });
+      setNotice(type === "camera_return" ? "Thanks, your face is visible again."
+        : type === "camera_no_face" ? "No face detected. Stay in view: after 10 minutes away the attempt is voided for review."
+        : type === "camera_multiple_faces" ? "More than one person is in view. This is flagged for your examiner." : "Center your face in the camera.");
+      void signal(type, frames.length ? { frames } : {});
     }).then((stop) => { if (stopped) stop(); else dispose = stop; }).catch((cause) => setNotice(message(cause)));
     return () => { stopped = true; dispose?.(); };
   }, [cameraRequired, inProgress, signal, started]);
