@@ -23,7 +23,7 @@ export const CATEGORY: Record<IncidentCategory, { label: string; icon: typeof Wi
 };
 
 export function IncidentCounts({ c }: { c: { info: number; review: number; priority: number } }) {
-  if (!c.info && !c.review && !c.priority) return <span className="text-sm text-muted-foreground">None</span>;
+  if (!c.info && !c.review && !c.priority) return <span className="text-[13px] text-subtle-foreground">None</span>;
   return (
     <span className="flex flex-wrap gap-1">
       {c.priority > 0 && <Badge tone="danger"><AlertOctagon aria-hidden />{c.priority}<span className="sr-only"> priority</span></Badge>}
@@ -34,7 +34,7 @@ export function IncidentCounts({ c }: { c: { info: number; review: number; prior
 }
 
 export function ContactIndicator({ contact, lastAt, now }: { contact: ContactState; lastAt: string | null; now: number }) {
-  if (contact === "none") return <span className="text-sm text-muted-foreground">—</span>;
+  if (contact === "none") return <span className="text-[13px] text-subtle-foreground">—</span>;
   const ago = lastAt ? fmtAgo(now - Date.parse(lastAt)) : "never";
   const cfg = {
     live: { dot: "bg-success", label: "Live", cls: "text-foreground" },
@@ -42,7 +42,7 @@ export function ContactIndicator({ contact, lastAt, now }: { contact: ContactSta
     lost: { dot: "bg-danger", label: "No contact", cls: "font-medium text-danger" },
   }[contact];
   return (
-    <span className={cn("inline-flex items-center gap-2 text-sm", cfg.cls)}>
+    <span className={cn("num inline-flex items-center gap-2 text-[13px]", cfg.cls)}>
       <span className="relative flex size-2.5" aria-hidden>
         {contact === "live" && <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60" />}
         <span className={cn("relative inline-flex size-2.5 rounded-full", cfg.dot)} />
@@ -54,9 +54,9 @@ export function ContactIndicator({ contact, lastAt, now }: { contact: ContactSta
 
 export function NotEvidenceNote({ className }: { className?: string }) {
   return (
-    <p className={cn("flex items-start gap-2 rounded-lg border border-info/30 bg-info-soft px-3 py-2 text-sm", className)}>
-      <Info className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
-      <span><b>Observations are hints, not proof of misconduct.</b> They come from the candidate&apos;s browser and can be missed or delayed. Review the context and decide; nothing here changes marks.</span>
+    <p className={cn("flex items-start gap-2 text-[13px] text-muted-foreground", className)}>
+      <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+      <span><b className="font-semibold text-foreground">Observations are hints, not proof of misconduct.</b> They come from the candidate&apos;s browser and can be missed or delayed. Review the context and decide; nothing here changes marks.</span>
     </p>
   );
 }

@@ -2,7 +2,7 @@
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeft, ArrowRight, Eraser, Flag, FlaskConical, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send, X,
+  ArrowLeft, ArrowRight, Eraser, Flag, LayoutGrid, Loader2, Megaphone, PanelRightClose, PanelRightOpen, Send, X,
 } from "lucide-react";
 import { useExamEngine } from "@/lib/client/exam-engine";
 import { useMe } from "@/lib/client/me";
@@ -17,7 +17,6 @@ import { QuestionView } from "@/components/exam/question-view";
 import { ReviewPanel } from "@/components/exam/review-panel";
 import { TEXT_SIZES, ToolsTabs } from "@/components/exam/tools-panel";
 import { FullscreenGate, LockedPanel, SupersededPanel } from "@/components/exam/overlays";
-import { Logo } from "@/components/common/brand";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -147,7 +146,7 @@ export default function WorkspacePage() {
   else if (view === "review") main = <ReviewPanel questions={questions} answers={ex.answers} onJump={go} onBack={() => setView("question")} onSubmit={() => setConfirmOpen(true)} />;
   else
     main = (
-      <div className="paper mx-auto w-full max-w-4xl rounded-xl border p-5 shadow-sm sm:p-8">
+      <div className="mx-auto w-full max-w-3xl rounded-lg border bg-surface px-5 py-6 shadow-sm sm:px-10 sm:py-9">
         <QuestionView
           key={q.aqId}
           q={q}
@@ -169,60 +168,68 @@ export default function WorkspacePage() {
     <div className="flex h-dvh flex-col" style={{ ["--q-size" as string]: TEXT_SIZES[prefs.textSize] }}>
       {/* top bar */}
       <header className="z-20 border-b bg-surface">
-        <div className="flex h-14 items-center gap-3 px-3 sm:px-4">
-          <Logo className="hidden [&>svg]:size-5 md:inline-flex" />
-          <div className="min-w-0 flex-1 md:border-l md:pl-3">
-            <p className="truncate text-sm font-semibold leading-tight">{ex.attempt.examTitle}</p>
-            <p className="truncate text-xs text-muted-foreground">{me.name} · {ex.attempt.totalMarks} marks</p>
+        <div className="relative flex h-14 items-center gap-3 px-3 sm:px-5">
+          <svg viewBox="0 0 20 20" className="hidden size-5 shrink-0 text-primary md:block" aria-hidden>
+            <rect x="1.5" y="1.5" width="17" height="17" rx="3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="m5.6 10.4 2.9 2.9 5.9-6.6" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div className="min-w-0 flex-1 md:flex-none md:max-w-[30%]">
+            <p className="truncate text-[13px] font-semibold leading-tight">{ex.attempt.examTitle}{ex.attempt.isSandbox && <span className="ml-2 font-normal text-info">Preview</span>}</p>
+            <p className="truncate text-[12px] text-muted-foreground">{me.name}</p>
           </div>
-          {ex.attempt.isSandbox && <span className="hidden items-center gap-1 rounded-full bg-info-soft px-2 py-1 text-xs font-medium text-info sm:inline-flex"><FlaskConical className="size-3.5" aria-hidden />Preview</span>}
-          <SaveStatus connection={ex.connection} pendingCount={ex.pendingCount} rejectedCount={ex.rejectedCount} saving={false} lastAckAt={ex.lastAckAt} compact />
-          {ex.deadline && <CountdownContainer deadline={ex.deadline} now={ex.now} totalMs={ex.attempt.durationMin * 60000} onExpire={ex.status === "in_progress" ? ex.submit : undefined} />}
-          <Button variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={() => setToolsOpen((o) => !o)} aria-pressed={toolsOpen} aria-label={toolsOpen ? "Hide tools" : "Show scratchpad and display tools"}>
-            {toolsOpen ? <PanelRightClose /> : <PanelRightOpen />}
-          </Button>
-          <Button size="sm" className="hidden sm:inline-flex" onClick={() => setView("review")} disabled={inputsDisabled}><Send /> Review &amp; submit</Button>
+          {ex.deadline && (
+            <div className="md:absolute md:left-1/2 md:-translate-x-1/2">
+              <CountdownContainer deadline={ex.deadline} now={ex.now} totalMs={ex.attempt.durationMin * 60000} onExpire={ex.status === "in_progress" ? ex.submit : undefined} />
+            </div>
+          )}
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <SaveStatus connection={ex.connection} pendingCount={ex.pendingCount} rejectedCount={ex.rejectedCount} saving={false} lastAckAt={ex.lastAckAt} compact />
+            <Button variant="ghost" size="icon-sm" className="hidden lg:inline-flex" onClick={() => setToolsOpen((o) => !o)} aria-pressed={toolsOpen} aria-label={toolsOpen ? "Hide tools" : "Show scratchpad and display tools"}>
+              {toolsOpen ? <PanelRightClose /> : <PanelRightOpen />}
+            </Button>
+            <Button size="sm" className="hidden sm:inline-flex" onClick={() => setView("review")} disabled={inputsDisabled}>Review &amp; submit</Button>
+          </div>
         </div>
-        {ex.attempt.isSandbox && <p className="border-t bg-info-soft px-4 py-1.5 text-xs font-medium text-info">Sandbox preview: nothing you do here is recorded or counted.</p>}
+        {ex.attempt.isSandbox && <p className="border-t bg-info-soft px-5 py-1.5 text-[12px] font-medium text-info">Sandbox preview: nothing you do here is recorded or counted.</p>}
       </header>
       <OfflineBanner connection={ex.connection} pendingCount={ex.pendingCount} />
       {latestAnn && dismissedAnn !== latestAnn.id && (
-        <div role="status" aria-live="polite" className="flex items-start gap-2 border-b border-info/30 bg-info-soft px-4 py-2 text-sm">
-          <Megaphone className="mt-0.5 size-4 shrink-0 text-info" aria-hidden />
-          <p className="flex-1"><b>Announcement:</b> {latestAnn.body}</p>
+        <div role="status" aria-live="polite" className="flex items-start gap-2.5 border-b bg-primary-soft px-5 py-2.5 text-[13px]">
+          <Megaphone className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
+          <p className="flex-1"><b>From your examiner:</b> {latestAnn.body}</p>
           <button className="rounded p-0.5 text-muted-foreground hover:text-foreground" onClick={() => setDismissedAnn(latestAnn.id)} aria-label="Dismiss announcement"><X className="size-4" /></button>
         </div>
       )}
 
       <div className={cn("flex min-h-0 flex-1", navSide === "right" && "flex-row-reverse")}>
-        <aside className={cn("hidden w-72 shrink-0 overflow-y-auto bg-background p-4 lg:block", navSide === "left" ? "border-r" : "border-l")}>
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Questions</h2>
+        <aside className={cn("hidden w-64 shrink-0 overflow-y-auto bg-background px-5 py-6 lg:block", navSide === "left" ? "border-r" : "border-l")}>
+          <h2 className="mb-4 text-[13px] font-semibold">Questions</h2>
           {nav}
         </aside>
-        <main ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto px-3 py-5 outline-none sm:px-6 sm:py-8" aria-label="Exam question">
+        <main ref={mainRef} tabIndex={-1} className="min-w-0 flex-1 overflow-y-auto px-3 py-6 outline-none sm:px-8 sm:py-10" aria-label="Exam question">
           {closed && <Alert tone="info" className="mx-auto mb-4 max-w-4xl" title="This attempt has ended">Your accepted answers were submitted.</Alert>}
           {main}
         </main>
         {toolsOpen && isLg && (
-          <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l bg-surface p-4 xl:w-96" aria-label="Tools">{tools}</aside>
+          <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l bg-surface px-5 py-6 xl:w-96" aria-label="Tools">{tools}</aside>
         )}
       </div>
 
       {showFooter && (
         <footer className="z-10 border-t bg-surface">
-          <div className="mx-auto flex max-w-5xl items-center gap-2 px-3 py-2.5 sm:px-6">
+          <div className="mx-auto flex max-w-3xl items-center gap-2 px-3 py-2.5 sm:px-0">
             <Button variant="outline" onClick={() => go(current - 1)} disabled={current === 0} aria-label="Previous question"><ArrowLeft /> <span className="hidden sm:inline">Previous</span></Button>
-            <Button variant="outline" className="lg:hidden" onClick={() => setNavOpen(true)}><LayoutGrid /> {current + 1}/{questions.length}</Button>
+            <Button variant="outline" className="num lg:hidden" onClick={() => setNavOpen(true)}><LayoutGrid /> {current + 1}/{questions.length}</Button>
             <div className="flex-1" />
-            <Button variant="ghost" onClick={() => ex.setAnswer(q.aqId, null, 0)} disabled={inputsDisabled || !a?.value} className="hidden sm:inline-flex"><Eraser /> Clear response</Button>
+            <Button variant="ghost" onClick={() => ex.setAnswer(q.aqId, null, 0)} disabled={inputsDisabled || !a?.value} className="hidden text-muted-foreground sm:inline-flex"><Eraser /> Clear</Button>
             <Button variant={a?.flagged ? "flag" : "outline"} onClick={() => ex.toggleFlag(q.aqId)} aria-pressed={!!a?.flagged} disabled={inputsDisabled}>
               <Flag className={cn(a?.flagged && "fill-current")} /> <span className="hidden sm:inline">{a?.flagged ? "Marked for review" : "Mark for review"}</span>
             </Button>
-            <Button variant="outline" className="lg:hidden" onClick={() => setToolsOpen(true)} aria-label="Scratchpad and display tools"><PanelRightOpen /></Button>
+            <Button variant="outline" size="icon" className="lg:hidden" onClick={() => setToolsOpen(true)} aria-label="Scratchpad and display tools"><PanelRightOpen /></Button>
             {current < questions.length - 1 ? (
-              <Button onClick={() => go(current + 1)}><span>Next</span> <ArrowRight /></Button>
+              <Button onClick={() => go(current + 1)}>Next <ArrowRight /></Button>
             ) : (
-              <Button onClick={() => setView("review")} disabled={inputsDisabled}><Send /> Review</Button>
+              <Button onClick={() => setView("review")} disabled={inputsDisabled}>Review <ArrowRight /></Button>
             )}
           </div>
         </footer>

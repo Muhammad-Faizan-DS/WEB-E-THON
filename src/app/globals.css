@@ -3,70 +3,77 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Design tokens. Calm, paper-like, high contrast. One accent (deep teal).
- * Status colours are always paired with an icon + text label in components.
+ * Fairmark tokens. See DESIGN.md. "An exam paper": ink on warm paper, one ink-blue accent.
+ * Status colours appear on dots/icons; text stays ink except for priority/destructive states.
  */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
-  --background: oklch(0.985 0.004 85);      /* warm paper */
-  --foreground: oklch(0.22 0.03 255);       /* ink */
-  --surface: oklch(1 0 0);                   /* cards, sheets */
-  --surface-2: oklch(0.965 0.006 85);        /* subtle wells */
-  --muted-foreground: oklch(0.47 0.025 255);
-  --border: oklch(0.89 0.01 85);
-  --input: oklch(0.86 0.012 85);
-  --ring: oklch(0.52 0.11 195);
+  --background: #f6f5f1;
+  --foreground: #15171c;
+  --surface: #ffffff;
+  --surface-2: #efeee8;
+  --muted-foreground: #555a66;
+  --subtle-foreground: #6c717c;
+  --border: #e3e1d9;
+  --border-strong: #cfccc1;
+  --input: #cfccc1;
+  --ring: #2340c8;
 
-  --primary: oklch(0.42 0.085 195);          /* deep teal */
-  --primary-foreground: oklch(0.985 0.004 85);
-  --primary-soft: oklch(0.95 0.03 195);
+  --primary: #2340c8;
+  --primary-hover: #1b33a6;
+  --primary-foreground: #ffffff;
+  --primary-soft: #eaeefc;
 
-  --secondary: oklch(0.94 0.008 85);
-  --secondary-foreground: oklch(0.25 0.03 255);
+  --secondary: #efeee8;
+  --secondary-foreground: #15171c;
 
-  --success: oklch(0.5 0.12 150);
-  --success-soft: oklch(0.95 0.04 150);
-  --warning: oklch(0.6 0.14 70);
-  --warning-soft: oklch(0.96 0.05 85);
-  --danger: oklch(0.52 0.18 25);
-  --danger-soft: oklch(0.95 0.03 25);
-  --flag: oklch(0.5 0.15 300);
-  --flag-soft: oklch(0.95 0.03 300);
-  --info: oklch(0.5 0.12 250);
-  --info-soft: oklch(0.95 0.03 250);
+  --success: #1e7a4c;
+  --success-soft: #e7f2ec;
+  --warning: #a35f00;
+  --warning-dot: #d98e04;
+  --warning-soft: #fbf2df;
+  --danger: #b42318;
+  --danger-soft: #fbebe9;
+  --flag: #6b3fc0;
+  --flag-soft: #f1ecfa;
+  --info: #2a5db0;
+  --info-soft: #eaf0fa;
 
-  /* question text size, driven by workspace preferences */
-  --q-size: 1.0625rem;
+  --q-size: 1.125rem;
 }
 
 .dark {
-  --background: oklch(0.18 0.015 255);
-  --foreground: oklch(0.94 0.01 85);
-  --surface: oklch(0.22 0.018 255);
-  --surface-2: oklch(0.255 0.018 255);
-  --muted-foreground: oklch(0.72 0.02 255);
-  --border: oklch(0.32 0.02 255);
-  --input: oklch(0.38 0.02 255);
-  --ring: oklch(0.72 0.1 195);
+  --background: #101216;
+  --foreground: #ecedef;
+  --surface: #171a20;
+  --surface-2: #1e222a;
+  --muted-foreground: #a9afbb;
+  --subtle-foreground: #8b919d;
+  --border: #2a2f39;
+  --border-strong: #3a404c;
+  --input: #3a404c;
+  --ring: #8ea2ff;
 
-  --primary: oklch(0.72 0.1 195);
-  --primary-foreground: oklch(0.18 0.02 255);
-  --primary-soft: oklch(0.3 0.05 195);
+  --primary: #8ea2ff;
+  --primary-hover: #a9b8ff;
+  --primary-foreground: #0e1220;
+  --primary-soft: #1d2440;
 
-  --secondary: oklch(0.28 0.02 255);
-  --secondary-foreground: oklch(0.94 0.01 85);
+  --secondary: #1e222a;
+  --secondary-foreground: #ecedef;
 
-  --success: oklch(0.75 0.14 150);
-  --success-soft: oklch(0.3 0.05 150);
-  --warning: oklch(0.8 0.14 80);
-  --warning-soft: oklch(0.32 0.05 80);
-  --danger: oklch(0.72 0.16 25);
-  --danger-soft: oklch(0.32 0.06 25);
-  --flag: oklch(0.75 0.13 300);
-  --flag-soft: oklch(0.31 0.05 300);
-  --info: oklch(0.75 0.11 250);
-  --info-soft: oklch(0.3 0.05 250);
+  --success: #5cc48d;
+  --success-soft: #16281f;
+  --warning: #f0b44c;
+  --warning-dot: #f0b44c;
+  --warning-soft: #2d2412;
+  --danger: #ff8a80;
+  --danger-soft: #2f1716;
+  --flag: #b99cff;
+  --flag-soft: #241c38;
+  --info: #8fb4f0;
+  --info-soft: #17223a;
 }
 
 @theme inline {
@@ -75,10 +82,13 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-soft: var(--primary-soft);
   --color-secondary: var(--secondary);
@@ -86,6 +96,7 @@
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
+  --color-warning-dot: var(--warning-dot);
   --color-warning-soft: var(--warning-soft);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
@@ -94,14 +105,18 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
 
-  --font-sans: var(--font-plex-sans);
+  --font-sans: var(--font-public-sans);
+  --font-serif: var(--font-source-serif);
   --font-mono: var(--font-plex-mono);
-  --font-serif: var(--font-plex-serif);
+
+  --shadow-sm: 0 1px 2px rgb(21 23 28 / 0.06);
+  --shadow-md: 0 2px 6px -1px rgb(21 23 28 / 0.08), 0 1px 2px rgb(21 23 28 / 0.05);
+  --shadow-lg: 0 12px 32px -8px rgb(21 23 28 / 0.18), 0 2px 6px rgb(21 23 28 / 0.06);
 }
 
 @layer base {
@@ -110,40 +125,63 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
+    accent-color: var(--primary);
+    scrollbar-color: var(--border-strong) transparent;
   }
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans), system-ui, sans-serif;
-    font-feature-settings: "ss01", "tnum";
+    font-size: 0.875rem;
+    line-height: 1.5;
+    caret-color: var(--primary);
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--primary) 22%, transparent);
+    color: inherit;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
   }
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+    border-radius: 4px;
   }
+  a {
+    text-underline-offset: 3px;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
   @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
+    *, *::before, *::after {
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
     }
   }
-  .reduce-motion *,
-  .reduce-motion *::before,
-  .reduce-motion *::after {
+  .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
 }
 
 @layer components {
-  /* question sheet: plain surface with a thin accent edge */
-  .paper {
-    background-color: var(--surface);
-    box-shadow: inset 0 3px 0 0 var(--primary);
+  /* reading voice: questions, instructions, explanations */
+  .prose-read {
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: 1rem;
+    line-height: 1.65;
   }
   .q-text {
+    font-family: var(--font-serif), Georgia, serif;
     font-size: var(--q-size);
-    line-height: 1.65;
+    line-height: 1.6;
+  }
+  .num {
+    font-variant-numeric: tabular-nums;
   }
 }

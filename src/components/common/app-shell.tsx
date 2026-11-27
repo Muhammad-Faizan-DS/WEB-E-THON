@@ -16,37 +16,40 @@ export function AppShell({ nav, children }: { nav: NavItem[]; children: React.Re
   return (
     <div className="min-h-dvh">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-2">Skip to content</a>
-      <header className="sticky top-0 z-30 border-b bg-background/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4">
+      <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4">
           <Link href={nav[0]?.href ?? "/"} aria-label="Fairmark home"><Logo /></Link>
-          <nav aria-label="Main" className="hidden gap-1 sm:flex">
+          <nav aria-label="Main" className="hidden h-full items-stretch gap-5 sm:flex">
             {nav.map((n) => {
               const active = path === n.href || (n.href !== nav[0].href && path.startsWith(n.href));
               return (
                 <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}
-                  className={cn("rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-surface-2 hover:text-foreground", active && "bg-surface-2 font-medium text-foreground")}>
+                  className={cn("-mb-px inline-flex items-center border-b-2 border-transparent text-sm text-muted-foreground transition-colors hover:text-foreground", active && "border-foreground font-medium text-foreground")}>
                   {n.label}
                 </Link>
               );
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2">
             <div className="hidden text-right leading-tight sm:block">
-              <p className="text-sm font-medium">{me.name}</p>
+              <p className="text-[13px] font-medium">{me.name}</p>
               <p className="text-xs capitalize text-muted-foreground">{me.role}</p>
             </div>
-            <Button variant="ghost" size="sm" onClick={logout}><LogOut /> <span className="hidden sm:inline">Sign out</span></Button>
+            <span className="grid size-8 place-items-center rounded-full bg-surface-2 text-xs font-semibold" aria-hidden>
+              {me.name.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+            </span>
+            <Button variant="ghost" size="sm" onClick={logout} aria-label="Sign out"><LogOut /></Button>
           </div>
         </div>
         {nav.length > 1 && (
-          <nav aria-label="Main" className="flex gap-1 overflow-x-auto px-4 pb-2 sm:hidden">
+          <nav aria-label="Main" className="flex gap-5 overflow-x-auto px-4 sm:hidden">
             {nav.map((n) => (
-              <Link key={n.href} href={n.href} className={cn("rounded-md px-3 py-1.5 text-sm whitespace-nowrap", path === n.href ? "bg-surface-2 font-medium" : "text-muted-foreground")}>{n.label}</Link>
+              <Link key={n.href} href={n.href} className={cn("-mb-px whitespace-nowrap border-b-2 border-transparent py-2 text-sm", path === n.href ? "border-foreground font-medium" : "text-muted-foreground")}>{n.label}</Link>
             ))}
           </nav>
         )}
       </header>
-      <main id="main" className="mx-auto max-w-6xl px-4 py-6 sm:py-8">{children}</main>
+      <main id="main" className="mx-auto max-w-6xl px-4 py-8 sm:py-10">{children}</main>
     </div>
   );
 }
@@ -67,10 +70,10 @@ export function ShellSkeleton() {
 
 export function PageHeader({ title, description, actions }: { title: string; description?: React.ReactNode; actions?: React.ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+    <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div className="max-w-2xl">
+        <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.01em]">{title}</h1>
+        {description && <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>}
       </div>
       {actions}
     </div>

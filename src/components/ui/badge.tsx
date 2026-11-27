@@ -1,27 +1,51 @@
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
-const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap [&_svg]:size-3.5",
-  {
-    variants: {
-      tone: {
-        neutral: "border-border bg-surface-2 text-foreground",
-        primary: "border-primary/30 bg-primary-soft text-primary",
-        success: "border-success/30 bg-success-soft text-success",
-        warning: "border-warning/40 bg-warning-soft text-[color-mix(in_oklch,var(--warning)_70%,var(--foreground))]",
-        danger: "border-danger/30 bg-danger-soft text-danger",
-        flag: "border-flag/30 bg-flag-soft text-flag",
-        info: "border-info/30 bg-info-soft text-info",
-      },
-    },
-    defaultVariants: { tone: "neutral" },
-  },
-);
+export type BadgeTone = "neutral" | "primary" | "success" | "warning" | "danger" | "flag" | "info";
 
-export type BadgeTone = NonNullable<VariantProps<typeof badgeVariants>["tone"]>;
+const ICON: Record<BadgeTone, string> = {
+  neutral: "[&_svg]:text-subtle-foreground",
+  primary: "[&_svg]:text-primary",
+  success: "[&_svg]:text-success",
+  warning: "[&_svg]:text-warning-dot",
+  danger: "[&_svg]:text-danger",
+  flag: "[&_svg]:text-flag",
+  info: "[&_svg]:text-info",
+};
+const DOT: Record<BadgeTone, string> = {
+  neutral: "bg-subtle-foreground",
+  primary: "bg-primary",
+  success: "bg-success",
+  warning: "bg-warning-dot",
+  danger: "bg-danger",
+  flag: "bg-flag",
+  info: "bg-info",
+};
 
-export function Badge({ className, tone, ...props }: React.HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeVariants>) {
-  return <span className={cn(badgeVariants({ tone }), className)} {...props} />;
+/** Outlined tag: counts and categories. Colour lives on the icon; text stays ink (danger excepted). */
+export function Badge({ className, tone = "neutral", ...props }: React.HTMLAttributes<HTMLSpanElement> & { tone?: BadgeTone }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-[5px] border border-border bg-surface px-1.5 text-xs font-medium text-foreground [&_svg]:size-3.5",
+        ICON[tone],
+        tone === "danger" && "border-danger/30 bg-danger-soft text-danger",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** Status: a dot and a word (DESIGN.md). */
+export function Status({ tone = "neutral", children, className, pulse }: { tone?: BadgeTone; children: React.ReactNode; className?: string; pulse?: boolean }) {
+  return (
+    <span className={cn("inline-flex items-center gap-2 whitespace-nowrap text-[13px] font-medium", tone === "danger" && "text-danger", className)}>
+      <span className="relative flex size-2" aria-hidden>
+        {pulse && <span className={cn("absolute inline-flex size-full animate-ping rounded-full opacity-50", DOT[tone])} />}
+        <span className={cn("relative inline-flex size-2 rounded-full", DOT[tone])} />
+      </span>
+      {children}
+    </span>
+  );
 }

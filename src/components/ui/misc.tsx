@@ -43,8 +43,8 @@ export function Switch({ className, ...props }: React.ComponentProps<typeof SW.R
 
 export function Progress({ value, className, label }: { value: number; className?: string; label: string }) {
   return (
-    <PG.Root value={value} aria-label={label} className={cn("relative h-2 w-full overflow-hidden rounded-full bg-surface-2", className)}>
-      <PG.Indicator className="h-full bg-primary transition-[width]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+    <PG.Root value={value} aria-label={label} className={cn("relative h-1.5 w-full overflow-hidden rounded-full bg-surface-2", className)}>
+      <PG.Indicator className="h-full rounded-full bg-foreground/80 transition-[width]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
     </PG.Root>
   );
 }

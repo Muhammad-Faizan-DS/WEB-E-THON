@@ -48,7 +48,7 @@ export function LoginForm() {
 
   return (
     <>
-      <form onSubmit={onSubmit} noValidate className="mt-6 space-y-4">
+      <form onSubmit={onSubmit} noValidate className="mt-8 space-y-5">
         {formError && <Alert tone="danger">{formError}</Alert>}
         <div className="space-y-1.5">
           <Label htmlFor="email">Email</Label>
@@ -62,21 +62,27 @@ export function LoginForm() {
             aria-invalid={!!errors.password} aria-describedby={errors.password ? "pw-err" : undefined} />
           {errors.password && <p id="pw-err" className="text-sm text-danger">{errors.password}</p>}
         </div>
-        <Button type="submit" className="w-full" size="lg" disabled={pending}>
+        <Button type="submit" className="mt-2 w-full" size="lg" disabled={pending}>
           {pending ? <Loader2 className="animate-spin" /> : <LogIn />} Sign in
         </Button>
       </form>
       {SHOW_DEMO && (
-        <div className="mt-8 rounded-lg border border-dashed p-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Demo accounts · password Demo@2026</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+        <section aria-labelledby="demo-title" className="mt-10 border-t pt-6">
+          <h3 id="demo-title" className="text-[13px] font-semibold">Demo accounts</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">Fictional data. Password for all: <span className="font-mono">Demo@2026</span></p>
+          <ul className="mt-3 divide-y rounded-lg border bg-surface">
             {DEMO.map((d) => (
-              <Button key={d.email} type="button" variant="outline" size="sm" onClick={() => { setEmail(d.email); setPassword("Demo@2026"); }}>
-                {d.label}
-              </Button>
+              <li key={d.email}>
+                <button type="button" onClick={() => { setEmail(d.email); setPassword("Demo@2026"); }}
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition-colors hover:bg-surface-2"
+                  aria-label={`Use ${d.label} account`}>
+                  <span className="font-medium">{d.label}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{d.email}</span>
+                </button>
+              </li>
             ))}
-          </div>
-        </div>
+          </ul>
+        </section>
       )}
     </>
   );

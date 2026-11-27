@@ -1,6 +1,6 @@
 # AGENTS.md: rules for every coding agent (Claude Code, Cursor, Codex)
 
-**Source of truth: [`PRD.md`](PRD.md).** Read the section your task names before writing code. If the code, a prompt or this file disagrees with `PRD.md`, follow `PRD.md` and say so.
+**Source of truth: [`PRD.md`](PRD.md). UI work must also follow [`DESIGN.md`](DESIGN.md)** (tokens, type, status dots, no card grids, no badge soup). Read the section your task names before writing code. If the code, a prompt or this file disagrees with `PRD.md`, follow `PRD.md` and say so.
 
 ## Project in one paragraph
 

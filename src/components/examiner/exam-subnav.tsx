@@ -12,16 +12,16 @@ export function ExamSubnav({ examId, pendingRequests = 0 }: { examId: string; pe
     { href: `/examiner/exams/${examId}/requests`, label: "Requests", badge: pendingRequests },
   ];
   return (
-    <div className="mb-5 flex flex-wrap items-center gap-3">
-      <Link href="/examiner" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Dashboard</Link>
-      <nav aria-label="Exam sections" className="flex gap-1 overflow-x-auto rounded-lg bg-surface-2 p-1">
+    <div className="mb-8 border-b">
+      <Link href="/examiner" className="mb-3 inline-flex items-center gap-1 text-[13px] text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Dashboard</Link>
+      <nav aria-label="Exam sections" className="flex gap-6 overflow-x-auto">
         {items.map((i) => {
           const active = i.exact ? path === i.href : path.startsWith(i.href);
           return (
             <Link key={i.href} href={i.href} aria-current={active ? "page" : undefined}
-              className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted-foreground", active && "bg-surface font-medium text-foreground shadow-sm")}>
+              className={cn("-mb-px inline-flex h-10 items-center gap-1.5 whitespace-nowrap border-b-2 border-transparent text-sm text-muted-foreground transition-colors hover:text-foreground", active && "border-foreground font-medium text-foreground")}>
               {i.label}
-              {!!i.badge && <span className="rounded-full bg-flag px-1.5 text-xs font-semibold text-white">{i.badge}<span className="sr-only"> pending</span></span>}
+              {!!i.badge && <span className="num rounded-full bg-foreground px-1.5 text-[11px] font-semibold text-background">{i.badge}<span className="sr-only"> pending</span></span>}
             </Link>
           );
         })}

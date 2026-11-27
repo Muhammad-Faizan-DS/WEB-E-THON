@@ -1,9 +1,9 @@
 "use client";
 import * as React from "react";
-import { AlarmClock, Hourglass } from "lucide-react";
+import { AlarmClock } from "lucide-react";
 import { cn, fmtClock } from "@/lib/utils";
 
-/** Server-time countdown. Warnings at 5 and 1 minute are announced politely to screen readers. */
+/** Server-time countdown. Quiet until 5 minutes, then warns; announces 5 and 1 minute politely. */
 export function ExamTimer({ remainingMs, totalMs }: { remainingMs: number; totalMs: number }) {
   const min = remainingMs / 60000;
   const level = min <= 1 ? "danger" : min <= 5 ? "warning" : "normal";
@@ -17,24 +17,20 @@ export function ExamTimer({ remainingMs, totalMs }: { remainingMs: number; total
   }, [min]);
 
   const pct = Math.max(0, Math.min(100, (remainingMs / Math.max(1, totalMs)) * 100));
-  const Icon = level === "normal" ? Hourglass : AlarmClock;
   return (
     <div
       className={cn(
-        "relative flex items-center gap-2 overflow-hidden rounded-lg border px-3 py-1.5",
-        level === "normal" && "border-border bg-surface",
-        level === "warning" && "border-warning/50 bg-warning-soft",
-        level === "danger" && "border-danger/50 bg-danger-soft text-danger",
+        "relative flex items-center gap-2 rounded-md px-2.5 py-1 transition-colors",
+        level === "warning" && "bg-warning-soft text-warning",
+        level === "danger" && "bg-danger-soft text-danger",
       )}
     >
-      <Icon className="size-4 shrink-0" aria-hidden />
-      <div className="leading-none">
-        <span className="sr-only">Time remaining: </span>
-        <span role="timer" aria-live="off" className="font-mono text-lg font-semibold tabular-nums sm:text-xl">{fmtClock(remainingMs)}</span>
-        {level !== "normal" && <span className="ml-1.5 hidden text-xs font-medium sm:inline">{level === "danger" ? "Last minute" : "Under 5 min"}</span>}
-      </div>
-      <span className="absolute inset-x-0 bottom-0 h-0.5 bg-current/15" aria-hidden>
-        <span className="block h-full bg-current/60 transition-[width] duration-1000" style={{ width: `${pct}%` }} />
+      {level !== "normal" && <AlarmClock className="size-4 shrink-0" aria-hidden />}
+      <span className="sr-only">Time remaining: </span>
+      <span role="timer" aria-live="off" className="num text-[22px] font-semibold leading-none tracking-[-0.01em]">{fmtClock(remainingMs)}</span>
+      <span className="hidden text-[12px] font-medium text-muted-foreground sm:inline">{level === "danger" ? "last minute" : "left"}</span>
+      <span className="absolute inset-x-2.5 -bottom-1 h-[2px] overflow-hidden rounded-full bg-border" aria-hidden>
+        <span className={cn("block h-full rounded-full transition-[width] duration-1000", level === "normal" ? "bg-foreground/60" : "bg-current")} style={{ width: `${pct}%` }} />
       </span>
       <span className="sr-only" aria-live="polite">{announce}</span>
     </div>

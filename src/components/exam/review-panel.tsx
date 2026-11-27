@@ -1,10 +1,10 @@
 "use client";
-import { ArrowLeft, CheckCircle2, CircleDashed, CloudUpload, Flag, Send, XCircle } from "lucide-react";
+import { ArrowLeft, CloudUpload, Flag, Send, XCircle } from "lucide-react";
 import type { CandidateQuestion } from "@/contracts";
 import { isAnswered, type LocalAnswer } from "@/lib/client/exam-engine";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { Badge, Status } from "@/components/ui/badge";
+import { StatStrip } from "@/components/ui/card";
 
 export function ReviewPanel({
   questions, answers, onJump, onBack, onSubmit,
@@ -18,29 +18,29 @@ export function ReviewPanel({
   return (
     <section aria-labelledby="review-title" className="mx-auto max-w-3xl space-y-6">
       <div>
-        <h2 id="review-title" className="text-2xl font-semibold tracking-tight">Review before you submit</h2>
+        <h2 id="review-title" className="text-[26px] font-semibold tracking-[-0.01em]">Review before you submit</h2>
         <p className="mt-1 text-sm text-muted-foreground">Select any question to go back to it. You can&apos;t change answers after submitting.</p>
       </div>
-      <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat icon={CheckCircle2} tone="text-success" label="Answered" n={answered.length} of={questions.length} />
-        <Stat icon={CircleDashed} tone="text-danger" label="Not answered" n={blank} />
-        <Stat icon={Flag} tone="text-flag" label="For review" n={flagged.length} />
-        <Stat icon={CloudUpload} tone="text-warning" label="Not yet saved" n={unsynced.length + rejected.length} />
-      </dl>
+      <StatStrip items={[
+        { label: "Answered", value: <>{answered.length}<span className="text-base font-normal text-muted-foreground">/{questions.length}</span></> },
+        { label: "Not answered", value: blank, tone: blank ? "text-danger" : undefined },
+        { label: "Marked for review", value: flagged.length },
+        { label: "Not yet saved", value: unsynced.length + rejected.length, tone: unsynced.length + rejected.length ? "text-warning" : undefined },
+      ]} />
       <ol className="divide-y rounded-lg border bg-surface">
         {questions.map((q, i) => {
           const a = answers[q.aqId];
           const done = isAnswered(a?.value);
           return (
             <li key={q.aqId}>
-              <button type="button" onClick={() => onJump(i)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2">
-                <span className="w-8 shrink-0 font-mono text-sm text-muted-foreground">Q{q.position}</span>
-                <span className="line-clamp-1 flex-1 text-sm">{q.prompt}</span>
+              <button type="button" onClick={() => onJump(i)} className="flex min-h-12 w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2">
+                <span className="num w-8 shrink-0 text-[13px] font-semibold text-muted-foreground">{q.position}</span>
+                <span className="line-clamp-1 flex-1 font-serif text-[15px]">{q.prompt}</span>
                 <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
                   {a?.flagged && <Badge tone="flag"><Flag aria-hidden />Review</Badge>}
                   {a?.sync === "rejected" ? <Badge tone="danger"><XCircle aria-hidden />Not accepted</Badge>
                     : a && a.sync !== "synced" ? <Badge tone="warning"><CloudUpload aria-hidden />Not saved yet</Badge> : null}
-                  <Badge tone={done ? "success" : "danger"}>{done ? <CheckCircle2 aria-hidden /> : <CircleDashed aria-hidden />}{done ? "Answered" : "Blank"}</Badge>
+                  <Status tone={done ? "success" : "danger"}>{done ? "Answered" : "Blank"}</Status>
                 </span>
               </button>
             </li>
@@ -52,14 +52,5 @@ export function ReviewPanel({
         <Button size="lg" onClick={onSubmit}><Send /> Submit exam</Button>
       </div>
     </section>
-  );
-}
-
-function Stat({ icon: Icon, tone, label, n, of }: { icon: typeof Flag; tone: string; label: string; n: number; of?: number }) {
-  return (
-    <div className="rounded-lg border bg-surface p-3">
-      <dt className="flex items-center gap-1.5 text-xs text-muted-foreground"><Icon className={cn("size-4", tone)} aria-hidden />{label}</dt>
-      <dd className="mt-1 text-2xl font-semibold tabular-nums">{n}{of !== undefined && <span className="text-base font-normal text-muted-foreground">/{of}</span>}</dd>
-    </div>
   );
 }

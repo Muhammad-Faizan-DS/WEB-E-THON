@@ -41,30 +41,30 @@ export default function ReceiptPage() {
   return (
     <div className="min-h-dvh bg-background">
       <header className="border-b bg-surface"><div className="mx-auto flex h-14 max-w-2xl items-center px-4"><Logo /></div></header>
-      <main className="mx-auto max-w-2xl space-y-6 px-4 py-10">
+      <main className="mx-auto max-w-xl space-y-6 px-4 py-12">
         <div className="text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-full bg-success-soft">
-            {expired ? <Hourglass className="size-8 text-success" aria-hidden /> : <CheckCircle2 className="size-8 text-success" aria-hidden />}
+          <div className="mx-auto grid size-14 place-items-center rounded-full border border-success/30 bg-success-soft">
+            {expired ? <Hourglass className="size-7 text-success" aria-hidden /> : <CheckCircle2 className="size-7 text-success" aria-hidden />}
           </div>
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">{expired ? "Time's up. Your exam was submitted" : "Your exam has been submitted"}</h1>
-          <p className="mt-2 text-muted-foreground">{r.examTitle}</p>
+          <h1 className="mt-5 text-[26px] font-semibold tracking-[-0.01em]">{expired ? "Time's up. Your exam was submitted" : "Your exam has been submitted"}</h1>
+          <p className="mt-1.5 text-muted-foreground">{r.examTitle}</p>
         </div>
 
-        <Card>
-          <CardContent className="grid gap-4 pt-5 sm:grid-cols-2">
-            <div className="sm:col-span-2">
-              <p className="text-xs text-muted-foreground">Receipt reference</p>
-              <div className="mt-1 flex items-center gap-2">
-                <span className="font-mono text-2xl font-semibold tracking-wider">{r.receiptCode}</span>
-                <Button variant="ghost" size="icon-sm" aria-label="Copy receipt reference" onClick={() => navigator.clipboard?.writeText(r.receiptCode).then(() => toast.success("Copied"))}><Copy /></Button>
-              </div>
+        <section aria-label="Receipt" className="rounded-lg border bg-surface">
+          <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
+            <div>
+              <p className="text-[12px] text-muted-foreground">Receipt reference</p>
+              <p className="mt-0.5 font-mono text-[22px] font-medium tracking-[0.04em]">{r.receiptCode}</p>
             </div>
-            <Item label="Received by the server" value={`${fmtDateTime(r.finalizedAt)} (${fmtTime(r.finalizedAt)})`} />
+            <Button variant="outline" size="sm" onClick={() => navigator.clipboard?.writeText(r.receiptCode).then(() => toast.success("Copied"))}><Copy /> Copy</Button>
+          </div>
+          <dl className="divide-y text-sm">
+            <Item label="Received by the server" value={`${fmtDateTime(r.finalizedAt)} · ${fmtTime(r.finalizedAt)}`} />
             <Item label="How it ended" value={expired ? "Submitted automatically at the deadline" : "Submitted by you"} />
             <Item label="Answers accepted" value={`${r.acceptedCount} of ${r.questionCount}`} />
-            <Item label="Results" value={r.resultsStatus === "published" ? "Published" : "Pending. Your examiner will publish them."} />
-          </CardContent>
-        </Card>
+            <Item label="Results" value={r.resultsStatus === "published" ? "Published" : "Pending, your examiner publishes them"} />
+          </dl>
+        </section>
 
         {data.notAccepted.length > 0 && (
           <Alert tone="warning" title="Some changes didn't reach the server in time">
@@ -102,5 +102,5 @@ export default function ReceiptPage() {
 }
 
 function Item({ label, value }: { label: string; value: string }) {
-  return <div><p className="text-xs text-muted-foreground">{label}</p><p className="mt-0.5 font-medium">{value}</p></div>;
+  return <div className="grid grid-cols-[11rem_1fr] gap-4 px-5 py-3"><dt className="text-muted-foreground">{label}</dt><dd className="num font-medium">{value}</dd></div>;
 }

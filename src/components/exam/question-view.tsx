@@ -4,7 +4,6 @@ import { toast } from "sonner";
 import type { AnswerValue, CandidateQuestion } from "@/contracts";
 import type { LocalAnswer } from "@/lib/client/exam-engine";
 import { Checkbox, RadioGroup, RadioGroupItem } from "@/components/ui/misc";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const TYPE_LABEL = { single: "Choose one", multi: "Choose all that apply", written: "Written answer" } as const;
@@ -23,11 +22,10 @@ interface Props {
 
 export function QuestionView({ q, total, answer, onChange, pastePolicy, split, disabled, onPaste, onCopyBlocked }: Props) {
   const header = (
-    <header className="flex flex-wrap items-center gap-2 text-sm">
-      <h2 className="font-semibold">Question {q.position} <span className="font-normal text-muted-foreground">of {total}</span></h2>
-      <Badge tone="neutral">{TYPE_LABEL[q.type]}</Badge>
-      <Badge tone="primary">{q.marks} {q.marks === 1 ? "mark" : "marks"}</Badge>
-      {q.type === "multi" && <span className="text-xs text-muted-foreground">{q.multiRule === "partial" ? "Partial marks: wrong choices subtract" : "Exact match: all correct choices, no wrong ones"}</span>}
+    <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b pb-4 text-[13px]">
+      <h2 className="font-semibold">Question <span className="num">{q.position}</span> <span className="font-normal text-muted-foreground">of <span className="num">{total}</span></span></h2>
+      <span className="text-muted-foreground">· {TYPE_LABEL[q.type]} · <span className="num">{q.marks}</span> {q.marks === 1 ? "mark" : "marks"}</span>
+      {q.type === "multi" && <span className="w-full text-[12px] text-muted-foreground sm:ml-auto sm:w-auto">{q.multiRule === "partial" ? "Partial marks; wrong choices subtract" : "Exact match: every correct choice, no wrong ones"}</span>}
     </header>
   );
   const prompt = (
@@ -55,8 +53,8 @@ export function QuestionView({ q, total, answer, onChange, pastePolicy, split, d
     );
   }
   return (
-    <article className="space-y-5" aria-labelledby={`q-${q.aqId}`}>
-      <div className="space-y-4" id={`q-${q.aqId}`}>{header}{prompt}</div>
+    <article className="space-y-6" aria-labelledby={`q-${q.aqId}`}>
+      <div className="space-y-5" id={`q-${q.aqId}`}>{header}{prompt}</div>
       {body}
     </article>
   );
@@ -71,13 +69,13 @@ function ChoiceAnswer({ q, answer, onChange, disabled }: Pick<Props, "q" | "answ
       <label
         key={o.id}
         className={cn(
-          "flex cursor-pointer items-center gap-3 rounded-lg border bg-surface px-4 py-3 transition-colors hover:bg-surface-2",
-          on && "border-primary bg-primary-soft hover:bg-primary-soft",
+          "flex min-h-12 cursor-pointer items-center gap-3.5 rounded-md border border-border bg-surface px-4 py-3 transition-colors hover:border-border-strong hover:bg-surface-2",
+          on && "border-primary bg-primary-soft hover:border-primary hover:bg-primary-soft",
           disabled && "cursor-not-allowed opacity-60",
         )}
       >
         {control}
-        <span className="grid size-6 shrink-0 place-items-center rounded border font-mono text-xs text-muted-foreground" aria-hidden>{letters[i]}</span>
+        <span className={cn("num w-4 shrink-0 text-[13px] font-semibold text-subtle-foreground", on && "text-primary")} aria-hidden>{letters[i]}</span>
         <span className="q-text">{o.label}</span>
       </label>
     );
@@ -111,7 +109,7 @@ function ChoiceAnswer({ q, answer, onChange, disabled }: Pick<Props, "q" | "answ
           />
         )),
       )}
-      <p className="text-xs text-muted-foreground">{selected.length} selected</p>
+      <p className="num text-[12px] text-muted-foreground">{selected.length} selected</p>
     </div>
   );
 }
@@ -121,7 +119,7 @@ function WrittenAnswer({ q, answer, onChange, pastePolicy, disabled, onPaste }: 
   const words = text.trim() ? text.trim().split(/\s+/).length : 0;
   return (
     <div className="space-y-2">
-      <label htmlFor={`ans-${q.aqId}`} className="text-sm font-medium">Your answer</label>
+      <label htmlFor={`ans-${q.aqId}`} className="text-[13px] font-medium">Your answer</label>
       <textarea
         id={`ans-${q.aqId}`}
         value={text}
@@ -137,11 +135,11 @@ function WrittenAnswer({ q, answer, onChange, pastePolicy, disabled, onPaste }: 
           } else onPaste(chars, "allowed");
         }}
         onDrop={(e) => { if (pastePolicy === "block") e.preventDefault(); }}
-        className="q-text min-h-64 w-full resize-y rounded-lg border border-input bg-surface p-4 leading-relaxed placeholder:text-muted-foreground disabled:opacity-60"
+        className="q-text min-h-72 w-full resize-y rounded-md border border-input bg-surface px-4 py-3 leading-relaxed transition-colors placeholder:font-sans placeholder:text-[14px] placeholder:text-subtle-foreground hover:border-foreground/30 focus-visible:border-primary disabled:opacity-60"
         placeholder="Type your answer here. It saves automatically."
         aria-describedby={`count-${q.aqId}`}
       />
-      <p id={`count-${q.aqId}`} className="flex justify-between text-xs text-muted-foreground">
+      <p id={`count-${q.aqId}`} className="num flex justify-between text-[12px] text-muted-foreground">
         <span>{words} {words === 1 ? "word" : "words"} · {text.length} characters</span>
         {pastePolicy === "block" && <span>Pasting is off</span>}
       </p>

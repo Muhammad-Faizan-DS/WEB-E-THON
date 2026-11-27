@@ -4,23 +4,23 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+  "inline-flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-sm font-medium transition-[background-color,border-color,color,box-shadow] duration-150 ease-out disabled:pointer-events-none disabled:opacity-45 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 touch-manipulation",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        outline: "border border-input bg-surface hover:bg-surface-2",
-        ghost: "hover:bg-surface-2",
+        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary-hover active:shadow-none",
+        secondary: "bg-surface-2 text-foreground hover:bg-border",
+        outline: "border border-border-strong bg-surface text-foreground hover:border-foreground/30 hover:bg-surface-2",
+        ghost: "text-foreground hover:bg-surface-2",
         danger: "bg-danger text-white hover:bg-danger/90",
-        flag: "border border-flag/40 bg-flag-soft text-flag hover:bg-flag-soft/70",
-        link: "text-primary underline-offset-4 hover:underline px-0",
+        flag: "border border-flag/40 bg-flag-soft text-flag hover:border-flag/60",
+        link: "h-auto px-0 text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-10 px-4",
-        sm: "h-8 px-3 text-xs",
-        lg: "h-11 px-6 text-base",
-        icon: "size-10",
+        default: "h-9 px-3.5",
+        sm: "h-8 px-2.5 text-[13px]",
+        lg: "h-11 px-5 text-[15px]",
+        icon: "size-9",
         "icon-sm": "size-8",
       },
     },

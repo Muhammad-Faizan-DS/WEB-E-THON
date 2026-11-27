@@ -9,7 +9,6 @@ import { useServerClock, useTick } from "@/lib/client/use-server-clock";
 import { PageHeader } from "@/components/common/app-shell";
 import { CandidateStatusBadge } from "@/components/common/status";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/misc";
@@ -47,12 +46,12 @@ export default function CandidateHome() {
     <>
       <PageHeader
         title={`Hello, ${firstName}`}
-        description="Your exams, grouped by what you can do now. Times are shown in Pakistan time (PKT)."
+        description="Your exams, grouped by what you can do now. All times are Pakistan time (PKT)."
         actions={<Button variant="outline" size="sm" onClick={load}><RefreshCw /> Refresh</Button>}
       />
       {error && <Alert tone="warning" className="mb-4">{error}</Alert>}
       {!data ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-48" />)}</div>
+        <div className="space-y-3"><Skeleton className="h-10 w-80" />{[0, 1].map((i) => <Skeleton key={i} className="h-28" />)}</div>
       ) : (
         <Tabs defaultValue={defaultTab} key={defaultTab}>
           <TabsList aria-label="Exam groups">
@@ -65,9 +64,9 @@ export default function CandidateHome() {
               {data[k].length === 0 ? (
                 <Empty kind={k} />
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {data[k].map((c) => <ExamCard key={c.examId} c={c} now={clock.now()} />)}
-                </div>
+                <ul className="divide-y rounded-lg border bg-surface">
+                  {data[k].map((c) => <ExamRow key={c.examId} c={c} now={clock.now()} />)}
+                </ul>
               )}
             </TabsContent>
           ))}
@@ -78,80 +77,73 @@ export default function CandidateHome() {
 }
 
 function Count({ n }: { n: number }) {
-  return <span className="rounded-full bg-background px-1.5 text-xs tabular-nums text-muted-foreground">{n}</span>;
+  return <span className="num rounded-full bg-surface-2 px-1.5 text-xs text-muted-foreground">{n}</span>;
 }
 
 function Empty({ kind }: { kind: "available" | "upcoming" | "completed" }) {
   const text = {
-    available: "No exams are open for you right now. Check the Upcoming tab for what's next.",
-    upcoming: "Nothing scheduled. Your examiner will enrol you when an exam is set.",
-    completed: "Exams you finish will appear here, with your results once they are published.",
+    available: "No exams are open for you right now. Check Upcoming for what's next.",
+    upcoming: "Nothing scheduled yet. Your examiner will enrol you when an exam is set.",
+    completed: "Exams you finish appear here, with your result once it's published.",
   }[kind];
   return (
-    <div className="grid place-items-center rounded-lg border border-dashed px-6 py-14 text-center">
-      <Inbox className="size-8 text-muted-foreground" aria-hidden />
-      <p className="mt-3 max-w-sm text-sm text-muted-foreground">{text}</p>
+    <div className="rounded-lg border border-dashed px-6 py-14 text-center">
+      <Inbox className="mx-auto size-6 text-subtle-foreground" aria-hidden />
+      <p className="mx-auto mt-3 max-w-sm text-sm text-muted-foreground">{text}</p>
     </div>
   );
 }
 
-function ExamCard({ c, now }: { c: CandidateExamCard; now: number }) {
+function ExamRow({ c, now }: { c: CandidateExamCard; now: number }) {
   const opensIn = Date.parse(c.opensAt) - now;
   const left = c.deadline ? Date.parse(c.deadline) - now : null;
   return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-mono text-xs text-muted-foreground">{c.code}</p>
-          <CandidateStatusBadge status={c.status} />
+    <li className="grid gap-x-8 gap-y-3 px-5 py-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h3 className="text-base font-semibold">{c.title}</h3>
+          <span className="font-mono text-xs text-muted-foreground">{c.code}</span>
         </div>
-        <CardTitle className="text-lg">{c.title}</CardTitle>
-        <p className="text-sm text-muted-foreground">{c.examinerName}</p>
-      </CardHeader>
-      <CardContent className="flex-1">
-        <dl className="grid grid-cols-3 gap-2 rounded-md bg-surface-2 p-3 text-center text-sm">
-          <div><dt className="text-xs text-muted-foreground">Duration</dt><dd className="font-medium tabular-nums">{c.durationMin} min</dd></div>
-          <div><dt className="text-xs text-muted-foreground">Marks</dt><dd className="font-medium tabular-nums">{c.totalMarks}</dd></div>
-          <div><dt className="text-xs text-muted-foreground">Questions</dt><dd className="font-medium tabular-nums">{c.questionCount}</dd></div>
-        </dl>
-        <p className="mt-3 flex items-center gap-1.5 text-sm text-muted-foreground">
-          <CalendarClock className="size-4" aria-hidden />
-          {fmtDateTime(c.opensAt)} – {fmtDateTime(c.closesAt)}
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          {c.examinerName} · <span className="num">{c.durationMin} min · {c.questionCount} questions · {c.totalMarks} marks</span>
         </p>
-        {c.phase === "scheduled" && (
-          <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-info"><Clock3 className="size-4" aria-hidden />Opens {fmtRelative(opensIn)}</p>
-        )}
-        {left !== null && c.status === "in_progress" && (
-          <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-primary"><Clock3 className="size-4" aria-hidden /><span className="font-mono">{fmtClock(left)}</span> left</p>
-        )}
-        {c.status === "results_published" && c.scorePct !== null && (
-          <p className="mt-2 flex items-center gap-1.5 text-sm font-medium"><Trophy className="size-4 text-success" aria-hidden />Your score: {c.scorePct}%</p>
-        )}
-      </CardContent>
-      <CardFooter>
-        <CardAction c={c} />
-      </CardFooter>
-    </Card>
+        <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2">
+          <CandidateStatusBadge status={c.status} />
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
+            <CalendarClock className="size-4" aria-hidden />
+            <span className="num">{fmtDateTime(c.opensAt)} – {fmtDateTime(c.closesAt)}</span>
+          </span>
+          {c.phase === "scheduled" && <span className="text-[13px] font-medium">Opens {fmtRelative(opensIn)}</span>}
+          {left !== null && c.status === "in_progress" && (
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium"><Clock3 className="size-4 text-primary" aria-hidden /><span className="num">{fmtClock(left)}</span> left</span>
+          )}
+          {c.status === "results_published" && c.scorePct !== null && (
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium"><Trophy className="size-4 text-success" aria-hidden />Score <span className="num">{c.scorePct}%</span></span>
+          )}
+        </div>
+      </div>
+      <div className="md:w-48"><CardAction c={c} /></div>
+    </li>
   );
 }
 
 function CardAction({ c }: { c: CandidateExamCard }) {
-  if (c.phase === "scheduled") return <Button variant="secondary" disabled className="w-full"><Lock /> Not open yet</Button>;
+  if (c.phase === "scheduled") return <Button variant="outline" disabled className="w-full"><Lock /> Not open yet</Button>;
   switch (c.status) {
     case "not_started":
     case "reattempt_granted":
-      return <Button asChild className="w-full"><Link href={`/candidate/exams/${c.examId}`}>{c.status === "reattempt_granted" ? "Start re-attempt" : "View instructions"} <ArrowRight /></Link></Button>;
+      return <Button asChild className="w-full"><Link href={`/candidate/exams/${c.examId}`}>{c.status === "reattempt_granted" ? "Start re-attempt" : "Open exam"} <ArrowRight /></Link></Button>;
     case "in_progress":
-      return <Button asChild className="w-full"><Link href={`/candidate/exams/${c.examId}`}>Resume exam <ArrowRight /></Link></Button>;
+      return <Button asChild className="w-full"><Link href={`/candidate/exams/${c.examId}`}>Resume <ArrowRight /></Link></Button>;
     case "locked":
-      return <Button asChild variant="outline" className="w-full"><Link href={`/candidate/exams/${c.examId}`}><Lock /> See lock status</Link></Button>;
+      return <Button asChild variant="outline" className="w-full"><Link href={`/candidate/exams/${c.examId}`}><Lock /> Lock status</Link></Button>;
     case "submitted":
     case "expired":
-      return c.attemptId ? <Button asChild variant="outline" className="w-full"><Link href={`/exam/${c.attemptId}/receipt`}><FileQuestion /> View receipt</Link></Button> : null;
+      return c.attemptId ? <Button asChild variant="outline" className="w-full"><Link href={`/exam/${c.attemptId}/receipt`}><FileQuestion /> Receipt</Link></Button> : null;
     case "results_published":
       return c.attemptId ? <Button asChild className="w-full"><Link href={`/candidate/results/${c.attemptId}`}>View result <ArrowRight /></Link></Button>
-        : <Button variant="outline" disabled className="w-full">Result available soon</Button>;
+        : <Button variant="outline" disabled className="w-full">Result coming soon</Button>;
     default:
-      return <Button variant="secondary" disabled className="w-full">Not available</Button>;
+      return <Button variant="outline" disabled className="w-full">Not available</Button>;
   }
 }

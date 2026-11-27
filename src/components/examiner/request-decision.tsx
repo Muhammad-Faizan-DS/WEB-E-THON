@@ -53,11 +53,11 @@ export function RequestDecisionDialog({ request, open, onOpenChange, onDecided }
                 Sent {fmtTime(request.createdAt, false)} · {CATEGORY_LABEL[request.reasonCategory]}
               </DialogDescription>
             </DialogHeader>
-            <blockquote className="rounded-lg border-l-4 border-primary bg-surface-2 p-3 text-sm leading-relaxed">“{request.reason}”</blockquote>
-            <dl className="grid grid-cols-3 gap-2 text-center text-sm">
-              <div className="rounded-md border p-2"><dt className="text-xs text-muted-foreground">Attempt</dt><dd className="font-medium capitalize">{request.attemptStatus.replace("_", " ")}</dd></div>
-              <div className="rounded-md border p-2"><dt className="text-xs text-muted-foreground">Opens used</dt><dd className="font-medium tabular-nums">{request.opensUsed}</dd></div>
-              <div className="rounded-md border p-2"><dt className="flex items-center justify-center gap-1 text-xs text-muted-foreground"><Wifi className="size-3" aria-hidden />Offline</dt><dd className="font-medium tabular-nums">{request.connectivityIncidents ? `${request.connectivityIncidents}× · ${fmtDuration(request.offlineSeconds)}` : "None seen"}</dd></div>
+            <blockquote className="prose-read rounded-md bg-surface-2 px-4 py-3 text-[15px]">“{request.reason}”</blockquote>
+            <dl className="num grid grid-cols-3 divide-x rounded-md border text-center text-sm">
+              <div className="p-2.5"><dt className="text-xs text-muted-foreground">Attempt</dt><dd className="font-medium capitalize">{request.attemptStatus.replace("_", " ")}</dd></div>
+              <div className="p-2.5"><dt className="text-xs text-muted-foreground">Opens used</dt><dd className="font-medium tabular-nums">{request.opensUsed}</dd></div>
+              <div className="p-2.5"><dt className="flex items-center justify-center gap-1 text-xs text-muted-foreground"><Wifi className="size-3" aria-hidden />Offline</dt><dd className="font-medium tabular-nums">{request.connectivityIncidents ? `${request.connectivityIncidents}× · ${fmtDuration(request.offlineSeconds)}` : "None seen"}</dd></div>
             </dl>
             <p className="text-sm text-muted-foreground">
               {request.type === "unlock"

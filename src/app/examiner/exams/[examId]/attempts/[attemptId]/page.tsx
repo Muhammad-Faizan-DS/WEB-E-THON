@@ -9,8 +9,8 @@ import { api, ApiError } from "@/lib/client/api";
 import { useServerClock, useTick } from "@/lib/client/use-server-clock";
 import { CATEGORY, ContactIndicator, NotEvidenceNote, SEVERITY, SeverityBadge } from "@/components/examiner/severity";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge, Status } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, StatStrip } from "@/components/ui/card";
 import { Label, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Progress, Skeleton } from "@/components/ui/misc";
@@ -80,31 +80,28 @@ export default function TimelinePage() {
       <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-muted-foreground">{a.examTitle}</p>
-          <h1 className="text-2xl font-semibold tracking-tight">{a.candidateName}</h1>
+          <h1 className="text-[26px] font-semibold tracking-[-0.01em]">{a.candidateName}</h1>
           <p className="font-mono text-xs text-muted-foreground">{a.studentId ?? ""}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={a.status === "in_progress" ? "primary" : a.status === "locked" ? "warning" : "success"} className="capitalize">{a.status.replace("_", " ")}</Badge>
+          <Status tone={a.status === "in_progress" ? "primary" : a.status === "locked" ? "warning" : "success"} className="capitalize">{a.status.replace("_", " ")}</Status>
           {live && <ContactIndicator contact={a.lastContactAt && now - Date.parse(a.lastContactAt) < 30000 ? "live" : a.lastContactAt && now - Date.parse(a.lastContactAt) < 90000 ? "stale" : "lost"} lastAt={a.lastContactAt} now={now} />}
         </div>
       </div>
 
-      <dl className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-lg border bg-surface p-3">
-          <dt className="text-xs text-muted-foreground">Progress</dt>
-          <dd className="mt-1 space-y-1.5"><span className="font-semibold tabular-nums">{a.answered} of {a.total}</span><Progress value={(a.answered / Math.max(1, a.total)) * 100} label="Answered" /></dd>
-        </div>
-        <Fact label="Started" value={fmtTime(a.startedAt, false)} />
-        <Fact label={a.finalizedAt ? "Finished" : "Deadline"} value={fmtTime(a.finalizedAt ?? a.deadline, false)} />
-        <Fact label="Opens used" value={`${data.sessions.length} of ${data.maxOpens}`} warn={data.sessions.length > data.maxOpens} />
-      </dl>
+      <StatStrip className="mb-6" items={[
+        { label: "Progress", value: `${a.answered} of ${a.total}`, hint: <Progress value={(a.answered / Math.max(1, a.total)) * 100} label="Answered" className="mt-1.5" /> },
+        { label: "Started", value: fmtTime(a.startedAt, false) },
+        { label: a.finalizedAt ? "Finished" : "Deadline", value: fmtTime(a.finalizedAt ?? a.deadline, false) },
+        { label: "Tabs or devices", value: `${data.sessions.length} of ${data.maxOpens}`, tone: data.sessions.length > data.maxOpens ? "text-warning" : undefined },
+      ]} />
 
-      <NotEvidenceNote className="mb-6" />
+      <NotEvidenceNote className="mb-8 max-w-3xl" />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_19rem]">
         <section aria-labelledby="tl-title">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 id="tl-title" className="text-lg font-semibold">Incident timeline</h2>
+            <h2 id="tl-title" className="text-base font-semibold">Incident timeline</h2>
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter incidents">
               {([["all", `All ${data.incidents.length}`], ["open", `To review ${open.length}`], ["priority", `Priority ${counts.priority}`], ["connectivity", "Connection"]] as const).map(([k, l]) => (
                 <Button key={k} size="sm" variant={filter === k ? "default" : "outline"} onClick={() => setFilter(k)} aria-pressed={filter === k}>{l}</Button>
@@ -121,7 +118,7 @@ export default function TimelinePage() {
           ) : shown.length === 0 ? (
             <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No incidents match this filter.</p>
           ) : (
-            <ol className="relative space-y-4 border-l-2 border-border pl-6">
+            <ol className="relative space-y-4 border-l border-border-strong pl-6">
               {shown.map((i) => <IncidentItem key={i.key} i={i} attemptId={attemptId} onSaved={load} now={now} />)}
             </ol>
           )}
@@ -167,10 +164,6 @@ export default function TimelinePage() {
   );
 }
 
-function Fact({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
-  return <div className="rounded-lg border bg-surface p-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className={cn("mt-1 font-semibold tabular-nums", warn && "text-warning")}>{value}</dd></div>;
-}
-
 function IncidentItem({ i, attemptId, onSaved, now }: { i: IncidentDTO; attemptId: string; onSaved: () => void; now: number }) {
   const [editing, setEditing] = React.useState<"dismissed" | "follow_up" | null>(null);
   const [note, setNote] = React.useState("");
@@ -193,20 +186,20 @@ function IncidentItem({ i, attemptId, onSaved, now }: { i: IncidentDTO; attemptI
 
   return (
     <li className="relative">
-      <span className={cn("absolute -left-[33px] top-4 grid size-4 place-items-center rounded-full ring-4 ring-background", sev.dot)} aria-hidden />
-      <article className={cn("rounded-lg border bg-surface", i.severity === "priority" && !i.review && "border-danger/50 shadow-sm")} aria-label={`${sev.label}: ${Cat.label} at ${fmtTime(i.startedAt)}`}>
-        <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
+      <span className={cn("absolute -left-[30px] top-5 size-3 rounded-full ring-4 ring-background", sev.dot)} aria-hidden />
+      <article className={cn("rounded-lg border bg-surface", i.severity === "priority" && !i.review && "border-danger/40 shadow-md")} aria-label={`${sev.label}: ${Cat.label} at ${fmtTime(i.startedAt)}`}>
+        <header className="flex flex-wrap items-center gap-2.5 px-5 pt-4">
           <SeverityBadge severity={i.severity} />
           <span className="inline-flex items-center gap-1.5 text-sm font-medium"><Cat.icon className="size-4 text-muted-foreground" aria-hidden />{Cat.label}</span>
           {i.questionPosition && <Badge tone="neutral">Question {i.questionPosition}</Badge>}
-          <span className="ml-auto font-mono text-xs text-muted-foreground">
+          <span className="num ml-auto text-[12px] text-muted-foreground">
             {fmtTime(i.startedAt)}{i.endedAt && i.endedAt !== i.startedAt ? `–${fmtTime(i.endedAt)}` : ""}
             {i.durationSec ? ` · ${fmtDuration(i.durationSec)}` : i.endedAt === null ? " · end unknown" : ""}
           </span>
         </header>
-        <div className="space-y-3 px-4 py-3">
-          <p className="leading-relaxed">{i.explanation}</p>
-          <p className="text-xs text-muted-foreground">{i.groupingReason}</p>
+        <div className="space-y-3 px-5 py-3">
+          <p className="prose-read text-[15.5px] text-foreground">{i.explanation}</p>
+          <p className="text-[12px] text-muted-foreground">{i.groupingReason}</p>
           <details className="group rounded-md bg-surface-2">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-sm font-medium">
               <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden />
@@ -232,7 +225,7 @@ function IncidentItem({ i, attemptId, onSaved, now }: { i: IncidentDTO; attemptI
             </div>
           </details>
         </div>
-        <footer className="border-t px-4 py-3">
+        <footer className="border-t px-5 py-3">
           {i.review && !editing ? (
             <div className="flex flex-wrap items-start justify-between gap-2 text-sm">
               <div>
@@ -257,11 +250,17 @@ function IncidentItem({ i, attemptId, onSaved, now }: { i: IncidentDTO; attemptI
               <p className="text-xs text-muted-foreground">Recorded with your name and the time. It never changes the candidate&apos;s marks.</p>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => setEditing("dismissed")}><CheckCircle2 /> Dismiss</Button>
-              <Button size="sm" variant="flag" onClick={() => setEditing("follow_up")}><Flag /> Request follow-up</Button>
-              {i.severity === "info" && <span className="text-xs text-muted-foreground">Info only. No decision needed.</span>}
-            </div>
+            i.severity === "info" ? (
+              <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
+                <span>Info only. No decision needed.</span>
+                <Button size="sm" variant="link" className="text-[12px]" onClick={() => setEditing("follow_up")}>Flag anyway</Button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => setEditing("dismissed")}><CheckCircle2 /> Dismiss</Button>
+                <Button size="sm" variant="flag" onClick={() => setEditing("follow_up")}><Flag /> Request follow-up</Button>
+              </div>
+            )
           )}
         </footer>
       </article>

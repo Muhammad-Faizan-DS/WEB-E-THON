@@ -3,7 +3,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
-  ArrowRight, CheckCircle2, CircleDashed, Hand, Hourglass, Lock, Megaphone, Pause, Play, Radio, Search, Send, Timer, Users, Loader2,
+  ArrowRight, Hand, Megaphone, Pause, Play, Radio, Search, Send, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AnnouncementCreate, ExamMonitor, ExamRequestList, type ExamRequest, type MonitorRow } from "@/contracts";
@@ -14,8 +14,8 @@ import { ExamSubnav } from "@/components/examiner/exam-subnav";
 import { ContactIndicator, IncidentCounts, NotEvidenceNote } from "@/components/examiner/severity";
 import { RequestDecisionDialog, RequestTypeBadge } from "@/components/examiner/request-decision";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge, Status } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, StatStrip } from "@/components/ui/card";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { Alert } from "@/components/ui/alert";
 import { Progress, Skeleton } from "@/components/ui/misc";
@@ -23,12 +23,12 @@ import { cn, fmtAgo, fmtClock, fmtRelative, fmtTime } from "@/lib/utils";
 
 type Filter = "attention" | "all" | "in_progress" | "locked" | "finished" | "not_started";
 
-const STATUS: Record<MonitorRow["status"], { label: string; tone: "neutral" | "primary" | "warning" | "success" | "info"; icon: typeof Timer }> = {
-  not_started: { label: "Not started", tone: "neutral", icon: CircleDashed },
-  in_progress: { label: "In progress", tone: "primary", icon: Timer },
-  locked: { label: "Locked", tone: "warning", icon: Lock },
-  submitted: { label: "Submitted", tone: "success", icon: CheckCircle2 },
-  expired: { label: "Time ended", tone: "info", icon: Hourglass },
+const STATUS: Record<MonitorRow["status"], { label: string; tone: "neutral" | "primary" | "warning" | "success" | "info" }> = {
+  not_started: { label: "Not started", tone: "neutral" },
+  in_progress: { label: "In progress", tone: "primary" },
+  locked: { label: "Locked", tone: "warning" },
+  submitted: { label: "Submitted", tone: "success" },
+  expired: { label: "Time ended", tone: "info" },
 };
 
 /** Attention score: higher = needs the examiner sooner. */
@@ -107,12 +107,12 @@ export default function MonitorPage() {
   const updatedAgo = lastLoad ? Math.max(0, Math.round((now - lastLoad) / 1000)) : null;
 
   const tiles = [
-    { k: "all", label: "Enrolled", n: data.totals.enrolled, icon: Users, tone: "text-muted-foreground" },
-    { k: "not_started", label: "Not started", n: data.totals.notStarted, icon: CircleDashed, tone: "text-muted-foreground" },
-    { k: "in_progress", label: "In progress", n: data.totals.inProgress, icon: Timer, tone: "text-primary" },
-    { k: "locked", label: "Locked", n: data.totals.locked, icon: Lock, tone: "text-warning" },
-    { k: "finished", label: "Finished", n: data.totals.submitted + data.totals.expired, icon: CheckCircle2, tone: "text-success" },
-    { k: "attention", label: "Needs attention", n: attentionCount, icon: Hand, tone: "text-danger" },
+    { k: "all", label: "All enrolled", n: data.totals.enrolled },
+    { k: "attention", label: "Needs attention", n: attentionCount },
+    { k: "in_progress", label: "In progress", n: data.totals.inProgress },
+    { k: "locked", label: "Locked", n: data.totals.locked },
+    { k: "finished", label: "Finished", n: data.totals.submitted + data.totals.expired },
+    { k: "not_started", label: "Not started", n: data.totals.notStarted },
   ] as const;
 
   return (
@@ -121,7 +121,7 @@ export default function MonitorPage() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">{data.exam.title}</h1>
+            <h1 className="text-[26px] font-semibold tracking-[-0.01em]">{data.exam.title}</h1>
             <PhaseBadge phase={data.exam.phase} />
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -138,22 +138,16 @@ export default function MonitorPage() {
         </div>
       </div>
 
-      <NotEvidenceNote className="mb-5" />
+      <NotEvidenceNote className="mb-6 max-w-3xl" />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" role="group" aria-label="Filter by status">
-        {tiles.map((t) => (
-          <button key={t.k} type="button" onClick={() => setFilter(t.k)} aria-pressed={filter === t.k}
-            className={cn("rounded-lg border bg-surface p-3 text-left transition-colors hover:bg-surface-2", filter === t.k && "border-primary ring-1 ring-primary")}>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><t.icon className={cn("size-4", t.tone)} aria-hidden />{t.label}</span>
-            <span className="mt-1 block text-2xl font-semibold tabular-nums">{t.n}</span>
-          </button>
-        ))}
+      <div role="group" aria-label="Filter candidates by status" className="mb-8">
+        <StatStrip items={tiles.map((t) => ({ label: t.label, value: t.n, active: filter === t.k, onClick: () => setFilter(t.k), tone: t.k === "attention" && t.n > 0 ? "text-danger" : undefined }))} />
       </div>
 
       <div className="grid gap-6 2xl:grid-cols-[1fr_22rem]">
         <section aria-labelledby="cands">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <h2 id="cands" className="text-lg font-semibold">Candidates <span className="text-sm font-normal text-muted-foreground">({rows.length}{filter !== "all" ? ` of ${data.rows.length}` : ""})</span></h2>
+            <h2 id="cands" className="text-base font-semibold">Candidates <span className="text-sm font-normal text-muted-foreground">({rows.length}{filter !== "all" ? ` of ${data.rows.length}` : ""})</span></h2>
             <div className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
               <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search name or ID" className="pl-9" aria-label="Search candidates" />
@@ -167,7 +161,7 @@ export default function MonitorPage() {
               {/* desktop table */}
               <div className="hidden overflow-x-auto rounded-lg border bg-surface md:block">
                 <table className="w-full text-sm">
-                  <thead className="border-b bg-surface-2 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <thead className="border-b bg-surface-2 text-left text-[12px] text-muted-foreground">
                     <tr>
                       <th scope="col" className="px-4 py-2.5 font-medium">Candidate</th>
                       <th scope="col" className="px-3 py-2.5 font-medium">Status</th>
@@ -180,18 +174,21 @@ export default function MonitorPage() {
                   </thead>
                   <tbody className="divide-y">
                     {rows.map((r) => (
-                      <tr key={r.enrollmentId} className={cn("align-middle", needsAttention(r) && "bg-danger-soft/30")}>
+                      <tr key={r.enrollmentId} className="align-middle transition-colors hover:bg-surface-2/60">
                         <td className="whitespace-nowrap px-4 py-3">
-                          <p className="font-medium">{r.candidateName}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{r.studentId ?? "—"}</p>
+                          <p className="flex items-center gap-2 font-medium">
+                            {needsAttention(r) ? <span className="size-1.5 rounded-full bg-danger" aria-hidden /> : <span className="size-1.5" aria-hidden />}
+                            {r.candidateName}{needsAttention(r) && <span className="sr-only"> (needs attention)</span>}
+                          </p>
+                          <p className="pl-3.5 font-mono text-xs text-muted-foreground">{r.studentId ?? "—"}</p>
                         </td>
                         <td className="px-3 py-3"><StatusCell r={r} now={now} onDecide={() => setDeciding(requests.find((x) => x.id === r.pendingRequest?.id) ?? null)} /></td>
                         <td className="w-40 px-3 py-3"><ProgressCell r={r} /></td>
                         <td className="whitespace-nowrap px-3 py-3"><ContactIndicator contact={r.contact} lastAt={r.lastContactAt} now={now} /></td>
-                        <td className="px-3 py-3 tabular-nums"><span className={cn(r.opensUsed > r.maxOpens && "font-semibold text-warning")}>{r.attemptId ? `${r.opensUsed}/${r.maxOpens}` : "—"}</span></td>
+                        <td className="num px-3 py-3"><span className={cn(r.opensUsed > r.maxOpens && "font-semibold text-warning")}>{r.attemptId ? `${r.opensUsed}/${r.maxOpens}` : "—"}</span></td>
                         <td className="px-3 py-3">
                           <IncidentCounts c={r.incidents} />
-                          {r.unreviewed > 0 && <p className="mt-1 text-xs text-muted-foreground">{r.unreviewed} to review</p>}
+                          {r.unreviewed > 0 && <p className="mt-1 text-[12px] text-muted-foreground">{r.unreviewed} to review</p>}
                         </td>
                         <td className="px-3 py-3 text-right">
                           {r.attemptId && <Button asChild size="sm" variant={r.unreviewed ? "default" : "ghost"}><Link href={`/examiner/exams/${examId}/attempts/${r.attemptId}`}>Timeline <ArrowRight /></Link></Button>}
@@ -204,9 +201,9 @@ export default function MonitorPage() {
               {/* mobile cards */}
               <ul className="space-y-3 md:hidden">
                 {rows.map((r) => (
-                  <li key={r.enrollmentId} className={cn("rounded-lg border bg-surface p-4", needsAttention(r) && "border-danger/40")}>
+                  <li key={r.enrollmentId} className="rounded-lg border bg-surface p-4">
                     <div className="flex items-start justify-between gap-2">
-                      <div><p className="font-medium">{r.candidateName}</p><p className="font-mono text-xs text-muted-foreground">{r.studentId ?? "—"}</p></div>
+                      <div><p className="flex items-center gap-2 font-medium">{needsAttention(r) && <span className="size-1.5 rounded-full bg-danger" aria-hidden />}{r.candidateName}</p><p className="font-mono text-xs text-muted-foreground">{r.studentId ?? "—"}</p></div>
                       <StatusCell r={r} now={now} onDecide={() => setDeciding(requests.find((x) => x.id === r.pendingRequest?.id) ?? null)} />
                     </div>
                     <div className="mt-3 space-y-2"><ProgressCell r={r} /><ContactIndicator contact={r.contact} lastAt={r.lastContactAt} now={now} /></div>
@@ -224,7 +221,7 @@ export default function MonitorPage() {
         <aside className="grid content-start gap-6 lg:grid-cols-2 2xl:grid-cols-1">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2"><Hand className="size-4 text-flag" aria-hidden />Requests {pendingReqs.length > 0 && <Badge tone="flag">{pendingReqs.length} pending</Badge>}</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Hand className="size-4 text-subtle-foreground" aria-hidden />Requests {pendingReqs.length > 0 && <Badge tone="flag">{pendingReqs.length} pending</Badge>}</CardTitle>
             </CardHeader>
             <CardContent>
               {pendingReqs.length === 0 ? (
@@ -232,9 +229,9 @@ export default function MonitorPage() {
               ) : (
                 <ul className="space-y-3">
                   {pendingReqs.map((r) => (
-                    <li key={r.id} className="rounded-md border p-3">
+                    <li key={r.id} className="rounded-md bg-surface-2 p-3">
                       <div className="flex items-center justify-between gap-2"><p className="font-medium">{r.candidateName}</p><RequestTypeBadge type={r.type} /></div>
-                      <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">“{r.reason}”</p>
+                      <p className="prose-read mt-1 line-clamp-2 text-[14px] text-foreground/85">“{r.reason}”</p>
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">{fmtAgo(now - Date.parse(r.createdAt))}</span>
                         <Button size="sm" onClick={() => setDeciding(r)}>Review</Button>
@@ -260,11 +257,11 @@ function StatusCell({ r, now, onDecide }: { r: MonitorRow; now: number; onDecide
   const left = r.deadline && (r.status === "in_progress" || r.status === "locked") ? Date.parse(r.deadline) - now : null;
   return (
     <div className="flex flex-col items-start gap-1">
-      <Badge tone={s.tone}><s.icon aria-hidden />{s.label}</Badge>
-      {left !== null && <span className="font-mono text-xs text-muted-foreground">{fmtClock(left)} left</span>}
-      {r.finalizedAt && <span className="text-xs text-muted-foreground">at {fmtTime(r.finalizedAt, false)}</span>}
+      <Status tone={s.tone} pulse={r.status === "in_progress" && r.contact === "live"}>{s.label}</Status>
+      {left !== null && <span className="num pl-4 text-[12px] text-muted-foreground">{fmtClock(left)} left</span>}
+      {r.finalizedAt && <span className="num pl-4 text-[12px] text-muted-foreground">at {fmtTime(r.finalizedAt, false)}</span>}
       {r.pendingRequest && (
-        <button type="button" onClick={onDecide} className="text-xs font-medium text-flag underline-offset-2 hover:underline">
+        <button type="button" onClick={onDecide} className="cursor-pointer pl-4 text-[12px] font-semibold text-primary underline-offset-2 hover:underline">
           {r.pendingRequest.type === "unlock" ? "Unlock requested" : "Re-attempt requested"} · review
         </button>
       )}
@@ -303,7 +300,7 @@ function AnnouncementsCard({ examId, list, onSent }: { examId: string; list: Exa
   }
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2"><Megaphone className="size-4 text-info" aria-hidden />Announcements</CardTitle></CardHeader>
+      <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2"><Megaphone className="size-4 text-subtle-foreground" aria-hidden />Announcements</CardTitle></CardHeader>
       <CardContent className="space-y-4">
         <form onSubmit={send} className="space-y-2" noValidate>
           <Label htmlFor="ann" className="sr-only">Announcement to all candidates</Label>
