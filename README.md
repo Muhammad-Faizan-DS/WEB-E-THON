@@ -5,7 +5,7 @@ SecureExam is the backend and a working reference portal for the PRD’s adminis
 ## Run locally
 
 1. Use Node.js 22.20 or newer and the pnpm version in [package.json](package.json). Run `pnpm install --frozen-lockfile`.
-2. Use a development PostgreSQL database. For a disposable local session, run `pnpm exec pglite-server --host 127.0.0.1 --port 5432 --max-connections 5` in a separate terminal. Its local connection string is `postgresql://test:test@127.0.0.1:5432/postgres`. A local PostgreSQL server or a dedicated Neon database also works.
+2. Use a development PostgreSQL database. For a disposable local session, run `pnpm exec pglite-server --host 127.0.0.1 --port 5432 --max-connections 20` (fewer connections make PGlite reset under parallel requests) in a separate terminal. Its local connection string is `postgresql://test:test@127.0.0.1:5432/postgres`. A local PostgreSQL server or a dedicated Neon database also works.
 3. Set these environment variables in your shell or an ignored `.env.local` file.
    - `DATABASE_URL` provides the database connection.
    - `AUTH_SECRET` signs sessions, activation keys, and report verification codes. Generate a value with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` and keep it stable.
@@ -29,6 +29,21 @@ Use the [core contracts](src/lib/contracts/core.ts) for questions, exams, and ac
 - For question authoring, save an exam draft and open **Questions**. Select a section, then write a question, paste text, upload a file, or upload a ZIP. Each method saves directly to that section. Existing shared content is copied for the edited exam when needed to preserve the other exam.
 - CSV question imports take `type,topic,difficulty,text,marks,options`. Use JSON choices in the options cell. JSON imports take an array of core question objects. Moodle XML and GIFT support equivalent single-choice, multiple-choice and essay items. Preview validates each row before committing valid rows. CSV also accepts `question,option_a,option_b,answer,topic,difficulty,marks`. For pasted text, number each question and put choices on separate lines (`A.`, `B.`), followed by `Answer: B` for choice questions. A ZIP can contain CSV, JSON, Moodle XML, GIFT, or TXT question files. Review identifies ZIP entries and row numbers.
 - The reference portal is under `src/app/(portal)` and `src/components/backend-preview`. Replace that layout and catch-all page when merging the team’s frontend. Retain the public `/verify/[code]` page or an equivalent route at the same URL for PDF QR codes. The current frontend branch’s mock adapter must be connected to the real DTOs before using it with this backend.
+
+## Deploy to Vercel and test it
+
+1. **Database.** Create a free Neon project and copy its pooled connection string. From your machine, run `DATABASE_URL=<neon url> pnpm db:migrate`, then `DATABASE_URL=<neon url> SEED_PASSWORD=<demo password> AUTH_SECRET=<same secret as Vercel> pnpm db:seed` (the seed refuses `NODE_ENV=production`, so run it locally). Keep `AUTH_SECRET` identical everywhere: it signs sessions and derives the activation keys.
+2. **Vercel project settings → Environment Variables:** `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL` (the production URL, e.g. `https://secureexam.vercel.app`), `CRON_SECRET`, and `SHOW_DEMO_ACCOUNTS=1` if judges should see the demo-account shortcuts on the sign-in page.
+3. **Deploy.** `vercel.json` schedules the expiry sweeper `/api/cron/finalize` daily (the Hobby plan allows one run per day; attempts are also finalized lazily on every read, so nothing depends on the cron).
+4. **Check readiness.** Open `/api/health`. It returns `200 {"status":"ok"}` only when the database answers, all migrations are applied, and the required settings exist. It shows setting names, never values.
+5. **Smoke test the live URL** from your machine (credentials come from your shell, not a file):
+
+   ```bash
+   SMOKE_PASSWORD=<demo password> SMOKE_EXAMINER=examiner@example.test SMOKE_CANDIDATE=candidate@example.test pnpm smoke https://<your-app>.vercel.app
+   ```
+
+   It checks health, sign-in, role isolation (401/403), the live monitor, checklist, keys, analytics and the tampered-verify case, and exits non-zero on any failure. For a protected preview deployment, also set `VERCEL_BYPASS` to the project's Protection Bypass secret.
+6. **While it runs.** Watch Vercel → Project → Logs (filter by `/api/` and status 5xx). Every handled failure is logged as `SecureExam request failed: <ErrorName>` without personal data. Re-run the smoke test after every deploy and before the demo.
 
 ## Architecture and checks
 

@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { announcements, answers, attempts, attemptQuestions, enrollments, examSections, exams, integrityEvents } from "../../db/schema";
+import { announcementReads, announcements, answers, attempts, attemptQuestions, enrollments, examSections, exams, integrityEvents } from "../../db/schema";
 import { type AnswerResponse, type AttemptState, type CandidateQuestion, type saveInput } from "@/lib/contracts/core";
 import { type z } from "zod";
 import { type Actor } from "./auth";
@@ -102,11 +102,14 @@ export function heartbeat(actor: Actor, attemptId: string, sessionId?: string) {
     const activeSessionId = sessionId ?? newSessionId();
     await recordGap(tx, attempt, now);
     await tx.update(attempts).set({ activeSessionId, lastHeartbeatAt: now }).where(eq(attempts.id, attemptId));
-    const news = await tx.select({ id: announcements.id, message: announcements.message, createdAt: announcements.createdAt })
-      .from(announcements).where(and(eq(announcements.examId, attempt.examId),
+    const news = await tx.select({ id: announcements.id, message: announcements.message, createdAt: announcements.createdAt,
+      private: sql<boolean>`${announcements.targetCandidateId} is not null`, read: sql<boolean>`${announcementReads.readAt} is not null` })
+      .from(announcements).leftJoin(announcementReads, and(eq(announcementReads.announcementId, announcements.id),
+        eq(announcementReads.candidateId, attempt.candidateId)))
+      .where(and(eq(announcements.examId, attempt.examId),
         or(isNull(announcements.targetCandidateId), eq(announcements.targetCandidateId, attempt.candidateId))))
       .orderBy(sql`${announcements.createdAt} desc`).limit(30);
-    return { ...await state(tx, { ...attempt, activeSessionId }, true), announcements: news };
+    return { ...await state(tx, { ...attempt, activeSessionId }, true), announcements: news, handRaisedAt: attempt.handRaisedAt?.toISOString() ?? null };
   });
 }
 
@@ -261,5 +264,16 @@ export function checkViolation(actor: Actor, attemptId: string, sessionId: strin
   return withAttempt(actor, attemptId, (tx, attempt) => {
     assertSession(attempt, sessionId);
     return state(tx, attempt);
+  });
+}
+
+/** "Ask examiner" (raised hand). The examiner sees it on the candidate's tile and replies with a private message. */
+export function raiseHand(actor: Actor, attemptId: string, sessionId: string, raised: boolean, message?: string) {
+  return withAttempt(actor, attemptId, async (tx, attempt, now) => {
+    assertSession(attempt, sessionId);
+    assertActive(attempt, now, 0, true);
+    await tx.update(attempts).set(raised ? { handRaisedAt: now, handMessage: message || null } : { handRaisedAt: null, handMessage: null })
+      .where(eq(attempts.id, attemptId));
+    return { raised, handRaisedAt: raised ? now.toISOString() : null };
   });
 }

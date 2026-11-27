@@ -1,25 +1,36 @@
 import { and, asc, count, desc, eq, inArray, sql } from "drizzle-orm";
-import { activationKeys, announcements, answers, attempts, attemptQuestions, enrollments, exams, gaps, incidents, integrityEvents, reattemptRequests, snapshots, users } from "../../db/schema";
+import { activationKeys, announcementReads, announcements, answers, attempts, attemptQuestions, enrollments, exams, gaps, incidents, integrityEvents, reattemptRequests, snapshots, users } from "../../db/schema";
 import type { cameraExceptionInput, incidentReview, liveLimitInput, announcementInput } from "@/lib/contracts/operations";
 import type { z } from "zod";
 import { audit } from "./admin";
 import type { Actor } from "./auth";
 import { database, inOrder, type Tx } from "./database";
+
+/** A candidate counts as online when the server heard a heartbeat (sent every 15 s) within this window. */
+const onlineWindowMs = 45_000;
 import { fail } from "./errors";
 import { ownedExam } from "./exams";
 import { expiredBy } from "./integrity";
 
 export async function monitor(actor: Actor, examId: string) {
   const db = database();
-  const [exam] = await db.select({ id: exams.id, totalMarks: exams.totalMarks, resultsPublished: exams.resultsPublished }).from(exams).where(and(eq(exams.id, examId), actor.role === "examiner" ? eq(exams.examinerId, actor.id) : undefined));
+  const [exam] = await db.select({ id: exams.id, title: exams.title, totalMarks: exams.totalMarks, resultsPublished: exams.resultsPublished,
+    endsAt: exams.endsAt, startsAt: exams.startsAt, settings: exams.settings, liveOpenLimit: exams.liveOpenLimit }).from(exams).where(and(eq(exams.id, examId), actor.role === "examiner" ? eq(exams.examinerId, actor.id) : undefined));
   if (!exam) fail(403, "FORBIDDEN", "This exam is unavailable.");
   await db.update(attempts).set({ status: "auto_submitted", submittedAt: attempts.deadlineAt })
     .where(and(eq(attempts.examId, exam.id), eq(attempts.status, "in_progress"), expiredBy(new Date())));
   const relevant = and(eq(attempts.examId, examId), eq(attempts.isSandbox, false));
-  const [live, flags, logs, alerts, news] = await inOrder([
+  const [roster, live, flags, logs, alerts, news, reads] = await inOrder([
+    db.select({ enrollmentId: enrollments.id, candidateId: users.id, name: users.name, email: users.email, isExternal: users.isExternal,
+      enrollmentStatus: enrollments.status, openLimitOverride: enrollments.openLimitOverride })
+      .from(enrollments).innerJoin(users, eq(users.id, enrollments.candidateId)).where(eq(enrollments.examId, examId)).orderBy(asc(users.name)),
     db.select({
-      id: attempts.id, candidate: users.name, status: attempts.status, deadlineAt: attempts.deadlineAt, lastHeartbeatAt: attempts.lastHeartbeatAt,
-      timeCreditSec: attempts.timeCreditSec, scoreCents: attempts.scoreCents,
+      id: attempts.id, candidate: users.name, candidateId: attempts.candidateId, enrollmentId: attempts.enrollmentId, attemptNo: attempts.attemptNo,
+      status: attempts.status, deadlineAt: attempts.deadlineAt, lastHeartbeatAt: attempts.lastHeartbeatAt, currentIndex: attempts.currentIndex,
+      timeCreditSec: attempts.timeCreditSec, scoreCents: attempts.scoreCents, handRaisedAt: attempts.handRaisedAt, handMessage: attempts.handMessage,
+      reviewUntil: attempts.reviewUntil, submittedAt: attempts.submittedAt,
+      total: sql<number>`(select count(*)::int from attempt_questions q where q.attempt_id = ${attempts.id})`,
+      locked: sql<number>`(select count(*)::int from attempt_questions q where q.attempt_id = ${attempts.id} and q.locked_at is not null)`,
       openCount: sql<number>`(select count(*)::int from attempt_questions q where q.attempt_id = ${attempts.id} and q.seen_at is not null and q.locked_at is null)`,
       seen: sql<number>`(select count(*)::int from attempt_questions q where q.attempt_id = ${attempts.id} and q.seen_at is not null)`,
       answered: sql<number>`(select count(*)::int from answers a where a.attempt_id = ${attempts.id} and a.response is not null and a.response not in ('null'::jsonb, '""'::jsonb, '[]'::jsonb))`,
@@ -34,6 +45,9 @@ export async function monitor(actor: Actor, examId: string) {
       .innerJoin(users, eq(users.id, enrollments.candidateId))
       .where(and(eq(enrollments.examId, examId), eq(activationKeys.status, "locked"))).orderBy(desc(activationKeys.issuedAt)).limit(100),
     db.select().from(announcements).where(eq(announcements.examId, examId)).orderBy(desc(announcements.createdAt)).limit(30),
+    db.select({ announcementId: announcementReads.announcementId, total: count() }).from(announcementReads)
+      .innerJoin(announcements, eq(announcements.id, announcementReads.announcementId))
+      .where(eq(announcements.examId, examId)).groupBy(announcementReads.announcementId),
   ]);
   const events = flags.length ? await db.select({ id: integrityEvents.id, incidentId: integrityEvents.incidentId, type: integrityEvents.type,
     qid: integrityEvents.questionId, questionNumber: attemptQuestions.position, at: integrityEvents.at, meta: integrityEvents.meta })
@@ -43,7 +57,50 @@ export async function monitor(actor: Actor, examId: string) {
   const ids = events.map(({ id }) => id);
   const frames = ids.length ? await db.select({ id: snapshots.id, eventId: snapshots.eventId, seq: snapshots.seq })
     .from(snapshots).where(inArray(snapshots.eventId, ids)).orderBy(asc(snapshots.seq)) : [];
-  return { attempts: live.map(({ scoreCents, ...row }) => ({ ...row, score: scoreCents !== null && exam.resultsPublished ? scoreCents / 100 : null })), totalMarks: exam.totalMarks, incidents: flags.map(({ incident, candidate }) => ({ ...incident, candidate })), events, frames, gaps: logs, keyAlerts: alerts, announcements: news };
+  const now = Date.now();
+  // One tile per enrolled candidate: their latest attempt (or "not_started"), progress, time left, connection and alert badges.
+  const latest = new Map<string, (typeof live)[number]>();
+  for (const row of live) if (row.enrollmentId && (latest.get(row.enrollmentId)?.attemptNo ?? 0) < row.attemptNo) latest.set(row.enrollmentId, row);
+  const unreviewed = (attemptId: string, priority?: string) => flags.filter(({ incident }) => incident.attemptId === attemptId &&
+    incident.reviewStatus === "unreviewed" && (!priority || incident.priority === priority)).length;
+  const defaultLimit = exam.liveOpenLimit ?? exam.settings.openLimit;
+  const candidates = roster.map((person) => {
+    const attempt = latest.get(person.enrollmentId);
+    const active = attempt?.status === "in_progress";
+    const heard = attempt?.lastHeartbeatAt?.getTime() ?? 0;
+    const limit = person.openLimitOverride ?? defaultLimit;
+    return {
+      ...person, attemptId: attempt?.id ?? null, status: attempt?.status ?? "not_started",
+      position: attempt?.currentIndex ?? 0, total: attempt?.total ?? 0, seen: attempt?.seen ?? 0, answered: attempt?.answered ?? 0,
+      openCount: attempt?.openCount ?? 0, lockedCount: attempt?.locked ?? 0, openLimit: limit === 0 ? null : limit,
+      timeLeftSec: active ? Math.max(0, Math.floor((attempt.deadlineAt.getTime() - now) / 1_000)) : null,
+      deadlineAt: attempt?.deadlineAt ?? null, submittedAt: attempt?.submittedAt ?? null, lastHeartbeatAt: attempt?.lastHeartbeatAt ?? null,
+      connection: !active ? "inactive" : now - heard <= onlineWindowMs ? "online" : "offline",
+      gapSeconds: attempt?.gapSeconds ?? 0, timeCreditSec: attempt?.timeCreditSec ?? 0, inReviewPause: Boolean(attempt?.reviewUntil),
+      handRaisedAt: active ? attempt.handRaisedAt : null, handMessage: active ? attempt.handMessage : null,
+      incidents: attempt ? { priority: unreviewed(attempt.id, "priority"), review: unreviewed(attempt.id, "review"), low: unreviewed(attempt.id, "low"),
+        unreviewed: unreviewed(attempt.id), total: flags.filter(({ incident }) => incident.attemptId === attempt.id).length } : { priority: 0, review: 0, low: 0, unreviewed: 0, total: 0 },
+      keyLocked: alerts.some(({ enrollmentId }) => enrollmentId === person.enrollmentId),
+      score: attempt?.scoreCents !== null && attempt?.scoreCents !== undefined && exam.resultsPublished ? attempt.scoreCents / 100 : null,
+    };
+  });
+  const tally = (status: string) => candidates.filter((item) => item.status === status).length;
+  const summary = {
+    enrolled: candidates.length, notStarted: tally("not_started"), inProgress: tally("in_progress"),
+    submitted: candidates.filter((item) => ["submitted", "auto_submitted", "graded"].includes(item.status)).length, voided: tally("voided"),
+    offline: candidates.filter((item) => item.connection === "offline").length,
+    handsRaised: candidates.filter((item) => item.handRaisedAt).length,
+    needsAttention: candidates.filter((item) => item.handRaisedAt || item.connection === "offline" || item.incidents.unreviewed > 0 || item.keyLocked).length,
+  };
+  const readCount = new Map(reads.map(({ announcementId, total }) => [announcementId, total]));
+  return {
+    exam: { id: exam.id, title: exam.title, startsAt: exam.startsAt, endsAt: exam.endsAt, integrityMode: exam.settings.integrityMode },
+    serverNow: new Date(now).toISOString(), summary, candidates,
+    attempts: live.map(({ scoreCents, ...row }) => ({ ...row, score: scoreCents !== null && exam.resultsPublished ? scoreCents / 100 : null })),
+    totalMarks: exam.totalMarks, incidents: flags.map(({ incident, candidate }) => ({ ...incident, candidate })), events, frames, gaps: logs, keyAlerts: alerts,
+    announcements: news.map((item) => ({ ...item, readCount: readCount.get(item.id) ?? 0, audience: item.targetCandidateId ? 1 : candidates.length,
+      target: item.targetCandidateId ? roster.find(({ candidateId }) => candidateId === item.targetCandidateId)?.name ?? null : null })),
+  };
 }
 
 async function lockOwnedAttempt(tx: Tx, examiner: string, id: string) {
@@ -64,7 +121,12 @@ export function postAnnouncement(actor: Actor, examId: string, input: z.infer<ty
       if (!member) fail(400, "NOT_ENROLLED", "Choose an enrolled candidate.");
     }
     const [row] = await tx.insert(announcements).values({ examId, targetCandidateId: input.candidateId, message: input.message }).returning();
-    await audit(tx, actor.id, "announcement_sent", "exam", examId, { after: { announcementId: row.id } });
+    if (input.candidateId) {
+      await tx.update(attempts).set({ handRaisedAt: null, handMessage: null })
+        .where(and(eq(attempts.examId, examId), eq(attempts.candidateId, input.candidateId), eq(attempts.status, "in_progress")));
+    }
+    await audit(tx, actor.id, input.candidateId ? "private_message_sent" : "announcement_sent", "exam", examId,
+      { after: { announcementId: row.id, candidateId: input.candidateId ?? null } });
     return row;
   });
 }
@@ -162,4 +224,15 @@ export async function readSnapshot(actor: Actor, id: string) {
       actor.role === "examiner" ? eq(exams.examinerId, actor.id) : undefined));
   if (!row) fail(404, "FRAME_NOT_FOUND", "Camera frame not found.");
   return row.image;
+}
+
+/** Candidate "Got it" on an announcement addressed to everyone or to them, for an exam they are enrolled in. */
+export async function acknowledgeAnnouncement(actor: Actor, announcementId: string) {
+  const db = database();
+  const [row] = await db.select({ id: announcements.id, target: announcements.targetCandidateId }).from(announcements)
+    .innerJoin(enrollments, and(eq(enrollments.examId, announcements.examId), eq(enrollments.candidateId, actor.id)))
+    .where(eq(announcements.id, announcementId));
+  if (!row || (row.target && row.target !== actor.id)) fail(404, "ANNOUNCEMENT_NOT_FOUND", "Announcement not found.");
+  await db.insert(announcementReads).values({ announcementId, candidateId: actor.id }).onConflictDoNothing();
+  return { id: announcementId, read: true };
 }

@@ -89,6 +89,8 @@ export const startInput = z.union([
 export const heartbeatInput = z.union([session, z.object({ takeover: z.literal(true), deviceCheck }).strict()]);
 export const mutateAttempt = session;
 export const flagInput = session.extend({ flagged: z.boolean() });
+/** "Ask examiner": raise (with an optional short note) or lower the hand. */
+export const handInput = session.extend({ raised: z.boolean(), message: z.string().trim().max(300).optional() }).strict();
 export const response = z.union([z.string().max(24_000), z.array(z.string().min(1).max(64)).max(20), z.null()]);
 export const saveInput = session.extend({
   answers: z.array(z.object({ qid: id, response, seq: z.number().int().min(1).max(2_147_483_647) }).strict()).min(1).max(200)
@@ -135,7 +137,8 @@ export interface AttemptState {
   reviewUntil: string | null;
   integrityMode: ExamSettings["integrityMode"];
   incidentCount: number;
-  announcements?: Array<{ id: string; message: string; createdAt: string }>;
+  announcements?: Array<{ id: string; message: string; createdAt: string; private: boolean; read: boolean }>;
+  handRaisedAt?: string | null;
   currentIndex: number;
   openCount: number;
   totalQuestions: number;

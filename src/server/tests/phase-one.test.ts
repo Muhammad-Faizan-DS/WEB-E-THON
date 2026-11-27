@@ -572,4 +572,54 @@ describe("SecureExam HTTP API", () => {
     const code = results.data.find(({ examId }: { examId: string }) => examId === practice.examId).verifyCode;
     expect((await request(`/api/verify/${code}`)).data).toMatchObject({ valid: true, score: 1 });
   });
+
+  it("runs the live monitor: candidate tiles, raised hands, private replies, read receipts and health", async ({ onTestFailed }) => {
+    onTestFailed(() => { console.error(logs); });
+    const examiner = await login("examiner");
+    const candidate = await login("candidate");
+    const other = await login("candidate2");
+    const health = await request("/api/health");
+    expect(health, JSON.stringify(health)).toMatchObject({ status: "ok", checks: { database: { ok: true }, migrations: { ok: true } } });
+    expect(JSON.stringify(health)).not.toContain("postgresql://"); // names of settings only, never values
+
+    const draft = await createDraft(examiner, { title: "Monitored quiz", examType: "quiz", totalMarks: 1, settings: { integrityMode: "standard", sequentialReveal: false } });
+    await request(draft.questions, { cookie: examiner, method: "POST", data: { type: "single", text: "1 + 1", topic: "Arithmetic", difficulty: 1, marks: 1,
+      options: [{ id: "a", text: "2", isCorrect: true }, { id: "b", text: "3", isCorrect: false }] } });
+    expect((await request(draft.exam + "/publish", { cookie: examiner, method: "POST" })).status).toBe(200);
+    const enrolled = await request(draft.exam + "/enrollments", { cookie: examiner, method: "POST", data: {
+      candidates: [{ candidateId: identities.candidate }, { candidateId: identities.candidate2 }] } });
+    const keyFor = (id: string) => enrolled.data.find(({ candidateId }: { candidateId: string }) => candidateId === id).key;
+    const started = await request(draft.exam + "/attempts", { cookie: candidate, method: "POST", data: { deviceCheck: true, key: keyFor(identities.candidate) } });
+    expect(started.status).toBe(201);
+    const a = `/api/attempts/${started.data.id}`;
+    const session = started.data.sessionId as string;
+
+    let live = await request(draft.exam + "/monitor", { cookie: examiner });
+    expect(live.data.summary).toMatchObject({ enrolled: 2, notStarted: 1, inProgress: 1, submitted: 0 });
+    const tile = () => live.data.candidates.find(({ candidateId }: { candidateId: string }) => candidateId === identities.candidate);
+    expect(tile()).toMatchObject({ status: "in_progress", total: 1, connection: "online", handRaisedAt: null, incidents: { unreviewed: 0 } });
+    expect(tile().timeLeftSec).toBeGreaterThan(0);
+
+    expectCode(await request(a + "/hand", { cookie: other, method: "POST", data: { sessionId: session, raised: true } }), 403, "FORBIDDEN");
+    expect((await request(a + "/hand", { cookie: candidate, method: "POST", data: { sessionId: session, raised: true, message: "Q1 looks odd" } })).status).toBe(200);
+    live = await request(draft.exam + "/monitor", { cookie: examiner });
+    expect(tile()).toMatchObject({ handMessage: "Q1 looks odd", handRaisedAt: expect.any(String) });
+    expect(live.data.summary).toMatchObject({ handsRaised: 1, needsAttention: 1 });
+
+    const reply = await request(draft.exam + "/announcements", { cookie: examiner, method: "POST", data: { message: "Q1 is fine as written.", candidateId: identities.candidate } });
+    const broadcast = await request(draft.exam + "/announcements", { cookie: examiner, method: "POST", data: { message: "Ten minutes left." } });
+    live = await request(draft.exam + "/monitor", { cookie: examiner });
+    expect(tile().handRaisedAt).toBeNull();
+    const beat = await request(a + "/heartbeat", { cookie: candidate, method: "POST", data: { sessionId: session } });
+    expect(beat.data.announcements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: reply.data.id, private: true, read: false }), expect.objectContaining({ id: broadcast.data.id, private: false, read: false })]));
+    const otherBeat = await request("/api/candidate/exams", { cookie: other });
+    expect(otherBeat.status).toBe(200);
+    expectCode(await request(`/api/announcements/${reply.data.id}/ack`, { cookie: other, method: "POST" }), 404, "ANNOUNCEMENT_NOT_FOUND");
+    expect((await request(`/api/announcements/${broadcast.data.id}/ack`, { cookie: candidate, method: "POST" })).status).toBe(200);
+    expect((await request(`/api/announcements/${broadcast.data.id}/ack`, { cookie: candidate, method: "POST" })).status).toBe(200);
+    live = await request(draft.exam + "/monitor", { cookie: examiner });
+    expect(live.data.announcements.find(({ id }: { id: string }) => id === broadcast.data.id)).toMatchObject({ readCount: 1, audience: 2 });
+    expect(live.data.announcements.find(({ id }: { id: string }) => id === reply.data.id)).toMatchObject({ readCount: 0, audience: 1, target: "Candidate" });
+  });
 });

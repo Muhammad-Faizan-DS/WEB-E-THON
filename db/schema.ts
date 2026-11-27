@@ -123,6 +123,9 @@ export const attempts = pgTable("attempts", {
   pendingIntegrityAt: time("pending_integrity_at"),
   integrityIncidentId: uuid("integrity_incident_id"),
   reviewUntil: time("review_until"),
+  /** "Ask examiner" (raised hand): set by the candidate, cleared when they lower it or the examiner replies privately. */
+  handRaisedAt: time("hand_raised_at"),
+  handMessage: text("hand_message"),
   scoreCents: integer("score_cents"),
   settings: jsonb("settings").$type<ExamSettings>().notNull(),
 }, (t) => [index("attempts_exam_idx").on(t.examId), index("attempts_candidate_idx").on(t.candidateId),
@@ -259,3 +262,10 @@ export const orgSettings = pgTable("org_settings", {
   allowExternalInvites: boolean("allow_external_invites").notNull().default(true),
   updatedAt: time("updated_at").notNull().defaultNow(),
 }, (t) => [check("org_settings_singleton", sql`${t.id}`)]);
+
+/** Read receipts: a candidate pressed "Got it" on an announcement. */
+export const announcementReads = pgTable("announcement_reads", {
+  announcementId: uuid("announcement_id").notNull().references(() => announcements.id),
+  candidateId: uuid("candidate_id").notNull().references(() => users.id),
+  readAt: time("read_at").notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.announcementId, t.candidateId] }), index("announcement_reads_candidate_idx").on(t.candidateId)]);

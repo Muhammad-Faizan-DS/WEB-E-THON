@@ -43,6 +43,8 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
   const [away, setAway] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [superseded, setSuperseded] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [acknowledged, setAcknowledged] = useState<string[]>([]);
   const prefs = useResource<WorkspacePreferences>("/api/me/prefs");
   const remaining = attempt && now ? Math.max(0, Math.ceil((Date.parse(attempt.deadlineAt) - now) / 1_000)) : 0;
   const inProgress = attempt?.status === "in_progress" && !superseded;
@@ -372,7 +374,11 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
         }}><label>Explanation<textarea name="explanation" required minLength={10} maxLength={2000} /></label>
           <button disabled={busy || now < Date.parse(attempt.reviewUntil)}>Send explanation and continue{now < Date.parse(attempt.reviewUntil) ? ` in ${Math.ceil((Date.parse(attempt.reviewUntil) - now) / 1_000)}s` : ""}</button></form>
       </section>}
-      {attempt.announcements?.length ? <section className="panel"><h2>Announcements</h2><ul>{attempt.announcements.map((item) => <li key={item.id}>{item.message}</li>)}</ul></section> : null}
+      {attempt.announcements?.some((item) => !item.read && !acknowledged.includes(item.id)) && <section className="panel announcement-strip" aria-live="polite">
+        {attempt.announcements.filter((item) => !item.read && !acknowledged.includes(item.id)).slice(0, 3).map((item) => <div key={item.id} className="announcement">
+          <div><strong>{item.private ? "Message from your examiner" : "Announcement"}</strong><p>{item.message}</p></div>
+          <button onClick={() => { setAcknowledged((list) => [...list, item.id]); void request("/api/announcements/" + item.id + "/ack", "POST").catch(updateError); }}>Got it</button>
+        </div>)}</section>}
       <div className="layout"><section className="panel" onPaste={(event) => {
         if (!allowPaste) { event.preventDefault(); void signal("paste_blocked", { chars: Math.min(24_000, event.clipboardData.getData("text").length) }); }
       }} onCopy={(event) => { event.preventDefault(); void signal("copy_blocked"); }} onCut={(event) => { event.preventDefault(); void signal("cut_blocked"); }}
@@ -404,6 +410,22 @@ export function AttemptWorkspace({ attemptId, userId, name, back, sandbox, allow
               data-seen={item.seen} onClick={() => go(item.position)}>{item.position}{item.flagged ? "•" : ""}</button>)}</div></div>)}
         <p className="palette-legend"><span data-k="answered">Answered</span><span data-k="locked">Locked</span><span data-k="flagged">Flagged</span><span data-k="unseen">Not released</span></p>
         <p><small>Keyboard shortcuts: 1–4 answer, N/P navigate, L lock, F flag.</small></p>
+        {!sandbox && (attempt.handRaisedAt ? <div className="ask"><p className="notice">Your examiner has been asked. Keep working; the reply appears above.</p>
+          <button disabled={busy} onClick={() => void action(async () => {
+            await request(api + "/hand", "POST", { sessionId: token.current, raised: false });
+            setAttempt((previous) => previous && { ...previous, handRaisedAt: null });
+          })}>Lower hand</button></div>
+          : asking ? <form className="ask" onSubmit={(event) => {
+            event.preventDefault();
+            const note = String(new FormData(event.currentTarget).get("note") ?? "");
+            void action(async () => {
+              const { data } = await request<{ handRaisedAt: string }>(api + "/hand", "POST", { sessionId: token.current, raised: true, message: note || undefined });
+              setAttempt((previous) => previous && { ...previous, handRaisedAt: data.handRaisedAt });
+              setAsking(false);
+            });
+          }}><label>Question for the examiner (optional)<input name="note" maxLength={300} placeholder="e.g. Question 4 seems to have two answers" /></label>
+            <div className="actions"><button type="button" onClick={() => setAsking(false)}>Cancel</button><button className="primary" disabled={busy}>Ask</button></div></form>
+          : <button disabled={busy || blocked} onClick={() => setAsking(true)}>Ask examiner</button>)}
         <button className="primary" disabled={busy || blocked} onClick={() => void action(async () => {
           apply(await request<AttemptState>(api)); setConfirm(true);
         }, true)}>Review and submit</button>
