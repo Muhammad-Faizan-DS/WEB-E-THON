@@ -71,10 +71,10 @@ export function Flow({ nodes, label, className }: { nodes: FlowNode[]; label: st
               <span
                 aria-hidden
                 className={cn(
-                  "relative grid size-12 place-items-center rounded-full border-2 sm:size-14 [&_svg]:size-5 sm:[&_svg]:size-6",
-                  x.tone === "brand" && "border-primary bg-primary text-primary-foreground",
-                  x.tone === "no" && "border-dashed border-border-strong bg-background text-muted-foreground",
-                  (!x.tone || x.tone === "plain") && "border-border-strong bg-surface text-foreground",
+                  "relative grid size-12 place-items-center rounded-full border-2 sm:size-14 [&_svg]:size-6 sm:[&_svg]:size-7",
+                  x.tone === "brand" && "border-primary bg-primary text-primary-foreground [--pg-accent:currentColor]",
+                  x.tone === "no" && "border-dashed border-border-strong bg-background text-muted-foreground [--pg-accent:currentColor]",
+                  (!x.tone || x.tone === "plain") && "border-border-strong bg-surface text-foreground [--pg-accent:var(--primary)]",
                 )}
               >
                 {x.icon}

@@ -34,7 +34,7 @@ const STATS = [
 ] as const;
 
 /** Inner wells: page tone + hairline, no shadows, no colour fills. */
-const CELL = "bg-background ring-1 ring-inset ring-border";
+const CELL = "bg-white/45 ring-1 ring-inset ring-foreground/[0.07] dark:bg-white/[0.035] dark:ring-white/[0.08]";
 const BTN = "rounded-md px-3 py-1 text-[11px] font-semibold";
 
 /**
@@ -56,10 +56,11 @@ export function ProductFrame({ className }: { className?: string }) {
       </figcaption>
       <div
         aria-hidden
-        className="relative animate-[rise-far_1s_0.35s_cubic-bezier(0.22,1,0.36,1)_both] overflow-hidden rounded-xl border border-border bg-surface text-foreground select-none"
+        className="relative animate-[rise-far_1s_0.35s_cubic-bezier(0.22,1,0.36,1)_both] overflow-hidden rounded-[18px] border border-white/70 bg-white/50 text-foreground backdrop-blur-2xl backdrop-saturate-150 select-none [mask-image:linear-gradient(to_bottom,black_82%,transparent)] dark:border-white/10 dark:bg-surface/50"
       >
+        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent dark:via-white/30" />
         {/* top bar */}
-        <div className="flex items-center gap-3 border-b border-border px-4 py-3 sm:px-5">
+        <div className="flex items-center gap-3 border-b border-foreground/[0.07] px-4 py-3 sm:px-5">
           <span className="flex gap-1.5">
             <span className="size-2.5 rounded-full bg-foreground/20" />
             <span className="size-2.5 rounded-full bg-foreground/20" />
@@ -84,7 +85,7 @@ export function ProductFrame({ className }: { className?: string }) {
             <div className={cn("mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] text-muted-foreground", CELL)}>
               <Search className="size-3.5" /> Search by name or student ID
             </div>
-            <ul className="mt-2 divide-y divide-border">
+            <ul className="mt-2 divide-y divide-foreground/[0.07]">
               {ROWS.map((r) => {
                 const tone = TONE[r.tone];
                 const answered = r.tone === "live" ? Math.min(TOTAL - 1, r.answered + climb) : r.answered;
@@ -121,7 +122,7 @@ export function ProductFrame({ className }: { className?: string }) {
             </ul>
           </div>
 
-          <div className="hidden border-l border-border p-5 lg:block">
+          <div className="hidden border-l border-foreground/[0.07] p-5 lg:block">
             <p className="text-[12px] font-semibold text-muted-foreground">Needs your attention</p>
             <div className={cn("mt-3 rounded-lg p-3.5", CELL)}>
               <p className="flex items-center gap-1.5 text-[12px] font-semibold"><span className="size-2 rounded-full bg-danger" /> Priority review · Bilal Ahmed</p>
@@ -129,7 +130,7 @@ export function ProductFrame({ className }: { className?: string }) {
                 The exam page was hidden for 45 s. Two seconds after returning to Question 3, a 348-character paste was blocked. What happened while the page was hidden is unknown.
               </p>
               <div className="mt-3 flex gap-2">
-                <span className={cn(BTN, "bg-surface ring-1 ring-inset ring-border-strong")}>Dismiss</span>
+                <span className={cn(BTN, "bg-white/60 ring-1 ring-inset ring-foreground/15 dark:bg-white/5")}>Dismiss</span>
                 <span className={cn(BTN, "bg-foreground text-background")}>Follow up</span>
               </div>
             </div>
@@ -137,7 +138,7 @@ export function ProductFrame({ className }: { className?: string }) {
               <p className="flex items-center gap-1.5 text-[12px] font-semibold"><span className="size-2 rounded-full bg-warning-dot" /> Unlock request · Omar Farooq</p>
               <p className="mt-2 text-[12px] leading-[1.55] text-muted-foreground">Opened on a 4th device after his laptop shut down. Clock kept running.</p>
               <div className="mt-3 flex gap-2">
-                <span className={cn(BTN, "bg-surface ring-1 ring-inset ring-border-strong")}>Review</span>
+                <span className={cn(BTN, "bg-white/60 ring-1 ring-inset ring-foreground/15 dark:bg-white/5")}>Review</span>
               </div>
             </div>
             <p className="mt-5 text-[11px] text-muted-foreground">Sample data</p>

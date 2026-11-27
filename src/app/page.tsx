@@ -11,7 +11,7 @@ import { VerifySlip } from "@/components/landing/verify-slip";
 import { Close } from "@/components/landing/close";
 import { Flow } from "@/components/landing/flow";
 import { Reveal } from "@/components/landing/reveal";
-import { Ban, Clock3, CloudOff, Eye, FileText, HardDrive, MonitorSmartphone, PenLine, Server, UserCheck } from "lucide-react";
+import { ClockLock, DeviceClock, DeviceSave, EyeObserve, Gavel, IncidentNote, PenWrite, PersonDecide, ServerClock, ServerTick } from "@/components/landing/pictograms";
 
 export const metadata: Metadata = {
   title: { absolute: "Fairmark · Exams you can trust, even when the Wi-Fi can't" },
@@ -28,9 +28,9 @@ export default function Home() {
 
         <section id="how" aria-labelledby="how-title" className="mt-20 scroll-mt-16 border-t border-border py-24 md:mt-24 md:py-32">
           <div className={WRAP}>
-            <Reveal>
-              <SectionTitle id="how-title">Two questions a candidate never has to ask.</SectionTitle>
-              <Lede>
+            <Reveal className="text-center">
+              <SectionTitle id="how-title" className="mx-auto">Two questions a candidate never has to ask.</SectionTitle>
+              <Lede className="mx-auto">
                 &ldquo;How long do I have?&rdquo; and &ldquo;Is my latest answer saved?&rdquo; are answered on screen at all
                 times, by the server, even when the connection drops.
               </Lede>
@@ -43,9 +43,9 @@ export default function Home() {
                 <Flow
                   label="Time: the server sets the deadline once; the device clock cannot change it."
                   nodes={[
-                    { icon: <Server />, label: "Server clock" },
-                    { icon: <Clock3 />, label: "Deadline locked", tone: "brand" },
-                    { icon: <MonitorSmartphone />, label: "Device clock", tone: "no" },
+                    { icon: <ServerClock />, label: "Server clock" },
+                    { icon: <ClockLock />, label: "Deadline locked", tone: "brand" },
+                    { icon: <DeviceClock />, label: "Device clock", tone: "no" },
                   ]}
                 />
                 <ul className="mt-4 divide-y divide-border">
@@ -64,9 +64,9 @@ export default function Home() {
                 <Flow
                   label="Saving: an answer is saved with a receipt; offline it is kept on the device and sent later."
                   nodes={[
-                    { icon: <PenLine />, label: "You answer" },
-                    { icon: <CloudOff />, label: "Kept on device" },
-                    { icon: <HardDrive />, label: "Server receipt", tone: "brand" },
+                    { icon: <PenWrite />, label: "You answer" },
+                    { icon: <DeviceSave />, label: "Kept on device" },
+                    { icon: <ServerTick />, label: "Server receipt", tone: "brand" },
                   ]}
                 />
                 <ul className="mt-4 divide-y divide-border">
@@ -80,11 +80,11 @@ export default function Home() {
           </div>
         </section>
 
-        <section id="integrity" aria-labelledby="integrity-title" className="scroll-mt-16 border-t border-border py-24 md:py-32">
+        <section id="integrity" aria-labelledby="integrity-title" className="scroll-mt-16 border-y border-border bg-band py-24 md:py-32">
           <div className={WRAP}>
-            <Reveal>
-              <SectionTitle id="integrity-title">Who decides what an observation means? A person.</SectionTitle>
-              <Lede>
+            <Reveal className="text-center">
+              <SectionTitle id="integrity-title" className="mx-auto">Who decides what an observation means? <span className="text-primary">A person.</span></SectionTitle>
+              <Lede className="mx-auto">
                 Fairmark notes only what the candidate was told about at the start: leaving the page, exiting full screen,
                 blocked pastes, dropped connections. It groups them into incidents with a plain explanation, and a person
                 decides what, if anything, happens next.
@@ -94,10 +94,10 @@ export default function Home() {
               className="mt-12"
               label="Integrity: observations are grouped into one explained incident, a person decides, nothing is automatic."
               nodes={[
-                { icon: <Eye />, label: "3 observations" },
-                { icon: <FileText />, label: "1 incident" },
-                { icon: <UserCheck />, label: "A person decides", tone: "brand" },
-                { icon: <Ban />, label: "Auto penalty", tone: "no" },
+                { icon: <EyeObserve />, label: "3 observations" },
+                { icon: <IncidentNote />, label: "1 incident" },
+                { icon: <PersonDecide />, label: "A person decides", tone: "brand" },
+                { icon: <Gavel />, label: "Auto penalty", tone: "no" },
               ]}
             />
             <Reveal><Incidents /></Reveal>
@@ -106,15 +106,15 @@ export default function Home() {
 
         <section id="roles" aria-labelledby="roles-title" className="scroll-mt-16 border-t border-border py-24 md:py-32">
           <div className={WRAP}>
-            <Reveal>
-              <SectionTitle id="roles-title">One platform, three roles.</SectionTitle>
-              <Lede>Each role sees only what it needs. Every permission is checked on the server, not just hidden in the interface.</Lede>
+            <Reveal className="text-center">
+              <SectionTitle id="roles-title" className="mx-auto">One platform, three roles.</SectionTitle>
+              <Lede className="mx-auto">Each role sees only what it needs. Every permission is checked on the server, not just hidden in the interface.</Lede>
             </Reveal>
             <Reveal delay={0.1}><Roles /></Reveal>
           </div>
         </section>
 
-        <section id="features" aria-labelledby="features-title" className="scroll-mt-16 border-t border-border py-24 md:py-32">
+        <section id="features" aria-labelledby="features-title" className="scroll-mt-16 border-y border-border bg-band py-24 md:py-32">
           <div className={WRAP}>
             <div className="grid items-end gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)]">
               <div>

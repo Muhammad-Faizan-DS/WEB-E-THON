@@ -10,8 +10,10 @@
 :root {
   --radius: 0.5rem;
 
-  --background: #f7f8f8;
+  --background: #f2f5f3;
   --foreground: #0b0d0e;
+  /* alternating homepage bands: a soft emerald-tinted paper so the light theme has rhythm, not white on white */
+  --band: #e6efe9;
   --surface: #ffffff;
   --surface-2: #f1f2f3;
   --muted-foreground: #5c6168;
@@ -51,6 +53,7 @@
 .dark {
   --background: #08090a;
   --foreground: #f7f8f8;
+  --band: #0d1211;
   --surface: #0f1011;
   --surface-2: #16171a;
   --muted-foreground: #8a8f98;
@@ -89,6 +92,7 @@
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-band: var(--band);
   --color-muted-foreground: var(--muted-foreground);
   --color-subtle-foreground: var(--subtle-foreground);
   --color-border: var(--border);

@@ -29,6 +29,8 @@ export interface LocalAnswer {
   rev: number; // latest local revision
   ackRev: number; // latest revision the server confirmed
   flagged: boolean;
+  /** a flag change made offline that the server hasn't confirmed yet */
+  flagPending?: boolean;
   savedAt: string | null;
   sync: SyncState;
 }
@@ -116,6 +118,12 @@ export function useExamEngine(attemptId: string, userId: string) {
   React.useEffect(() => { attemptRef.current = attempt; }, [attempt]);
 
   const pendingKey = `fm:${userId}:${attemptId}:pending`;
+  const flagsKey = `fm:${userId}:${attemptId}:flags`;
+  const pendingFlags = React.useRef<Record<string, boolean>>({});
+  const persistFlags = React.useCallback(() => {
+    const f = pendingFlags.current;
+    (Object.keys(f).length ? set(flagsKey, f) : del(flagsKey)).catch(() => {});
+  }, [flagsKey]);
   const persistPending = React.useCallback(() => {
     const p = pending.current;
     (Object.keys(p).length ? set(pendingKey, p) : del(pendingKey)).then(
@@ -199,9 +207,29 @@ export function useExamEngine(attemptId: string, userId: string) {
   }, [attemptId, markReachable, markUnreachable, patch, persistPending, scheduleRetry]);
   React.useEffect(() => { flushRef.current = flush; }, [flush]);
 
+  // review flags queue like answers: kept on the device and resent until the server confirms
+  const sendFlag = React.useCallback(async (aqId: string) => {
+    const want = pendingFlags.current[aqId];
+    if (want === undefined || !sid.current) return;
+    try {
+      await api.put(`/api/attempts/${attemptId}/flags/${aqId}`, { flagged: want, clientSessionId: sid.current });
+      if (pendingFlags.current[aqId] === want) { delete pendingFlags.current[aqId]; persistFlags(); }
+      setAnswers((s) => (s[aqId] ? { ...s, [aqId]: { ...s[aqId], flagPending: aqId in pendingFlags.current } } : s));
+    } catch (e) {
+      const err = e as ApiError;
+      if (err.isNetwork) { if (navigator.onLine) setUnreachable(true); return; } // stays queued
+      delete pendingFlags.current[aqId]; persistFlags();
+      setAnswers((s) => (s[aqId] ? { ...s, [aqId]: { ...s[aqId], flagged: !want, flagPending: false } } : s));
+      toast.error("Couldn't change the review mark", { description: err.message });
+    }
+  }, [attemptId, persistFlags]);
+  const sendFlagRef = React.useRef(sendFlag);
+  React.useEffect(() => { sendFlagRef.current = sendFlag; }, [sendFlag]);
+
   const flushAll = React.useCallback(() => {
     if (retryTimer.current) { clearTimeout(retryTimer.current); retryTimer.current = null; }
     Object.keys(pending.current).forEach((id) => flushRef.current(id));
+    Object.keys(pendingFlags.current).forEach((id) => void sendFlagRef.current(id));
   }, []);
 
   // ---------- public actions ----------
@@ -220,13 +248,11 @@ export function useExamEngine(attemptId: string, userId: string) {
 
   const toggleFlag = React.useCallback(async (aqId: string) => {
     const next = !answersRef.current[aqId]?.flagged;
-    setAnswers((s) => ({ ...s, [aqId]: { ...s[aqId], flagged: next } }));
-    try {
-      await api.put(`/api/attempts/${attemptId}/flags/${aqId}`, { flagged: next, clientSessionId: sid.current });
-    } catch (e) {
-      if ((e as ApiError).isNetwork) markUnreachable();
-    }
-  }, [attemptId, markUnreachable]);
+    pendingFlags.current[aqId] = next;
+    persistFlags();
+    setAnswers((s) => ({ ...s, [aqId]: { ...s[aqId], flagged: next, flagPending: true } }));
+    await sendFlag(aqId);
+  }, [persistFlags, sendFlag]);
 
   const logEvent = React.useCallback((type: IntegrityEventType, detail?: Record<string, unknown>) => {
     if (events.current.length >= 500) return;
@@ -289,22 +315,24 @@ export function useExamEngine(attemptId: string, userId: string) {
           map[a.aqId] = { value: a.value, rev: a.revision, ackRev: a.revision, flagged: a.flagged, savedAt: a.savedAt, sync: "synced" };
         }
       }
+      // review flags changed offline before a reload: re-apply them and resend
+      const heldFlags = ((await get(flagsKey).catch(() => undefined)) ?? {}) as Record<string, boolean>;
+      pendingFlags.current = heldFlags;
+      for (const [id, f] of Object.entries(heldFlags)) if (map[id]) map[id] = { ...map[id], flagged: f, flagPending: true };
       persistPending();
       setAnswers(map);
       setLastAckAt(st.answers.map((a) => a.savedAt).filter(Boolean).sort().at(-1) ?? null);
       setUnreachable(false);
       setPhase("ready");
-      if (Object.keys(pending.current).length) {
-        toast.info("Restored answers from this device", { description: "Sending them to the server now." });
-        flushAll();
-      }
+      if (Object.keys(pending.current).length) toast.info("Restored answers from this device", { description: "Sending them to the server now." });
+      if (Object.keys(pending.current).length || Object.keys(heldFlags).length) flushAll();
     } catch (e) {
       const err = e as ApiError;
       if (err.code === "ALREADY_SUBMITTED") { setPhase("finalized"); return; }
       setLoadError(err.isNetwork ? "You're offline. Any answers you typed are kept on this device. Reconnect and this page will reload." : err.status === 404 ? "We couldn't find this attempt." : err.message);
       setPhase("error");
     }
-  }, [applyState, attemptId, flushAll, pendingKey, persistPending]);
+  }, [applyState, attemptId, flushAll, flagsKey, pendingKey, persistPending]);
 
   React.useEffect(() => {
     const t = setTimeout(load, 0);
@@ -421,11 +449,27 @@ export function useExamEngine(attemptId: string, userId: string) {
       const sent = Date.now();
       const st = await api.post(`/api/exams/${examId.current}/attempts`, { clientSessionId: sid.current }, AttemptState);
       applyState(st, sent);
+      // show exactly what the server holds now (another tab may have saved newer answers); keep a local
+      // edit only if it is newer than the server's version and still waiting to be sent
+      setAnswers(() => {
+        const map: Record<string, LocalAnswer> = {};
+        for (const a of st.answers) {
+          const p = pending.current[a.aqId];
+          if (p && p.rev > a.revision) map[a.aqId] = { value: p.value, rev: p.rev, ackRev: a.revision, flagged: a.flagged, savedAt: a.savedAt, sync: "pending" };
+          else {
+            delete pending.current[a.aqId];
+            map[a.aqId] = { value: a.value, rev: a.revision, ackRev: a.revision, flagged: a.flagged, savedAt: a.savedAt, sync: "synced" };
+          }
+        }
+        return map;
+      });
+      persistPending();
+      toast.info("Showing your latest saved answers", { description: "Any changes made in your other window are shown here." });
       flushAll();
     } catch (e) {
       toast.error("Couldn't switch to this window", { description: (e as ApiError).message });
     }
-  }, [applyState, flushAll]);
+  }, [applyState, flushAll, persistPending]);
 
   const pendingCount = Object.values(answers).filter((a) => a.sync === "pending" || a.sync === "saving").length;
   const rejectedCount = Object.values(answers).filter((a) => a.sync === "rejected").length;

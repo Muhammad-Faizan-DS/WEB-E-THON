@@ -258,7 +258,7 @@ export default function WorkspacePage() {
             <div className="flex-1" />
             <Button variant="ghost" onClick={() => ex.setAnswer(q.aqId, null, 0)} disabled={inputsDisabled || !a?.value} className="px-2.5 text-muted-foreground sm:px-4" aria-label="Clear answer"><Eraser /> <span className="hidden sm:inline">Clear</span></Button>
             <Button variant={a?.flagged ? "flag" : "outline"} onClick={() => ex.toggleFlag(q.aqId)} aria-pressed={!!a?.flagged} disabled={inputsDisabled} aria-label="Mark for review">
-              <Flag className={cn(a?.flagged && "fill-current")} /> <span className="hidden sm:inline">{a?.flagged ? "Marked for review" : "Mark for review"}</span>
+              <Flag className={cn(a?.flagged && "fill-current")} /> <span className="hidden sm:inline">{a?.flagged ? "Marked for review" : "Mark for review"}{a?.flagPending && <span className="font-normal text-muted-foreground"> · waiting</span>}</span>
             </Button>
             <Button variant="outline" size="icon" className="lg:hidden" onClick={() => setToolsOpen(true)} aria-label="Scratchpad and display tools"><PanelRightOpen /></Button>
             {current < questions.length - 1 ? (

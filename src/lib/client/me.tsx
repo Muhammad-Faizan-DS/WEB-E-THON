@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Me, type Preferences, type Role } from "@/contracts";
 import { toast } from "sonner";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 
 interface MeCtx { me: Me; setPreferences: (p: Partial<Preferences>) => Promise<boolean>; logout: () => Promise<void> }
 const Ctx = React.createContext<MeCtx | null>(null);
@@ -20,6 +20,9 @@ export function MeProvider({ role, children, fallback }: { role: Role | Role[]; 
   const setThemeRef = React.useRef(setTheme);
   React.useEffect(() => { setThemeRef.current = setTheme; }, [setTheme]);
   const [me, setMe] = React.useState<Me | null>(null);
+  // server unreachable while loading: explain it and keep this page, instead of pretending they signed out
+  const [unreachable, setUnreachable] = React.useState(false);
+  const [retry, setRetry] = React.useState(0);
   const roles = Array.isArray(role) ? role : [role];
   const roleKey = roles.join(",");
 
@@ -33,10 +36,14 @@ export function MeProvider({ role, children, fallback }: { role: Role | Role[]; 
         if (m.role === "candidate") setThemeRef.current(m.preferences.theme);
         document.documentElement.classList.toggle("reduce-motion", m.preferences.reduceMotion);
       },
-      () => router.replace(`/login?next=${encodeURIComponent(location.pathname)}`),
+      (err: unknown) => {
+        if (!alive) return;
+        if (err instanceof ApiError && err.isNetwork) { setUnreachable(true); return; }
+        router.replace(`/login?next=${encodeURIComponent(location.pathname)}`);
+      },
     );
     return () => { alive = false; };
-  }, [roleKey, router]);
+  }, [roleKey, router, retry]);
 
   const value = React.useMemo<MeCtx | null>(() => me && {
     me,
@@ -55,12 +62,29 @@ export function MeProvider({ role, children, fallback }: { role: Role | Role[]; 
       }
     },
     logout: async () => {
-      try { await api.post("/api/auth/logout"); } catch { /* still leave: the session is cleared or expires */ }
-      // a full page load, not a client transition: no cached screens survive, and it works in an old tab too
+      try {
+        await api.post("/api/auth/logout");
+      } catch {
+        // don't pretend: if the server didn't end the session, the user is still signed in
+        toast.error("Couldn't sign out", { description: "You're offline or the server can't be reached. Try again when you're connected." });
+        return;
+      }
+      // confirmed: a full page load, so no cached screens survive (works in an old tab too)
       window.location.replace(new URL("/login", window.location.origin).href);
     },
   }, [me, setTheme]);
 
+  if (!value && unreachable) {
+    return (
+      <main className="mx-auto grid min-h-dvh max-w-md place-items-center px-6 text-center">
+        <div>
+          <h1 className="text-[22px] font-semibold">Can&apos;t reach the server</h1>
+          <p className="mt-2 text-sm text-muted-foreground">You&apos;re still signed in. Anything you typed in an exam is kept on this device and is sent when the connection returns.</p>
+          <button type="button" onClick={() => { setUnreachable(false); setRetry((r) => r + 1); }} className="mt-6 inline-flex h-10 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground">Try again</button>
+        </div>
+      </main>
+    );
+  }
   if (!value) return <>{fallback}</>;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
