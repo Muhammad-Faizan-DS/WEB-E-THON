@@ -1,0 +1,22 @@
+---
+description: Secure Examination Management System: project rules (mirrors AGENTS.md)
+globs:
+alwaysApply: true
+---
+
+# Project rules
+
+Source of truth: `PRD.md`. Full agent rules: `AGENTS.md`. Both apply to every request. Read the PRD section the task names (§7 rules, §11 contracts, §12 API, §13 pages, §16 tests) before coding.
+
+@AGENTS.md
+
+## Essentials (in case the reference above is not loaded)
+
+- Stack: Next.js 16 App Router, TypeScript strict, Tailwind v4, shadcn/ui, Drizzle + `pg` on Neon, Zod, pnpm. Next 16 uses `proxy.ts` (not `middleware.ts`).
+- Scope: `be/*` branch = Dev A (backend: `src/db`, `drizzle`, `src/contracts`, `src/server`, `src/app/api`). `fe/*` branch = Dev B (pages, `src/components`, `src/lib/client`, `src/mocks`). **Only Dev A edits `src/db`, `drizzle/`, `src/contracts`.**
+- Every route handler: `requireUser(role)` → Zod parse → ownership check (404 if not owned) → service → whitelist mapper. Never send answer keys or other users' data to candidates.
+- Server time only. One idempotent `finalizeAttempt()` with `SELECT … FOR UPDATE`. Saves are revisioned (`revision`, `clientOpId`).
+- Sandbox and voided attempts are excluded everywhere (`realAttempts()`). Integrity observations never change scores. Use neutral wording only.
+- Accessibility: icon and text for every status, visible focus, keyboard reachable, works at 375px and 200% text.
+- No new dependencies, paid services or secrets. Never edit `.env*`. Never force-push. Never disable tests. Small diffs. Run `pnpm typecheck && pnpm lint && pnpm test` before calling a task done.
+- After the official cutoff: no commits, pushes or deploys.
